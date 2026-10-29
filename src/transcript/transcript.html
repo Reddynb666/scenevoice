@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="transcript_title">SceneVoice descriptions</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="transcript.css">
+</head>
+<body>
+  <main class="stack">
+    <header class="stack">
+      <h1 id="title" data-i18n="transcript_title">SceneVoice descriptions</h1>
+      <p id="videoTitle" class="muted"></p>
+      <p id="intro" class="small muted"></p>
+      <div class="row">
+        <a id="openVideo" class="button secondary" target="_blank" rel="noopener" data-i18n="transcript_open_video">Open the video</a>
+        <button type="button" id="copy" class="secondary" data-i18n="transcript_copy">Copy as text</button>
+        <a id="download" class="button secondary" download data-i18n="transcript_download">Download .txt</a>
+        <label class="field inline"><span data-i18n="transcript_detail_label">Length</span>
+          <select id="detail">
+            <option value="brief" data-i18n="detail_brief">Brief</option>
+            <option value="standard" selected data-i18n="detail_standard">Standard</option>
+            <option value="detailed" data-i18n="detail_detailed">Detailed</option>
+          </select>
+        </label>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </header>
+    <table id="table" hidden>
+      <thead><tr><th scope="col" data-i18n="transcript_time">Time</th><th scope="col" data-i18n="transcript_description">Description</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="empty" hidden data-i18n="transcript_none">No descriptions are saved for this video.</p>
+  </main>
+  <script src="transcript.js"></script>
+</body>
+</html>

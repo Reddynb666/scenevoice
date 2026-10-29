@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="options_title">SceneVoice settings</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="options_skip">Skip to settings</a>
+  <header class="top">
+    <div class="brand"><img src="icons/icon48.png" alt=""><h1 data-i18n="options_title">SceneVoice settings</h1></div>
+    <p class="muted" data-i18n="options_tagline">AI audio description for YouTube, made for screen reader users.</p>
+  </header>
+
+  <main id="main" tabindex="-1" class="stack">
+    <!-- 1. API key -->
+    <section class="card stack" aria-labelledby="h-key">
+      <h2 id="h-key" data-i18n="opt_key_title">1. Connect to Gemini</h2>
+      <p data-i18n="opt_key_intro">SceneVoice uses Google's Gemini model to watch the video and write descriptions. You use your own free API key, so there is no account and no subscription.</p>
+      <ol class="steps">
+        <li><span data-i18n="opt_key_step1">Open Google AI Studio and sign in with a Google account:</span> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></li>
+        <li data-i18n="opt_key_step2">Choose “Create API key” and copy it.</li>
+        <li data-i18n="opt_key_step3">Paste it below and press Save and test.</li>
+      </ol>
+      <label class="field" for="apiKey"><span data-i18n="opt_key_label">Gemini API key</span></label>
+      <div class="row nowrap">
+        <input type="password" id="apiKey" autocomplete="off" spellcheck="false" aria-describedby="keyStatus keyPrivacy">
+        <button type="button" id="toggleKey" class="secondary" aria-pressed="false" data-i18n="opt_key_show">Show</button>
+      </div>
+      <div class="row">
+        <button type="button" id="saveKey" data-i18n="opt_key_save">Save and test</button>
+        <button type="button" id="removeKey" class="danger" data-i18n="opt_key_remove">Remove key</button>
+      </div>
+      <p id="keyStatus" role="status" aria-live="polite"></p>
+      <p id="keyPrivacy" class="small muted" data-i18n="opt_key_privacy">Your key is stored only on this computer and is sent only to the Gemini API address below.</p>
+
+      <label class="field">
+        <span data-i18n="opt_model_label">Model</span>
+        <select id="model" aria-describedby="modelHint"></select>
+      </label>
+      <p id="modelHint" class="small muted" data-i18n="opt_model_hint">The recommended model is chosen automatically. Flash models are fast and inexpensive.</p>
+
+      <details>
+        <summary data-i18n="opt_advanced">Advanced</summary>
+        <div class="stack pad">
+          <label class="field">
+            <span data-i18n="opt_endpoint_label">API address</span>
+            <input type="url" id="apiBase" spellcheck="false" aria-describedby="endpointHint">
+          </label>
+          <p id="endpointHint" class="small muted" data-i18n="opt_endpoint_hint">Change only if you use a compatible relay, for example where Google services are not reachable. The relay will see your key and requests.</p>
+          <div class="row"><button type="button" id="saveEndpoint" class="secondary" data-i18n="opt_endpoint_save">Save address</button><button type="button" id="resetEndpoint" class="secondary" data-i18n="opt_endpoint_reset">Reset to default</button></div>
+        </div>
+      </details>
+    </section>
+
+    <!-- 2. Descriptions -->
+    <section class="card stack" aria-labelledby="h-desc">
+      <h2 id="h-desc" data-i18n="opt_desc_title">2. Descriptions</h2>
+
+      <label class="field">
+        <span data-i18n="set_language">Description language</span>
+        <select id="language" data-setting="language"></select>
+      </label>
+
+      <fieldset>
+        <legend data-i18n="set_mode">When a description does not fit</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="mode" value="gaps" data-setting="mode"><span data-i18n="mode_gaps">Keep playing</span><span class="hint" data-i18n="mode_gaps_hint">Shorten it to fit the pause. The video never stops.</span></label>
+          <label class="choice"><input type="radio" name="mode" value="pause" data-setting="mode"><span data-i18n="mode_pause">Pause the video</span><span class="hint" data-i18n="mode_pause_hint">Pause, describe in full, then continue.</span></label>
+          <label class="choice"><input type="radio" name="mode" value="manual" data-setting="mode"><span data-i18n="mode_manual">Only when I ask</span><span class="hint" data-i18n="mode_manual_hint">Silent until you press Describe now.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="set_detail">Detail</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="detail" value="brief" data-setting="detail"><span data-i18n="detail_brief">Brief</span><span class="hint" data-i18n="detail_brief_hint">A few words: only what you need to follow along.</span></label>
+          <label class="choice"><input type="radio" name="detail" value="standard" data-setting="detail"><span data-i18n="detail_standard">Standard</span><span class="hint" data-i18n="detail_standard_hint">One sentence, like professional audio description.</span></label>
+          <label class="choice"><input type="radio" name="detail" value="detailed" data-setting="detail"><span data-i18n="detail_detailed">Detailed</span><span class="hint" data-i18n="detail_detailed_hint">Adds setting, appearance and detail.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="set_density">How much to describe</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials</span><span class="hint" data-i18n="density_essential_hint">Only what you need to follow: scene changes, who is there, the main action, important text.</span></label>
+          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Standard</span><span class="hint" data-i18n="density_standard_hint">Adds expressions, gestures, objects and how people look.</span></label>
+          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">Everything</span><span class="hint" data-i18n="density_full_hint">Also scenery, decor and background activity, like a radio play.</span></label>
+        </div>
+      </fieldset>
+
+      <label class="check"><input type="checkbox" data-setting="onScreenText"><span data-i18n="set_on_screen_text">Read on-screen text</span><span class="hint" data-i18n="set_on_screen_text_hint">Titles, burned-in captions, signs and slides.</span></label>
+      <label class="check"><input type="checkbox" data-setting="enabled"><span data-i18n="set_enabled">Describe while I watch</span><span class="hint" data-i18n="set_enabled_hint">Speak descriptions automatically during playback.</span></label>
+      <label class="check"><input type="checkbox" data-setting="autoGenerate"><span data-i18n="set_auto_generate">Create descriptions automatically</span><span class="hint" data-i18n="set_auto_generate_hint">Start as soon as you open a video. Uses your API quota for every video you open.</span></label>
+      <label class="check"><input type="checkbox" data-setting="announceStatus"><span data-i18n="set_announce_status">Announce progress and status</span><span class="hint" data-i18n="set_announce_status_hint">For example “Descriptions ready”.</span></label>
+      <label class="check"><input type="checkbox" data-setting="pauseOnAsk"><span data-i18n="set_pause_on_ask">Pause while I ask a question</span></label>
+    </section>
+
+    <!-- 3. Speech -->
+    <section class="card stack" aria-labelledby="h-speech">
+      <h2 id="h-speech" data-i18n="opt_speech_title">3. Voice and sound</h2>
+
+      <fieldset>
+        <legend data-i18n="set_output">Voice</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
+          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listeners without a screen reader.</span></label>
+        </div>
+      </fieldset>
+
+      <div id="srOptions" class="stack">
+        <label class="field">
+          <span data-i18n="set_reader_speed">How fast does your screen reader speak?</span>
+          <select data-setting="readerSpeed" data-number aria-describedby="readerSpeedHint">
+            <option value="1" data-i18n="speed_normal">Default speed</option>
+            <option value="1.6" data-i18n="speed_fast">Fast</option>
+            <option value="2.4" data-i18n="speed_very_fast">Very fast</option>
+            <option value="3.2" data-i18n="speed_fastest">Extremely fast</option>
+          </select>
+        </label>
+        <p id="readerSpeedHint" class="small muted" data-i18n="set_reader_speed_hint">SceneVoice cannot hear your screen reader, so it uses this to decide which descriptions fit in a pause.</p>
+        <label class="check"><input type="checkbox" data-setting="interrupt"><span data-i18n="set_interrupt">Interrupt other speech</span><span class="hint" data-i18n="set_interrupt_hint">Descriptions cut off whatever your screen reader is saying, so they stay in time with the video.</span></label>
+      </div>
+
+      <div id="ttsOptions" class="stack">
+        <label class="field">
+          <span data-i18n="set_voice">Voice</span>
+          <select id="voice" data-setting="ttsVoice"></select>
+        </label>
+        <label class="field">
+          <span><span data-i18n="set_tts_rate">Speaking rate</span> <output id="rateOut" for="rate"></output></span>
+          <input type="range" id="rate" min="0.6" max="3" step="0.1" data-setting="ttsRate" data-number>
+        </label>
+        <div class="row"><button type="button" id="testVoice" class="secondary" data-i18n="set_test_voice">Test voice</button></div>
+      </div>
+
+      <label class="check"><input type="checkbox" data-setting="duck"><span data-i18n="set_duck">Lower the video volume while describing</span></label>
+      <label class="field">
+        <span><span data-i18n="set_duck_level">Video volume while describing</span> <output id="duckOut" for="duckLevel"></output></span>
+        <input type="range" id="duckLevel" min="0.05" max="0.9" step="0.05" data-setting="duckLevel" data-number>
+      </label>
+      <label class="check"><input type="checkbox" data-setting="showText"><span data-i18n="set_show_text">Show descriptions as large text on the video</span><span class="hint" data-i18n="set_show_text_hint">Helpful for low vision, and for people watching with you.</span></label>
+    </section>
+
+    <!-- 4. Shortcuts -->
+    <section class="card stack" aria-labelledby="h-keys">
+      <h2 id="h-keys" data-i18n="opt_keys_title">4. Keyboard shortcuts</h2>
+      <p data-i18n="opt_keys_intro">These work on any YouTube video, even while focus is on the player.</p>
+      <table>
+        <caption class="visually-hidden" data-i18n="opt_keys_title">Keyboard shortcuts</caption>
+        <thead><tr><th scope="col" data-i18n="opt_keys_action">Action</th><th scope="col" data-i18n="opt_keys_key">Shortcut</th></tr></thead>
+        <tbody id="shortcuts"></tbody>
+      </table>
+      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_edit">Change shortcuts</button></div>
+      <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader. Chrome opens its shortcut settings page.</p>
+    </section>
+
+    <!-- 5. Data -->
+    <section class="card stack" aria-labelledby="h-data">
+      <h2 id="h-data" data-i18n="opt_data_title">5. Saved descriptions and privacy</h2>
+      <p id="cacheInfo" role="status" aria-live="polite"></p>
+      <div class="row"><button type="button" id="clearCache" class="danger" data-i18n="opt_cache_clear">Delete all saved descriptions</button></div>
+      <ul class="small">
+        <li data-i18n="privacy_1">SceneVoice has no server and no account. It does not collect analytics.</li>
+        <li data-i18n="privacy_2">To create descriptions, the address of the YouTube video, its title and description are sent to the Gemini API with your key. Google's terms for the Gemini API apply.</li>
+        <li data-i18n="privacy_3">Descriptions are saved on this computer so a video is described only once.</li>
+      </ul>
+    </section>
+
+    <p class="small muted center"><span data-i18n="opt_footer">SceneVoice is free and open source.</span> <span id="version"></span></p>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "scenevoice",
+  "version": "1.0.0",
+  "description": "AI audio description for YouTube, made for screen reader users",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/build.mjs --zip",
+    "dev": "node scripts/build.mjs --watch",
+    "test": "vitest run",
+    "test:e2e": "python3 test/e2e/e2e.py",
+    "icons": "python3 scripts/make_icons.py"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.1.3",
+    "vitest": "^5.0.5"
+  },
+  "type": "module",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<your-account>/scenevoice"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_ext_name__",
+  "short_name": "SceneVoice",
+  "description": "__MSG_ext_description__",
+  "version": "1.0.0",
+  "default_locale": "en",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "__MSG_ext_name__",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "unlimitedStorage", "tts", "activeTab", "offscreen"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://www.youtube-nocookie.com/embed/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "commands": {
+    "toggle-descriptions": {
+      "suggested_key": { "default": "Alt+Shift+D" },
+      "description": "__MSG_cmd_toggle__"
+    },
+    "describe-now": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "__MSG_cmd_describe_now__"
+    },
+    "repeat-last": {
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "__MSG_cmd_repeat__"
+    },
+    "ask-question": {
+      "suggested_key": { "default": "Alt+Shift+Q" },
+      "description": "__MSG_cmd_ask__"
+    },
+    "cycle-detail": { "description": "__MSG_cmd_cycle_detail__" },
+    "cycle-mode": { "description": "__MSG_cmd_cycle_mode__" },
+    "cycle-density": { "description": "__MSG_cmd_cycle_density__" },
+    "stop-speaking": { "description": "__MSG_cmd_stop__" }
+  }
+}

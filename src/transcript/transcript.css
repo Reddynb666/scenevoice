@@ -1,0 +1,10 @@
+body { padding: 0 16px 40px; }
+main { max-width: 820px; margin: 0 auto; padding-top: 24px; }
+h1 { font-size: 22px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: start; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 13px; color: var(--muted); }
+td.time { white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); margin-inline-end: 6px; }
+.field.inline { grid-template-columns: auto auto; align-items: center; gap: 8px; }
+.field.inline select { width: auto; }

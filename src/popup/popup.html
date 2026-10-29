@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="ext_name">SceneVoice</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="stack">
+    <header class="brand">
+      <img src="icons/icon48.png" alt="">
+      <h1 data-i18n="ext_name">SceneVoice</h1>
+    </header>
+
+    <section id="keyBanner" class="card stack" hidden aria-labelledby="keyBannerTitle">
+      <h2 id="keyBannerTitle" data-i18n="popup_setup_title">Set up SceneVoice</h2>
+      <p data-i18n="popup_setup_body">Add your free Gemini API key to start creating descriptions.</p>
+      <div class="row"><button type="button" id="setupKey" data-i18n="popup_setup_button">Add API key</button></div>
+    </section>
+
+    <section class="card stack" aria-labelledby="videoHeading">
+      <h2 id="videoHeading" data-i18n="popup_this_video">This video</h2>
+      <p id="videoTitle" class="small muted"></p>
+      <p id="videoStatus" role="status" aria-live="polite"></p>
+      <div id="progressBox" hidden>
+        <label for="progress" class="visually-hidden" data-i18n="popup_progress_label">Generation progress</label>
+        <progress id="progress" max="100" value="0"></progress>
+        <p id="progressText" class="small muted"></p>
+      </div>
+      <div class="row actions">
+        <button type="button" id="generate" data-i18n="popup_generate">Create descriptions</button>
+        <button type="button" id="stop" class="danger" hidden data-i18n="popup_stop">Stop</button>
+        <button type="button" id="describe" class="secondary" data-i18n="popup_describe_now">Describe now</button>
+        <button type="button" id="ask" class="secondary" data-i18n="popup_ask">Ask a question</button>
+        <button type="button" id="transcript" class="secondary" hidden data-i18n="popup_transcript">Read all descriptions</button>
+      </div>
+    </section>
+
+    <section class="card stack" aria-labelledby="settingsHeading">
+      <h2 id="settingsHeading" data-i18n="popup_settings">Settings</h2>
+
+      <label class="check">
+        <input type="checkbox" data-setting="enabled">
+        <span data-i18n="set_enabled">Describe while I watch</span>
+        <span class="hint" data-i18n="set_enabled_hint">Speak descriptions automatically during playback.</span>
+      </label>
+
+      <fieldset>
+        <legend data-i18n="set_mode">When a description does not fit</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="mode" value="gaps" data-setting="mode"><span data-i18n="mode_gaps">Keep playing</span><span class="hint" data-i18n="mode_gaps_hint">Shorten it to fit the pause. The video never stops.</span></label>
+          <label class="choice"><input type="radio" name="mode" value="pause" data-setting="mode"><span data-i18n="mode_pause">Pause the video</span><span class="hint" data-i18n="mode_pause_hint">Pause, describe in full, then continue.</span></label>
+          <label class="choice"><input type="radio" name="mode" value="manual" data-setting="mode"><span data-i18n="mode_manual">Only when I ask</span><span class="hint" data-i18n="mode_manual_hint">Silent until you press Describe now.</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="set_detail">Detail</legend>
+        <div class="choices choices-inline">
+          <label class="choice"><input type="radio" name="detail" value="brief" data-setting="detail"><span data-i18n="detail_brief">Brief</span></label>
+          <label class="choice"><input type="radio" name="detail" value="standard" data-setting="detail"><span data-i18n="detail_standard">Standard</span></label>
+          <label class="choice"><input type="radio" name="detail" value="detailed" data-setting="detail"><span data-i18n="detail_detailed">Detailed</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="set_density">How much to describe</legend>
+        <div class="choices choices-inline">
+          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials</span></label>
+          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Standard</span></label>
+          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">Everything</span></label>
+        </div>
+      </fieldset>
+
+      <label class="check">
+        <input type="checkbox" data-setting="onScreenText">
+        <span data-i18n="set_on_screen_text">Read on-screen text</span>
+        <span class="hint" data-i18n="set_on_screen_text_hint">Titles, burned-in captions, signs and slides.</span>
+      </label>
+
+      <fieldset>
+        <legend data-i18n="set_output">Voice</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
+          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listeners without a screen reader.</span></label>
+        </div>
+      </fieldset>
+
+      <label class="field">
+        <span data-i18n="set_language">Description language</span>
+        <select id="language" data-setting="language"></select>
+      </label>
+    </section>
+
+    <footer class="row">
+      <button type="button" id="openOptions" class="secondary" data-i18n="popup_all_settings">All settings</button>
+      <p class="small muted" id="shortcutHint"></p>
+    </footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

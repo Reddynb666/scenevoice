@@ -1,0 +1,130 @@
+# SceneVoice — AI audio description for YouTube
+
+[中文说明](./README.zh-CN.md)
+
+SceneVoice is a free, open-source browser extension that adds **audio description** to any YouTube video, for blind and low-vision viewers. It watches the video with Google's Gemini model, writes short descriptions of what is on screen, and speaks them in the pauses between dialogue — through **your own screen reader**, so you keep your voice, your speed and your braille display.
+
+It is built for screen reader users first. Every control works from the keyboard; every state is announced; nothing is hidden behind a picture.
+
+## What it does
+
+- **Describes any YouTube video on demand.** Press `Alt+Shift+D` on a video and SceneVoice creates descriptions in about half a minute per five minutes of video. The first part is ready before the rest is finished, and everything is saved on your computer, so a video is described only once.
+- **Fits into the pauses.** Every moment is written in three lengths (brief, standard, detailed). SceneVoice picks the longest one that fits the silence, so descriptions never talk over dialogue. If you prefer, it can pause the video and read the full description instead, or stay silent until you ask.
+- **Reads on-screen text.** Title cards, burned-in captions, signs, slides and chat messages are read out, in the video's language with a translation if needed. You can turn this off separately.
+- **Describe now and ask anything.** `Alt+Shift+S` describes the current moment at once. `Alt+Shift+Q` opens a dialog where you can type a question — "who is speaking?", "what does the sign say?" — and get an answer about that exact moment.
+- **Your screen reader, or a built-in voice.** By default descriptions go to a live region that NVDA, JAWS and VoiceOver read with your own settings. People without a screen reader can switch to the browser's built-in voices.
+- **Chinese and English, and more.** Descriptions can be written in Simplified or Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic or Hindi. The interface is in English and Simplified Chinese.
+- **Large-text overlay** for low-vision viewers and for sighted people watching with you.
+- **No account, no server, no tracking.** You use your own free Gemini API key. SceneVoice has no backend and collects nothing.
+
+## Install
+
+### From the Chrome Web Store
+
+Coming soon. Until then, install the unpacked build below. SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116 or newer).
+
+### Unpacked (developer) build
+
+1. Download the latest `scenevoice-<version>.zip` from the Releases page and unzip it, or build it yourself (see Development).
+2. Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and pick the unzipped `dist` folder.
+3. The settings page opens. Follow the three steps there to add a Gemini API key.
+
+### Getting a Gemini API key
+
+1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and sign in with a Google account.
+2. Choose **Create API key** and copy it.
+3. Paste it into SceneVoice's settings page and press **Save and test**.
+
+The free tier is enough for everyday use. Google's terms for the Gemini API apply to what you send; see [Privacy](#privacy).
+
+## Using it
+
+Open any YouTube video.
+
+| Action | Shortcut |
+| --- | --- |
+| Create descriptions for this video, or turn them on and off | `Alt+Shift+D` |
+| Describe what is on screen right now | `Alt+Shift+S` |
+| Repeat the last description | `Alt+Shift+L` |
+| Ask a question about this moment | `Alt+Shift+Q` |
+| Change the level of detail | *(set your own)* |
+| Change what happens when a description does not fit | *(set your own)* |
+| Change how much is described | *(set your own)* |
+| Stop speaking | *(set your own)* |
+
+Shortcuts can be changed at `chrome://extensions/shortcuts` — do this if one clashes with your screen reader. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
+
+The first time you play a video that has no descriptions, SceneVoice says so once and tells you the shortcut.
+
+### Settings worth knowing
+
+- **When a description does not fit** — *Keep playing* (default) shortens it to fit the pause; *Pause the video* reads the full description and continues; *Only when I ask* keeps quiet until you press Describe now.
+- **Detail** — Brief, Standard or Detailed: how long each description is. Standard is close to professional audio description.
+- **How much to describe** — Essentials (scene changes, who is there, the main action, important text), Standard (adds expressions, gestures, objects, appearance) or Everything (also scenery and background, like a radio play). The model writes everything once; this only filters, so changing it is instant.
+- **How fast does your screen reader speak?** — SceneVoice cannot hear your screen reader, so it uses this to judge what fits in a pause. If descriptions get cut off, pick a slower setting; if they are too short, pick a faster one.
+- **Interrupt other speech** — descriptions cut off whatever the screen reader is saying, so they stay in time with the picture. Off by default.
+- **Create descriptions automatically** — starts as soon as you open a video. Off by default because it uses your API quota on every video you open.
+
+## How it works
+
+```
+YouTube page ──(video link, title)──▶ Gemini API (your key) ──(timed script, JSON)──▶ saved on your computer
+                                                                                        │
+                                           video time ──▶ scheduler ──▶ pick length ──▶ your screen reader / built-in voice
+```
+
+- The video itself is never downloaded or uploaded. Gemini reads public YouTube videos by URL, in sections of five minutes. Requests are made from a worker in the extension's own hidden page (an offscreen document), not from the YouTube tab: your key never enters the page, YouTube's page policies cannot block the requests, and the job carries on if you leave the video. Progress is saved after every section, so an interruption costs at most one section. Two tabs showing the same video share one run.
+- If the chosen model is overloaded or no longer available for your key, the extension retries with increasing pauses and then continues with the next best model.
+- For every moment the model writes three versions of the description, how long the following pause is, whether it is on-screen text or action, and how important it is.
+- While you watch, the extension checks the video's position several times a second. When a cue's time arrives it chooses the longest version that fits the pause at your reading speed and playback rate, lowers the video volume a little, and hands the text to a live region (or the built-in voice).
+- People found in one section are passed to the next so names stay consistent.
+
+Descriptions are generated by a language model and can be wrong. SceneVoice asks the model to say "appears to" when unsure and never to invent names, but treat anything safety-critical with care.
+
+## Privacy
+
+- SceneVoice has no server and no account, and sends no analytics.
+- To create descriptions, the YouTube video's address, title and description are sent to the Gemini API together with your API key. Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) apply.
+- Your API key is stored only on your computer (`chrome.storage.local`) and is sent only to the Gemini API address shown in settings. It is never placed in a URL.
+- Descriptions are saved on your computer so a video is described only once. You can delete them all from the settings page.
+- Settings (not the key) are synced through your browser profile if sync is on.
+
+Full policy: [PRIVACY.md](./PRIVACY.md).
+
+## Development
+
+```
+npm install
+npm run build        # builds into dist/
+npm test             # unit tests (vitest)
+npm run test:e2e     # end-to-end test in headless Chromium with a mock Gemini API
+npm run package      # build + scenevoice-<version>.zip for the Web Store
+npm run dev          # rebuild on change
+```
+
+Layout:
+
+- `src/content/` — runs on YouTube pages: playback tracking, live regions, player button, ask dialog, and `generator.js`, the tab's side of generation (start, stop, ask; progress arrives as messages).
+- `src/background/` — service worker: text-to-speech, keyboard commands, status for the popup, cache housekeeping, and the hub that starts generation jobs, saves each finished section and tells the tabs. It makes no Gemini calls itself: Chrome stops a service worker whose fetch takes more than 30 seconds, and video requests often do.
+- `src/offscreen/` — the offscreen document and its web worker, where the Gemini requests actually run (`worker.js` keeps the job list; `offscreen.js` bridges it to the service worker).
+- `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, scheduler, cache, settings.
+- `src/popup/`, `src/options/` — toolbar popup and settings page.
+- `scripts/locales.mjs` — every user-facing string in English and Chinese; the build generates `_locales/`.
+- `test/` — unit tests, and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (127 checks, including axe accessibility scans).
+
+Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Roadmap
+
+- Character memory you can edit ("call the woman in the red coat Maya"), kept per channel.
+- Per-video-type defaults (tutorials more detailed, music videos brief).
+- Sharing corrected descriptions so a video is described once for everyone.
+- Other platforms where the video can be reached by URL.
+
+## Acknowledgements
+
+Writing guidelines follow the audio description practice described by the American Council of the Blind's Audio Description Project and the UK ITC guidance. Thanks to the blind and low-vision developers and testers on AppleVis whose discussions shaped the design.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
