@@ -121,9 +121,9 @@ function render(state) {
 let savedSettings = null;
 
 /**
- * Show mode and detail as they apply to the video in this tab: when its type
- * changed them, those values are selected, and a note says so. Choosing
- * another value makes it the user's own, for every video.
+ * Show mode, detail and density as they apply to the video in this tab: when
+ * its type changed them, those values are selected, and a note says so.
+ * Choosing another value makes it the user's own, for every video.
  */
 function renderType() {
   const type = current?.supported ? current.videoType : '';
@@ -170,6 +170,7 @@ function onSaveError() {
 function renderQuickKeys(sc) {
   const items = [
     ['cycle-detail', t('quick_detail')],
+    ['cycle-density', t('quick_density')],
     ['cycle-mode', t('quick_mode')],
     ['speed-up', t('quick_faster')],
     ['speed-down', t('quick_slower')],

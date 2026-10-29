@@ -2,6 +2,7 @@
 // value and aria-valuetext) and the YouTube tab (spoken when a shortcut changes them).
 
 import { t } from './i18n.js';
+import { CHOICES } from './settings.js';
 
 /** 1.2 → "1.2×" (zh: "1.2 倍"). */
 export const formatRate = (rate) => t('value_rate', Number(rate).toFixed(1));
@@ -16,15 +17,33 @@ export const formatPercent = (value) => t('value_percent', String(Math.round(Num
 /**
  * What the video type changed, from typeAdjustments(): "Tutorial video:
  * SceneVoice will pause when needed, with detailed descriptions." '' if nothing.
+ * A changed density follows in a sentence of its own.
  */
 export function typeAdjustedText(type, changes) {
   const name = t(`type_name_${type}`);
   const mode = changes.mode ? t(`type_mode_${changes.mode}`) : '';
   const detail = changes.detail ? t(`type_detail_${changes.detail}`) : '';
-  if (mode && detail) return t('type_switched_both', name, mode, detail);
-  if (mode) return t('type_switched_mode', name, mode);
-  if (detail) return t('type_switched_detail', name, detail);
-  return '';
+  const density = changes.density ? t(`type_density_${changes.density}`) : '';
+  let text = '';
+  if (mode && detail) text = t('type_switched_both', name, mode, detail);
+  else if (mode) text = t('type_switched_mode', name, mode);
+  else if (detail) text = t('type_switched_detail', name, detail);
+  if (!density) return text;
+  return text ? `${text} ${t('type_also_density', density)}` : t('type_switched_density', name, density);
+}
+
+/**
+ * Which of mode, detail and density the user picked themselves, and so which
+ * the video type still decides: "You chose the mode yourself, so the video type
+ * now decides only the detail and how much to describe." '' when none.
+ */
+export function typeChosenText(settings) {
+  const chosen = CHOICES.filter((key) => settings?.[`${key}Chosen`]);
+  if (!chosen.length) return '';
+  if (chosen.length === CHOICES.length) return t('type_chosen_all');
+  const names = (keys) => keys.map((key) => t(`type_key_${key}`));
+  const list = ([a, b]) => (b ? t('list_two', a, b) : a);
+  return t('type_chosen_some', list(names(chosen)), list(names(CHOICES.filter((key) => !chosen.includes(key)))));
 }
 
 /** The name of a screen reader speed preset, as in the settings list. */

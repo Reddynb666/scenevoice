@@ -60,11 +60,14 @@ const CLEAN = {
   detail: oneOf(DETAILS),
   modeChosen: bool,
   detailChosen: bool,
+  densityChosen: bool,
   autoByType: bool,
   entertainmentMode: oneOf(MODES),
   entertainmentDetail: oneOf(DETAILS),
+  entertainmentDensity: oneOf(DENSITIES),
   tutorialMode: oneOf(MODES),
   tutorialDetail: oneOf(DETAILS),
+  tutorialDensity: oneOf(DENSITIES),
   density: oneOf(DENSITIES),
   onScreenText: bool,
   language: (v, d) => (v === 'auto' || LANGUAGE_CODES.has(v) ? v : d),
@@ -84,7 +87,7 @@ const CLEAN = {
 };
 
 /** Settings the user can pick for themselves instead of leaving them to the video type. */
-const CHOICES = ['mode', 'detail'];
+export const CHOICES = Object.freeze(['mode', 'detail', 'density']);
 
 /**
  * Stored settings, with every known key present and valid. Unknown keys are
@@ -94,8 +97,8 @@ export function normalizeSettings(raw) {
   const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const out = {};
   for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) out[key] = CLEAN[key](src[key], fallback);
-  // Saved before these flags existed: a mode or detail other than the default
-  // can only have been picked by the user.
+  // Saved before these flags existed: a mode, detail or density other than the
+  // default can only have been picked by the user.
   for (const key of CHOICES) {
     const flag = `${key}Chosen`;
     if (typeof src[flag] !== 'boolean') out[flag] = key in src && out[key] !== DEFAULT_SETTINGS[key];
@@ -104,8 +107,8 @@ export function normalizeSettings(raw) {
 }
 
 /**
- * A patch with the user's own choices marked. Mode and detail are only ever
- * saved when the user picks them (the video type adjusts them in the page,
+ * A patch with the user's own choices marked. Mode, detail and density are only
+ * ever saved when the user picks them (the video type adjusts them in the page,
  * never in storage), so saving one means the user chose it.
  */
 export function markChoices(patch) {

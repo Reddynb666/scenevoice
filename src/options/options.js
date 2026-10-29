@@ -1,7 +1,8 @@
 import { DEFAULT_API_BASE, LANGUAGES, MSG } from '../shared/constants.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
-import { voiceFor, voicePatch, voiceTestMessage } from '../shared/settings.js';
+import { typeChosenText } from '../shared/labels.js';
+import { CHOICES, voiceFor, voicePatch, voiceTestMessage } from '../shared/settings.js';
 import { getLocal, getSettings, resetSettings, resolveLanguage, setLocal, setSettings } from '../shared/storage.js';
 import { groupVoices, languageMatch, pickVoice } from '../shared/voices.js';
 import { GeminiClient, GeminiError, chooseModel, usableModels } from '../shared/gemini.js';
@@ -145,21 +146,19 @@ async function loadModels({ announce }) {
 }
 
 /**
- * The video type settings: a type's mode and detail can be changed only while
- * adjusting is on; a mode or detail the user picked is named, with a way back.
+ * The video type settings: a type's mode, detail and density can be changed
+ * only while adjusting is on; those the user picked are named, with a way back.
  */
 function renderTypeSettings(settings) {
   for (const id of ['typeEntertainment', 'typeTutorial']) $(id).disabled = !settings.autoByType;
-  const { modeChosen, detailChosen } = settings;
-  const key = modeChosen && detailChosen ? 'type_chosen_both' : modeChosen ? 'type_chosen_mode' : detailChosen ? 'type_chosen_detail' : '';
-  const text = settings.autoByType && key ? t(key) : '';
+  const text = settings.autoByType ? typeChosenText(settings) : '';
   if ($('typeChosen').textContent !== text) $('typeChosen').textContent = text;
   $('typeChosenBox').hidden = !text;
 }
 
 async function letTypeDecide() {
   try {
-    await setSettings({ modeChosen: false, detailChosen: false });
+    await setSettings(Object.fromEntries(CHOICES.map((key) => [`${key}Chosen`, false])));
   } catch {
     onSaveError();
     return;

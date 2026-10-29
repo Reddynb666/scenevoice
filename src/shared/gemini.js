@@ -17,7 +17,7 @@ export class GeminiError extends Error {
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    // Chooses the default mode and detail for the video (see videotype.js). It
+    // Chooses the default mode, detail and density for the video (see videotype.js). It
     // comes with the descriptions, so knowing it costs no extra request.
     videoType: { type: 'STRING', enum: ['entertainment', 'tutorial', 'other'] },
     characters: {
@@ -40,12 +40,16 @@ const RESPONSE_SCHEMA = {
           gap: { type: 'NUMBER' },
           kind: { type: 'STRING', enum: ['visual', 'text'] },
           priority: { type: 'INTEGER' },
+          // Text cues: the text exactly as written, transcribed before the
+          // spoken versions are written, so they quote it rather than paraphrase.
+          // Also what playback compares with the captions. '' for visual cues.
+          onScreenText: { type: 'STRING' },
           brief: { type: 'STRING' },
           standard: { type: 'STRING' },
           detailed: { type: 'STRING' },
         },
-        required: ['start', 'gap', 'kind', 'priority', 'brief', 'standard', 'detailed'],
-        propertyOrdering: ['start', 'gap', 'kind', 'priority', 'brief', 'standard', 'detailed'],
+        required: ['start', 'gap', 'kind', 'priority', 'onScreenText', 'brief', 'standard', 'detailed'],
+        propertyOrdering: ['start', 'gap', 'kind', 'priority', 'onScreenText', 'brief', 'standard', 'detailed'],
       },
     },
   },
@@ -72,7 +76,9 @@ function clip(text, n) {
  * (ACB Audio Description Project guidelines, Netflix AD Style Guide, DCMP
  * Description Key, and the Chinese T/CSMPTE 13-2021 standard): describe what
  * is seen, set the scene, introduce people, read on-screen text, never talk over
- * dialogue, and never interpret.
+ * dialogue, and never interpret. Blind viewers say what they mind most is
+ * missing text on screen, and descriptions that fill every silence: text comes
+ * first, word for word, and quiet moments stay quiet.
  */
 export function scriptInstructions(lang) {
   const language = languageName(lang);
@@ -81,15 +87,15 @@ export function scriptInstructions(lang) {
     `Write every description in ${language}.`,
     '',
     'Always describe (these come first when time is short):',
+    '- Meaningful on-screen text, each as its own "text" cue (see below). It comes before everything else: a viewer can often follow the picture from the sound, but never text they cannot see.',
     '- Every change of place or time: start that description with where we are now (and when, if it changed).',
     '- Every person the first time they appear: a short visual sketch (apparent age, build, hair, clothing) and what they are doing. On later appearances, just the label.',
     '- Who is speaking or being spoken to, whenever that is not obvious from the audio alone (for example in a group, a video call, or when someone speaks off screen).',
     '- Actions and their results: what someone does, picks up, hands over, points at, and what happens next. Follow the action step by step in demonstrations, tutorials, cooking, sport and gameplay.',
     '- Expressions and gestures that carry meaning (a nod, a smile, a shaking head, a look away).',
     '- Important objects, products, charts, diagrams and what they show.',
-    '- Any meaningful on-screen text (see below).',
     '',
-    'Also describe, when there is room: setting details, clothing, lighting and weather, camera moves that matter (a close-up on an object, a drone shot of a landscape), montages (summarise), and the mood the picture creates.',
+    'Also describe, as priority 2 or 3 and only when it adds something the viewer would want to know (never just because there is a pause): setting details, clothing, lighting and weather, camera moves that matter (a close-up on an object, a drone shot of a landscape), montages (summarise), and the mood the picture creates.',
     '',
     'Rules:',
     '- Describe only what can be seen. Never describe what can be heard (dialogue, music, sound effects) and never repeat what a speaker is saying.',
@@ -103,13 +109,16 @@ export function scriptInstructions(lang) {
     '- Keep labels consistent with the provided character list. Add new people to "characters" with a one-line description.',
     '',
     'On-screen text (kind "text"):',
-    '- Read meaningful text that appears on screen: titles, captions or subtitles burned into the picture, signs, labels, slides, chat or phone screens, product names, scores, prices.',
-    `- Quote it as written. If it is not in ${language}, give the original followed by a short translation.`,
-    '- Skip channel watermarks, subscribe buttons, platform interface and text that only repeats what is being said.',
+    '- Give meaningful text its own "text" cue; never fold it into a visual description. That includes titles and title cards, names and roles in lower thirds, chapter cards, subtitles burned into the picture, slides, chart and graph labels with their numbers, prices, scores, dates, phone numbers, email and web addresses, social media handles, code, menu items and buttons in a screen recording, signs, labels, chat and phone screens.',
+    '- "onScreenText" is a transcription: copy the text exactly as written, character for character, in its original language and script, with its numbers, symbols, capitalisation and punctuation. Never translate, summarise, correct or reword it. Separate lines or list items with " / ". Text that appears together (one slide, one menu, one lower third) is one cue. For visual cues, "onScreenText" is "".',
+    `- The three spoken versions quote "onScreenText" word for word after a one- or two-word label saying what it is (for example "Title: …", "Price: …", "Code: …", "Menu: …"). For long text, the brief version quotes only the key words and the standard version the most important lines, in reading order, but neither rewords what it quotes. If the text is not in ${language}, quote the original and add a short translation in the standard and detailed versions.`,
+    '- Skip text the viewer already hears: subtitles of dialogue in the language being spoken, or words a speaker reads aloud. Do read subtitles that translate speech in another language. Skip channel watermarks, subscribe buttons and platform interface, and do not read the same text again while it stays on screen.',
+    '- Set "start" when the text appears, or at the first pause in speech while it is still on screen.',
     '',
-    'How much:',
-    '- Aim for a description every 10 to 20 seconds while the picture is changing, and never leave more than 30 seconds undescribed unless the picture is static and has already been described. A five-minute section of a typical video has 15 to 40 descriptions; a fast demonstration or an action scene can have more, a static talking head fewer.',
-    '- Descriptions may be as close as 2 seconds apart when the picture changes quickly.',
+    'When to describe, and when to stay silent:',
+    '- Describe only when something visually important appears, happens or changes. Silence is part of the experience: never describe just to fill a pause, and do not describe again what is still the same.',
+    '- There is no quota. A talking head, a slide already read, or a long take may need nothing for a minute or more; a fast demonstration or an action scene may need a description every few seconds (as close as 2 seconds apart).',
+    '- Music, scenery and other atmospheric passages: let them play. Describe only a key change in the picture (a new place, a new person, a cut to something different), in a few words, with priority 3 unless it matters to the story or the subject.',
     '- Each description says one thing. Do not pad: the viewer hears the video first and the description second.',
     '',
     'Timing:',
@@ -121,18 +130,19 @@ export function scriptInstructions(lang) {
     '- "brief": the essential fact in at most 8 words (or 15 characters in Chinese, Japanese or Korean).',
     '- "standard": one sentence, at most 22 words (40 characters in CJK).',
     '- "detailed": one or two sentences, at most 50 words (90 characters in CJK), adding setting, appearance or detail.',
+    '- In text cues, only the quoted on-screen text may go beyond these limits.',
     '',
     'Priority:',
-    '- 1 = needed to follow what happens: scene changes, who is present, the main action and its result, on-screen text that matters, who is speaking.',
-    '- 2 = helpful: secondary actions, expressions and gestures, objects, appearance details on first sight.',
-    '- 3 = atmosphere: decor, lighting, scenery, minor background activity.',
+    '- 1 = needed to follow what happens: scene changes, who is present, the main action and its result, who is speaking, and on-screen text that carries information (titles, names, numbers, prices, contact details, code, instructions).',
+    '- 2 = helpful: secondary actions, expressions and gestures, objects, appearance details on first sight, minor on-screen text such as a sign in the background.',
+    '- 3 = atmosphere: decor, lighting, scenery, minor background activity, the picture during music. Anything the viewer would not miss.',
     '',
     'Video type ("videoType"), for the whole video, judged from the title, the uploader\'s description and the picture:',
     '- "tutorial": made to teach or explain, so what is on screen must not be missed: lessons and lectures, how-to and product demonstrations, cooking and craft tutorials, science explainers, news or analysis built on charts, maps or slides.',
     '- "entertainment": watched for enjoyment: films, series, animation, music videos and performances, vlogs, gameplay, comedy, sport.',
     '- "other": neither, or you cannot tell.',
     '',
-    'Output JSON only, matching the schema. If truly nothing visual happens in this section, return an empty "cues" list.',
+    'Output JSON only, matching the schema. If nothing important is visible in this section, return an empty "cues" list: that is a correct answer, not a failure.',
   ].join('\n');
 }
 
@@ -204,6 +214,7 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
             'You help a blind or low-vision person understand a video they are watching.',
             `Answer in ${languageName(lang)}, in at most 3 short sentences, plain text without markdown.`,
             'Answer about what is visible at the moment they asked, using the clip and context provided.',
+            'Quote any text on screen that bears on the question exactly as written.',
             'If you cannot tell, say so honestly. Never invent details.',
           ].join('\n'),
         },

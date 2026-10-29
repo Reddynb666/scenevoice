@@ -39,7 +39,10 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 - [ ] In Pause mode the video stops, the full description is read, and playback resumes by itself.
 - [ ] Seeking forward or back does not produce a flood of old descriptions.
 - [ ] Changing the detail level with the shortcut is announced and takes effect on the next cue.
-- [ ] On-screen text is read as a distinct kind of cue, and turning the setting off silences it.
+- [ ] On-screen text is read as a distinct kind of cue, word for word, and turning the setting off silences it.
+- [ ] A visual description that comes due while on-screen text is being read does not cut the text off.
+- [ ] On a video with captions, a slide title the presenter reads aloud is not read again.
+- [ ] A music video or landscape passage is not filled with descriptions; *Essentials only* is quieter still.
 - [ ] Ads are not described.
 - [ ] Nothing is spoken twice (live region and built-in voice must not both be active).
 

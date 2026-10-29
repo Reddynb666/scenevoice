@@ -82,9 +82,25 @@
         </div>
       </fieldset>
 
+      <fieldset>
+        <legend data-i18n="set_density">How much to describe</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials only</span><span class="hint" data-i18n="density_essential_hint">Only what you need to follow: scene changes, who is there, the main action. Useful on-screen text is still read, and quiet moments are left quiet.</span></label>
+          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Moderate</span><span class="hint" data-i18n="density_standard_hint">Adds expressions, gestures, objects and how people look, and all the on-screen text.</span></label>
+          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">As much as possible</span><span class="hint" data-i18n="density_full_hint">Also scenery, decor and background activity. Nothing is added just to fill a silence.</span></label>
+        </div>
+      </fieldset>
+
+      <label class="check"><input type="checkbox" id="onScreenText" data-setting="onScreenText" aria-describedby="onScreenTextHint"><span data-i18n="set_on_screen_text">Read on-screen text</span></label>
+      <p id="onScreenTextHint" class="small muted" data-i18n="set_on_screen_text_hint">Titles, names, slides, chart figures, prices, contact details, code and menus, word for word and before other descriptions. Text you already hear in the dialogue is not read again.</p>
+      <label class="check"><input type="checkbox" data-setting="enabled"><span data-i18n="set_enabled">Describe while I watch</span><span class="hint" data-i18n="set_enabled_hint">Speak descriptions automatically during playback.</span></label>
+      <label class="check"><input type="checkbox" data-setting="autoGenerate"><span data-i18n="set_auto_generate">Create descriptions automatically</span><span class="hint" data-i18n="set_auto_generate_hint">Start as soon as you open a video. Uses your API quota for every video you open.</span></label>
+      <label class="check"><input type="checkbox" data-setting="announceStatus"><span data-i18n="set_announce_status">Announce progress and status</span><span class="hint" data-i18n="set_announce_status_hint">For example “Descriptions ready”.</span></label>
+      <label class="check"><input type="checkbox" data-setting="pauseOnAsk"><span data-i18n="set_pause_on_ask">Pause while I ask a question</span></label>
+
       <h3 id="h-type" data-i18n="opt_type_title">By video type</h3>
-      <label class="check"><input type="checkbox" id="autoByType" data-setting="autoByType" aria-describedby="autoByTypeHint"><span data-i18n="set_auto_by_type">Adjust mode and detail to the video type</span></label>
-      <p id="autoByTypeHint" class="small muted" data-i18n="set_auto_by_type_hint">By default, entertainment keeps playing with brief descriptions, so the pace is not broken, and tutorials and explainers pause for detailed ones, so nothing on screen is missed. Other videos use the mode and detail above. A mode or detail you choose yourself (above, in the popup or with a shortcut) always comes first. The type comes from the video’s YouTube category and title, and from Gemini once descriptions exist.</p>
+      <label class="check"><input type="checkbox" id="autoByType" data-setting="autoByType" aria-describedby="autoByTypeHint"><span data-i18n="set_auto_by_type">Adjust descriptions to the video type</span></label>
+      <p id="autoByTypeHint" class="small muted" data-i18n="set_auto_by_type_hint">By default, entertainment keeps playing with brief descriptions of the essentials only, so the pace is not broken and quiet moments stay quiet; tutorials and explainers pause for detailed descriptions, so nothing on screen is missed. Other videos use the settings above. A mode, detail or amount you choose yourself (above, in the popup or with a shortcut) always comes first. The type comes from the video’s YouTube category and title, and from Gemini once descriptions exist.</p>
       <div class="type-grid">
         <fieldset id="typeEntertainment" class="stack">
           <legend data-i18n="type_entertainment_legend">Entertainment: films, music, vlogs, games</legend>
@@ -102,6 +118,14 @@
               <option value="brief" data-i18n="detail_brief">Brief</option>
               <option value="standard" data-i18n="detail_standard">Standard</option>
               <option value="detailed" data-i18n="detail_detailed">Detailed</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="set_density">How much to describe</span>
+            <select data-setting="entertainmentDensity">
+              <option value="essential" data-i18n="density_essential">Essentials only</option>
+              <option value="standard" data-i18n="density_standard">Moderate</option>
+              <option value="full" data-i18n="density_full">As much as possible</option>
             </select>
           </label>
         </fieldset>
@@ -123,27 +147,20 @@
               <option value="detailed" data-i18n="detail_detailed">Detailed</option>
             </select>
           </label>
+          <label class="field">
+            <span data-i18n="set_density">How much to describe</span>
+            <select data-setting="tutorialDensity">
+              <option value="essential" data-i18n="density_essential">Essentials only</option>
+              <option value="standard" data-i18n="density_standard">Moderate</option>
+              <option value="full" data-i18n="density_full">As much as possible</option>
+            </select>
+          </label>
         </fieldset>
       </div>
       <div id="typeChosenBox" class="stack" hidden>
         <p id="typeChosen"></p>
         <div class="row"><button type="button" id="typeAgain" class="secondary" aria-describedby="typeChosen" data-i18n="type_again">Let the video type decide again</button></div>
       </div>
-
-      <fieldset>
-        <legend data-i18n="set_density">How much to describe</legend>
-        <div class="choices">
-          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials</span><span class="hint" data-i18n="density_essential_hint">Only what you need to follow: scene changes, who is there, the main action, important text.</span></label>
-          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Standard</span><span class="hint" data-i18n="density_standard_hint">Adds expressions, gestures, objects and how people look.</span></label>
-          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">Everything</span><span class="hint" data-i18n="density_full_hint">Also scenery, decor and background activity, like a radio play.</span></label>
-        </div>
-      </fieldset>
-
-      <label class="check"><input type="checkbox" data-setting="onScreenText"><span data-i18n="set_on_screen_text">Read on-screen text</span><span class="hint" data-i18n="set_on_screen_text_hint">Titles, burned-in captions, signs and slides.</span></label>
-      <label class="check"><input type="checkbox" data-setting="enabled"><span data-i18n="set_enabled">Describe while I watch</span><span class="hint" data-i18n="set_enabled_hint">Speak descriptions automatically during playback.</span></label>
-      <label class="check"><input type="checkbox" data-setting="autoGenerate"><span data-i18n="set_auto_generate">Create descriptions automatically</span><span class="hint" data-i18n="set_auto_generate_hint">Start as soon as you open a video. Uses your API quota for every video you open.</span></label>
-      <label class="check"><input type="checkbox" data-setting="announceStatus"><span data-i18n="set_announce_status">Announce progress and status</span><span class="hint" data-i18n="set_announce_status_hint">For example “Descriptions ready”.</span></label>
-      <label class="check"><input type="checkbox" data-setting="pauseOnAsk"><span data-i18n="set_pause_on_ask">Pause while I ask a question</span></label>
     </section>
 
     <!-- 3. Speech -->

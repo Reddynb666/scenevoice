@@ -1,10 +1,11 @@
-// What kind of video this is, and the mode and detail that suit it.
+// What kind of video this is, and the mode, detail and density that suit it.
 // No browser APIs here, so everything is unit-testable.
 //
 // Entertainment (films, music, vlogs, games) is best left flowing: describe in
-// the gaps, briefly. Tutorials and explainers (lessons, how-to demonstrations,
-// science, news with charts) show things that must not be missed: pause, and
-// describe in detail. The type comes from what SceneVoice already has, with no
+// the gaps, briefly, only what is needed to follow, and leave quiet moments
+// quiet. Tutorials and explainers (lessons, how-to demonstrations, science,
+// news with charts) show things that must not be missed: pause, and describe
+// in detail. The type comes from what SceneVoice already has, with no
 // extra request:
 //   1. Gemini's own judgement, returned with the descriptions (it has seen the video);
 //   2. the category the uploader chose, from the watch page that is fetched
@@ -12,6 +13,7 @@
 //   3. words such as "tutorial" in the title, when the category says little.
 
 import { VIDEO_TYPES } from './constants.js';
+import { CHOICES } from './settings.js';
 
 /** YouTube's categories. Chinese names too, in case a page gives them localized. */
 const CATEGORY_TYPES = {
@@ -83,19 +85,19 @@ export function resolveVideoType({ scriptType, pageType } = {}) {
   return knownType(scriptType) || knownType(pageType);
 }
 
-/** The setting that holds a type's mode or detail: ('tutorial', 'mode') → 'tutorialMode'. */
+/** The setting that holds a type's mode, detail or density: ('tutorial', 'mode') → 'tutorialMode'. */
 export const typeSettingKey = (type, key) => `${type}${key[0].toUpperCase()}${key.slice(1)}`;
 
 /**
- * The mode and detail to use for a video of this type instead of the user's
- * settings: only those that differ, and never one the user picked themselves.
- * Empty when adjusting is off or the type is unknown.
- * @returns {{mode?: string, detail?: string}}
+ * The mode, detail and density to use for a video of this type instead of the
+ * user's settings: only those that differ, and never one the user picked
+ * themselves. Empty when adjusting is off or the type is unknown.
+ * @returns {{mode?: string, detail?: string, density?: string}}
  */
 export function typeAdjustments(settings, type) {
   const out = {};
   if (!settings?.autoByType || !knownType(type)) return out;
-  for (const key of ['mode', 'detail']) {
+  for (const key of CHOICES) {
     if (settings[`${key}Chosen`]) continue;
     const value = settings[typeSettingKey(type, key)];
     if (value && value !== settings[key]) out[key] = value;

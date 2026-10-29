@@ -32,8 +32,9 @@ Describe now, ask anything
 • Alt+Shift+Q opens a dialog: "Who is speaking?" "What does the sign say?" and you get an answer about that exact moment.
 • Alt+Shift+L repeats the last description.
 
-Reads on-screen text
-• Title cards, burned-in captions, signs, slides and chat messages, with translation when needed.
+Reads on-screen text first, word for word
+• Titles, names, slides, chart figures, prices, contact details, code, menus and signs, exactly as written and before other descriptions, with translation when needed. Text you already hear is not repeated.
+• Quiet moments stay quiet: nothing is described just to fill a silence.
 
 Your key, your data
 • You use your own free Gemini API key from Google AI Studio. No account, no subscription, no server, no analytics.
@@ -63,8 +64,9 @@ SceneVoice 为任意 YouTube 视频加上口述影像。按下 Alt+Shift+D，每
 • Alt+Shift+Q 打开对话框："谁在说话？""牌子上写的什么？"得到针对这一刻的回答。
 • Alt+Shift+L 重复上一条描述。
 
-朗读画面文字
-• 标题卡、内嵌字幕、标牌、幻灯片、聊天消息，必要时附翻译。
+屏幕文字优先、按原文朗读
+• 标题、人名、幻灯片、图表数字、价格、联系方式、代码、菜单、标牌，照原样先于其他描述读出，必要时附翻译；已经听得到的文字不再重复。
+• 安静时刻留白：不会为了填满空隙硬加描述。
 
 你的密钥，你的数据
 • 使用你自己在 Google AI Studio 申请的免费 Gemini API 密钥。无账号、无订阅、无服务器、不收集数据。

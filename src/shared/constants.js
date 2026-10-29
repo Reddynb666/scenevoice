@@ -13,21 +13,27 @@ export const DEFAULT_SETTINGS = Object.freeze({
   mode: 'gaps',
   /** 'brief' | 'standard' | 'detailed' */
   detail: 'standard',
-  /** The user picked the mode / the detail themselves (popup, settings page or shortcut).
-   *  A choice of their own is never adjusted to the video type. */
+  /** The user picked the mode / the detail / the density themselves (popup,
+   *  settings page or shortcut). A choice of their own is never adjusted to the video type. */
   modeChosen: false,
   detailChosen: false,
-  /** Use the mode and detail set below for entertainment and tutorial videos
-   *  (see videotype.js), for whichever of the two the user has not picked. */
+  densityChosen: false,
+  /** Use the mode, detail and density set below for entertainment and tutorial
+   *  videos (see videotype.js), for whichever of them the user has not picked. */
   autoByType: true,
   entertainmentMode: 'gaps',
   entertainmentDetail: 'brief',
+  /** Entertainment is for enjoying: only what is needed to follow, quiet moments left quiet. */
+  entertainmentDensity: 'essential',
   tutorialMode: 'pause',
   tutorialDetail: 'detailed',
+  tutorialDensity: 'standard',
   /** How many of the generated descriptions to speak: 'essential' (priority 1),
-   *  'standard' (1-2) or 'full' (everything). Filters without regenerating. */
+   *  'standard' (1-2) or 'full' (everything). On-screen text gets one level
+   *  more (see passesDensity). Filters without regenerating. */
   density: 'standard',
-  /** Read on-screen text (titles, captions burned into the video, signs). */
+  /** Read on-screen text (titles, captions burned into the video, prices, code),
+   *  word for word and ahead of other descriptions. */
   onScreenText: true,
   /** Description language. 'auto' follows the browser UI language. */
   language: 'auto',
@@ -66,7 +72,7 @@ export const DETAILS = Object.freeze(['brief', 'standard', 'detailed']);
 export const DENSITIES = Object.freeze(['essential', 'standard', 'full']);
 export const OUTPUTS = Object.freeze(['screenreader', 'tts']);
 
-/** Video types with their own mode and detail. Anything else uses the general settings. */
+/** Video types with their own mode, detail and density. Anything else uses the general settings. */
 export const VIDEO_TYPES = Object.freeze(['entertainment', 'tutorial']);
 
 /** Screen reader speeds offered in settings, slowest first. */

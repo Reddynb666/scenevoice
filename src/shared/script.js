@@ -7,8 +7,14 @@ import { SCRIPT_VERSION, VIDEO_TYPES } from './constants.js';
 /** Highest priority number spoken for each density setting. */
 export const DENSITY_MAX_PRIORITY = Object.freeze({ essential: 1, standard: 2, full: 3 });
 
+/**
+ * Whether a cue is spoken at this density. On-screen text is what listeners
+ * least want to miss (a picture can often be followed from the sound, text
+ * never), so it gets one level more: "essential" still reads helpful text.
+ */
 export function passesDensity(cue, density) {
-  return cue.priority <= (DENSITY_MAX_PRIORITY[density] || 3);
+  const max = DENSITY_MAX_PRIORITY[density] || 3;
+  return cue.priority <= (cue.kind === 'text' ? max + 1 : max);
 }
 
 export const DETAIL_ORDER = Object.freeze({
@@ -18,6 +24,8 @@ export const DETAIL_ORDER = Object.freeze({
 });
 
 const MAX_LEN = { brief: 160, standard: 360, detailed: 800 };
+/** A transcription of on-screen text: a slide or a code block, but not a page of it. */
+const MAX_SCREEN_TEXT = 600;
 
 /**
  * Parse a timestamp the model may return as seconds, "m:ss", "h:mm:ss",
@@ -41,14 +49,17 @@ export function parseTime(value) {
   return NaN;
 }
 
-/** Remove markdown, wrapping quotes and stray whitespace from model text. */
-export function cleanText(text, maxLen = 700) {
+/**
+ * Remove markdown, wrapping quotes and stray whitespace from model text.
+ * keepSymbols: the text quotes the screen, where "__init__", "#1" or "-5 °C"
+ * mean something; only bold markers and backticks are removed.
+ */
+export function cleanText(text, maxLen = 700, { keepSymbols = false } = {}) {
   if (typeof text !== 'string') return '';
-  let t = text
-    .replace(/\*\*|__|`+/g, '')
-    .replace(/^[#>\-*\s]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let t = keepSymbols
+    ? text.replace(/\*\*|`+/g, '')
+    : text.replace(/\*\*|__|`+/g, '').replace(/^[#>\-*\s]+/, '');
+  t = t.replace(/\s+/g, ' ').trim();
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('“') && t.endsWith('”'))) {
     t = t.slice(1, -1).trim();
   }
@@ -58,6 +69,20 @@ export function cleanText(text, maxLen = 700) {
     t = stop > maxLen * 0.5 ? cut.slice(0, stop + 1) : cut.trimEnd() + '…';
   }
   return t;
+}
+
+/**
+ * On-screen text as transcribed: exactly as written, quotes and symbols
+ * included. Line breaks become " / " so lists, menus and addresses keep their shape.
+ */
+export function cleanScreenText(text, maxLen = MAX_SCREEN_TEXT) {
+  if (typeof text !== 'string') return '';
+  const t = text
+    .split(/\s*\n\s*/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' / ');
+  return t.length > maxLen ? `${t.slice(0, maxLen).trimEnd()}…` : t;
 }
 
 /** Extract a JSON object from model text that may be wrapped in a code fence. */
@@ -95,10 +120,13 @@ export function normalizeChunk(raw, ctx = {}) {
     const start = parseTime(item.start ?? item.time ?? item.timestamp);
     if (!Number.isFinite(start) || start < 0) continue;
     const kind = item.kind === 'text' ? 'text' : 'visual';
-    let brief = cleanText(item.brief, MAX_LEN.brief);
-    let standard = cleanText(item.standard ?? item.text, MAX_LEN.standard);
-    let detailed = cleanText(item.detailed, MAX_LEN.detailed);
-    if (!standard) standard = detailed || brief;
+    const opts = { keepSymbols: kind === 'text' };
+    // Only text cues carry a transcription; a visual cue's would be a stray.
+    const onScreenText = kind === 'text' ? cleanScreenText(item.onScreenText) : '';
+    let brief = cleanText(item.brief, MAX_LEN.brief, opts);
+    let standard = cleanText(item.standard ?? item.text, MAX_LEN.standard, opts);
+    let detailed = cleanText(item.detailed, MAX_LEN.detailed, opts);
+    if (!standard) standard = detailed || brief || cleanText(onScreenText, MAX_LEN.standard, opts);
     if (!brief) brief = standard;
     if (!detailed) detailed = standard;
     if (!standard) continue;
@@ -107,7 +135,9 @@ export function normalizeChunk(raw, ctx = {}) {
     gap = Math.min(gap, 60);
     let priority = parseInt(item.priority, 10);
     if (![1, 2, 3].includes(priority)) priority = 2;
-    cues.push({ start, gap, kind, priority, brief, standard, detailed });
+    const cue = { start, gap, kind, priority, brief, standard, detailed };
+    if (onScreenText) cue.onScreenText = onScreenText;
+    cues.push(cue);
   }
 
   // Timestamps are occasionally returned in milliseconds.

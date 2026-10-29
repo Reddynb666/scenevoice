@@ -8,3 +8,4 @@ td.time { white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; }
 .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); margin-inline-end: 6px; }
 .field.inline { grid-template-columns: auto auto; align-items: center; gap: 8px; }
 .field.inline select { width: auto; }
+.exact { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }

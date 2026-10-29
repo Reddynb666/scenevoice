@@ -7,8 +7,9 @@ import { markChoices, nextValue, stepSpeed } from '../shared/settings.js';
 import { authorizeContentMessage } from '../shared/sender.js';
 import { resolveLanguage, setSettings, watchSettings } from '../shared/storage.js';
 import { chooseUtterance, cueAt, estimateSeconds, formatTime, passesDensity } from '../shared/script.js';
-import { CueScheduler, pickOne } from '../shared/scheduler.js';
+import { CueScheduler, mayInterrupt, pickOne } from '../shared/scheduler.js';
 import { fitCuesToDialogue, parseTimedText, speechIntervals } from '../shared/dialogue.js';
+import { dropTextHeardInCaptions } from '../shared/onscreen.js';
 import { pageVideoType, resolveVideoType, typeAdjustments } from '../shared/videotype.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
@@ -51,19 +52,23 @@ function main() {
   let beginSeq = 0;
   /** Stretches of speech in the current video, from its captions; null when unknown. */
   let dialogue = null;
+  /** The caption lines themselves, to leave out on-screen text the viewer hears anyway. */
+  let captionLines = [];
   /** Caption URLs already tried for the current video. */
   let captionUrlsTried = new Set();
   /** The video type the watch page suggests, '' until known. A type in the script (Gemini's) comes first. */
   let pageType = '';
   /** 'entertainment' | 'tutorial' | '' for the current video. */
   let videoType = '';
-  /** Mode and detail used for this video instead of the settings, because of its type. */
+  /** Mode, detail and density used for this video instead of the settings, because of its type. */
   let adjusted = {};
   /** `${videoId}:${type}` once the user has heard what the type changed. */
   let typeAnnouncedFor = '';
   /** How to undo an adjustment is said once per tab, with the first one. */
   let typeUndoHintGiven = false;
   let lastSpoken = null;
+  /** The cue being spoken during playback ({kind, priority}), or null. */
+  let speakingCue = null;
   let speechToken = 0;
   /** Token of the utterance that paused the video, or 0 when the video is not paused by us. */
   let pausedByUs = 0;
@@ -91,7 +96,7 @@ function main() {
   };
 
   const readerRate = () => (settings.output === 'tts' ? settings.ttsRate : settings.readerSpeed);
-  /** A setting as it applies to this video: mode and detail may follow the video type. */
+  /** A setting as it applies to this video: mode, detail and density may follow the video type. */
   const setting = (key) => (key in adjusted ? adjusted[key] : settings[key]);
   const shortcut = (name) => shortcuts[name] || '';
 
@@ -208,6 +213,7 @@ function main() {
     stopSpeaking();
     videoId = id;
     dialogue = null;
+    captionLines = [];
     captionUrlsTried = new Set();
     pageType = '';
     resetVideoState();
@@ -239,7 +245,8 @@ function main() {
 
   /**
    * Learn when people speak from the video's captions, so descriptions fit the
-   * real pauses rather than the model's estimate. Without captions the model's
+   * real pauses rather than the model's estimate, and what they say, so text on
+   * screen that is also spoken is not read twice. Without captions the model's
    * estimate is used as before.
    */
   async function loadDialogue(id, urls) {
@@ -248,10 +255,12 @@ function main() {
         if (dead || id !== videoId || dialogue || captionUrlsTried.has(url)) return;
         captionUrlsTried.add(url);
         const res = await fetch(url, { credentials: 'same-origin' });
-        const intervals = res.ok ? speechIntervals(parseTimedText(await res.text())) : [];
+        const lines = res.ok ? parseTimedText(await res.text()) : [];
+        const intervals = speechIntervals(lines);
         if (dead || id !== videoId || dialogue) return;
         if (intervals.length) {
           dialogue = intervals;
+          captionLines = lines;
           console.info(`[SceneVoice] dialogue timing from captions: ${intervals.length} stretches of speech`);
           if (script) scheduleCues();
           return;
@@ -326,10 +335,19 @@ function main() {
     typeUndoHintGiven = true;
   }
 
-  /** Hand the script's cues to the scheduler, moved and trimmed to the real dialogue when it is known. */
+  /**
+   * Hand the script's cues to the scheduler. When the captions are known,
+   * on-screen text they already say is left out, and the rest is moved and
+   * trimmed to the real dialogue.
+   */
   function scheduleCues() {
-    const cues = script?.cues || [];
-    scheduler.setCues(dialogue ? fitCuesToDialogue(cues, dialogue) : cues);
+    let cues = script?.cues || [];
+    if (dialogue) {
+      const { cues: kept, dropped } = dropTextHeardInCaptions(cues, captionLines);
+      if (dropped.length) console.info(`[SceneVoice] ${dropped.length} on-screen texts left out: already in the captions`, dropped.map((c) => `${formatTime(c.start)} ${c.onScreenText || c.standard}`));
+      cues = fitCuesToDialogue(kept, dialogue);
+    }
+    scheduler.setCues(cues);
     const v = getVideo();
     scheduler.reset(v && !isAdShowing() ? v.currentTime : null);
   }
@@ -602,9 +620,11 @@ function main() {
     if (v && v.paused && !v.ended) v.play().catch(() => {});
   }
 
-  async function speakText(text, { pause = false, kind = 'visual', urgent = false } = {}) {
+  /** @param {object} [o.cue]  the cue being spoken during playback, so a less important one does not cut it off */
+  async function speakText(text, { pause = false, kind = 'visual', urgent = false, cue = null } = {}) {
     const video = getVideo();
     const token = (speechToken += 1);
+    speakingCue = cue && { kind: cue.kind, priority: cue.priority };
     // If an earlier utterance paused the video, this one inherits the duty to resume it.
     if (pausedByUs) pausedByUs = token;
     if (settings.showText) ui.showText(text, kind, estimateSeconds(text, readerRate()));
@@ -616,6 +636,7 @@ function main() {
     }
     await announcer.say(text, { urgent });
     if (token !== speechToken) return; // a newer utterance took over
+    speakingCue = null;
     unduck();
     if (pausedByUs === token) resumeIfPausedByUs(video);
   }
@@ -635,11 +656,12 @@ function main() {
     }
     console.info(`[SceneVoice] ${formatTime(cue.start)} ${cue.kind}${u.needsPause ? ' (pause)' : ''}: ${u.text}`);
     lastSpoken = { text: u.text, kind: cue.kind };
-    speakText(u.text, { pause: u.needsPause, kind: cue.kind, urgent: manual });
+    speakText(u.text, { pause: u.needsPause, kind: cue.kind, urgent: manual, cue: manual ? null : cue });
   }
 
   function stopSpeaking() {
     speechToken += 1;
+    speakingCue = null;
     announcer.stop();
     unduck();
     ui.hideText();
@@ -679,9 +701,14 @@ function main() {
     if (video.paused || video.seeking) return;
     const fired = scheduler
       .tick(video.currentTime)
-      .filter((c) => (settings.onScreenText || c.kind !== 'text') && passesDensity(c, settings.density));
+      .filter((c) => (settings.onScreenText || c.kind !== 'text') && passesDensity(c, setting('density')));
     const cue = pickOne(fired);
-    if (cue) deliver(cue);
+    if (!cue) return;
+    if (!mayInterrupt(speakingCue, cue)) {
+      console.info(`[SceneVoice] ${formatTime(cue.start)} skipped: on-screen text is being read`);
+      return;
+    }
+    deliver(cue);
   }
 
   // ---------- user actions ----------
@@ -795,8 +822,8 @@ function main() {
    * Save a setting changed by a shortcut, then say the new value (or that it
    * was not saved). The local copy changes at once, so a quick second press
    * steps on from the new value and the announcement already uses it (a new
-   * speaking rate, for example). A mode or detail chosen here is the user's
-   * own, so the video type no longer changes it.
+   * speaking rate, for example). A mode, detail or density chosen here is the
+   * user's own, so the video type no longer changes it.
    */
   async function change(patch, announcement) {
     const marked = markChoices(patch);

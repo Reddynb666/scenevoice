@@ -12,8 +12,21 @@ const videoId = params.get('v') || '';
 const lang = params.get('lang') || 'en';
 let script = null;
 
+/**
+ * On-screen text exactly as written, when the description does not already
+ * quote it in full (it may translate it, or quote only part): for braille, and
+ * for copying an address or a line of code character for character.
+ */
+function exactText(c, shown) {
+  return c.kind === 'text' && c.onScreenText && !shown.includes(c.onScreenText) ? c.onScreenText : '';
+}
+
 function lines(detail) {
-  return (script?.cues || []).map((c) => `${formatTime(c.start)}  ${c.kind === 'text' ? `[${t('transcript_on_screen')}] ` : ''}${c[detail] || c.standard}`);
+  return (script?.cues || []).map((c) => {
+    const shown = c[detail] || c.standard;
+    const exact = exactText(c, shown);
+    return `${formatTime(c.start)}  ${c.kind === 'text' ? `[${t('transcript_on_screen')}] ` : ''}${shown}${exact ? ` (${t('transcript_exact', exact)})` : ''}`;
+  });
 }
 
 function render() {
@@ -32,7 +45,15 @@ function render() {
       tag.textContent = t('transcript_on_screen');
       text.append(tag);
     }
-    text.append(document.createTextNode(c[detail] || c.standard));
+    const shown = c[detail] || c.standard;
+    text.append(document.createTextNode(shown));
+    const exact = exactText(c, shown);
+    if (exact) {
+      const line = document.createElement('span');
+      line.className = 'exact';
+      line.textContent = t('transcript_exact', exact);
+      text.append(line);
+    }
     tr.append(time, text);
     rows.append(tr);
   }

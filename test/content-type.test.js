@@ -130,7 +130,7 @@ describe('video type on the YouTube page', () => {
   it('switches a tutorial to pause and detailed, says so once, and how to change it back', async () => {
     await vi.waitFor(() => expect(typeNotices()).toHaveLength(1), { timeout: 3000 });
     expect(typeNotices()[0]).toBe(
-      'Tutorial or explainer: SceneVoice will pause when needed, with detailed descriptions. To change it back, choose again in the SceneVoice popup, or turn off “Adjust mode and detail to the video type” in settings.',
+      'Tutorial or explainer: SceneVoice will pause when needed, with detailed descriptions. To change it back, choose again in the SceneVoice popup, or turn off “Adjust descriptions to the video type” in settings.',
     );
     expect((await tabState()).videoType).toBe('tutorial');
     // The settings themselves are not changed: other tabs and videos are not affected.
@@ -142,13 +142,13 @@ describe('video type on the YouTube page', () => {
     expect(typeNotices()).toHaveLength(1);
   });
 
-  it('keeps entertainment flowing with brief descriptions, without repeating how to undo', async () => {
+  it('keeps entertainment flowing with brief descriptions of the essentials, without repeating how to undo', async () => {
     const before = typeNotices().length;
     const mark = said().length;
     video.pause.mockClear();
     await openVideo('musicVideoB', 'Live at the Roundhouse');
     await vi.waitFor(() => expect(typeNotices()).toHaveLength(before + 1), { timeout: 3000 });
-    expect(typeNotices().at(-1)).toBe('Entertainment video: SceneVoice switches to brief descriptions.');
+    expect(typeNotices().at(-1)).toBe('Entertainment video: SceneVoice switches to brief descriptions. It describes only the essentials.');
 
     await playThroughFirstCue();
     await vi.waitFor(() => expect(saidSince(mark)).toContain(drum.brief), { timeout: 3000 });

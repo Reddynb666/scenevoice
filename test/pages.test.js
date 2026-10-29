@@ -176,8 +176,34 @@ describe('popup quick settings', () => {
   it('says where to set shortcuts for the quick settings, or which keys they have', async () => {
     await openPage('popup');
     await vi.waitFor(() => expect($('#quickKeys').textContent).toMatch(/can each have a shortcut/));
-    await openPage('popup', { shortcuts: { 'cycle-detail': 'Alt+Shift+1', 'speed-up': 'Alt+Shift+Up' } });
-    await vi.waitFor(() => expect($('#quickKeys').textContent).toBe('Shortcuts: Alt+Shift+1 detail · Alt+Shift+Up faster'));
+    await openPage('popup', { shortcuts: { 'cycle-detail': 'Alt+Shift+1', 'cycle-density': 'Alt+Shift+3', 'speed-up': 'Alt+Shift+Up' } });
+    await vi.waitFor(() => expect($('#quickKeys').textContent).toBe('Shortcuts: Alt+Shift+1 detail · Alt+Shift+3 how much to describe · Alt+Shift+Up faster'));
+  });
+
+  it('reads on-screen text by default, with a switch that says what it reads', async () => {
+    for (const page of ['popup', 'options']) {
+      await openPage(page);
+      const box = $('input[data-setting=onScreenText]');
+      await vi.waitFor(() => expect(box.checked).toBe(true));
+      expect(box.labels[0].textContent.trim()).toBe('Read on-screen text');
+      expect(box.getAttribute('aria-describedby')).toBe('onScreenTextHint');
+      expect($('#onScreenTextHint').textContent).toMatch(/prices, contact details, code and menus, word for word and before other descriptions/);
+      expect([...document.querySelectorAll('input[name=density]')].map((r) => r.labels[0].querySelector('span').textContent)).toEqual(['Essentials only', 'Moderate', 'As much as possible']);
+      expect($('input[name=density][value=standard]').checked).toBe(true);
+      box.checked = false;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await vi.waitFor(() => expect(stored().onScreenText).toBe(false));
+      // Not one of the settings the video type decides.
+      expect(stored()).not.toHaveProperty('densityChosen', true);
+    }
+  });
+
+  it('labels the on-screen text switch and density in Chinese', async () => {
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    expect($('input[data-setting=onScreenText]').labels[0].textContent.trim()).toBe('朗读屏幕文字');
+    expect($('#onScreenTextHint').textContent).toBe('标题、人名、幻灯片、图表数字、价格、联系方式、代码、菜单等按原文朗读，并且优先于其他描述；对白里已经说出的文字不再重复。');
+    expect($('fieldset:has(input[name=density]) legend').textContent).toBe('描述密度');
+    expect([...document.querySelectorAll('input[name=density]')].map((r) => r.labels[0].textContent)).toEqual(['仅关键', '适中', '尽量多']);
   });
 
   it('says so when a setting could not be saved, and clears the message on the next change', async () => {
@@ -207,7 +233,7 @@ describe('popup and the video type', () => {
     expect(checked('detail')).toBe('detailed');
     // Nothing is saved: the type only applies to this video.
     expect(stored()).toEqual({});
-    for (const fieldset of document.querySelectorAll('fieldset:has(input[name=mode]), fieldset:has(input[name=detail])')) {
+    for (const fieldset of document.querySelectorAll('fieldset:has(input[name=mode]), fieldset:has(input[name=detail]), fieldset:has(input[name=density])')) {
       expect(fieldset.getAttribute('aria-describedby')).toBe('typeNote');
     }
     expect(await axeViolations()).toEqual([]);
@@ -243,8 +269,10 @@ describe('popup and the video type', () => {
   it('explains it in Chinese for a Chinese interface', async () => {
     await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab('entertainment') });
     await vi.waitFor(() => expect($('#typeNote').hidden).toBe(false));
-    expect($('#typeNote').textContent).toBe('娱乐类视频，已切换为简短口述。 在下面另选一项，之后每个视频都按你的选择。');
+    expect($('#typeNote').textContent).toBe('娱乐类视频，已切换为简短口述。 描述密度为“仅关键”。 在下面另选一项，之后每个视频都按你的选择。');
     expect(checked('detail')).toBe('brief');
+    expect(checked('density')).toBe('essential');
+    expect($('input[name=density][value=essential]').labels[0].textContent).toBe('仅关键');
   });
 });
 
@@ -386,16 +414,18 @@ describe('settings page', () => {
     expect($('#keyStatus').textContent).not.toMatch(/could not be saved/);
   });
 
-  it('sets the mode and detail for each video type, changeable while adjusting is on', async () => {
+  it('sets the mode, detail and density for each video type, changeable while adjusting is on', async () => {
     await openPage('options');
     const box = $('#autoByType');
     await vi.waitFor(() => expect(box.checked).toBe(true));
     expect(box.getAttribute('aria-describedby')).toBe('autoByTypeHint');
-    expect($('#autoByTypeHint').textContent).toMatch(/A mode or detail you choose yourself .* always comes first/);
+    expect($('#autoByTypeHint').textContent).toMatch(/A mode, detail or amount you choose yourself .* always comes first/);
     expect($('#h-type').tagName).toBe('H3');
     const select = (key) => $(`select[data-setting=${key}]`);
     expect([select('entertainmentMode').value, select('entertainmentDetail').value]).toEqual(['gaps', 'brief']);
     expect([select('tutorialMode').value, select('tutorialDetail').value]).toEqual(['pause', 'detailed']);
+    expect([select('entertainmentDensity').value, select('tutorialDensity').value]).toEqual(['essential', 'standard']);
+    expect(select('entertainmentDensity').labels[0].querySelector('span').textContent).toBe('How much to describe');
     // Each list is named by its own label, inside a group named for the type.
     expect(select('tutorialMode').labels[0].querySelector('span').textContent).toBe('When a description does not fit');
     expect(select('tutorialMode').closest('fieldset').querySelector('legend').textContent).toMatch(/^Tutorials and explainers/);
@@ -404,8 +434,10 @@ describe('settings page', () => {
 
     selectValue(select('tutorialMode'), 'manual');
     await vi.waitFor(() => expect(stored().tutorialMode).toBe('manual'));
-    // A type's setting is not a choice of the general mode.
-    expect(stored().modeChosen).toBe(false);
+    selectValue(select('entertainmentDensity'), 'standard');
+    await vi.waitFor(() => expect(stored().entertainmentDensity).toBe('standard'));
+    // A type's setting is not a choice of the general one.
+    expect(stored()).toMatchObject({ modeChosen: false, densityChosen: false });
 
     box.checked = false;
     box.dispatchEvent(new Event('change', { bubbles: true }));
@@ -415,23 +447,25 @@ describe('settings page', () => {
     expect(await axeViolations()).toEqual([]);
   });
 
-  it('says which of mode and detail the user chose, and lets the video type decide again', async () => {
+  it('says which of mode, detail and density the user chose, and lets the video type decide again', async () => {
     await openPage('options', { sync: { settings: { mode: 'manual', modeChosen: true } } });
     await vi.waitFor(() => expect($('#typeChosenBox').hidden).toBe(false));
-    expect($('#typeChosen').textContent).toBe('You chose the mode yourself, so only the detail follows the video type.');
+    expect($('#typeChosen').textContent).toBe('You chose the mode yourself, so the video type now decides only the detail and how much to describe.');
     expect($('#typeAgain').getAttribute('aria-describedby')).toBe('typeChosen');
     expect(await axeViolations()).toEqual([]);
 
     choose($('input[name=detail][value=brief]'));
-    await vi.waitFor(() => expect($('#typeChosen').textContent).toBe('You chose the mode and the detail yourself, so every video uses your choice.'));
+    await vi.waitFor(() => expect($('#typeChosen').textContent).toBe('You chose the mode and the detail yourself, so the video type now decides only how much to describe.'));
+    choose($('input[name=density][value=full]'));
+    await vi.waitFor(() => expect($('#typeChosen').textContent).toBe('You chose the mode, the detail and how much to describe yourself, so every video uses your choice.'));
 
     $('#typeAgain').click();
-    await vi.waitFor(() => expect(stored()).toMatchObject({ modeChosen: false, detailChosen: false }));
+    await vi.waitFor(() => expect(stored()).toMatchObject({ modeChosen: false, detailChosen: false, densityChosen: false }));
     // The values stay; they are just no longer the user's own choice.
-    expect(stored()).toMatchObject({ mode: 'manual', detail: 'brief' });
+    expect(stored()).toMatchObject({ mode: 'manual', detail: 'brief', density: 'full' });
     await vi.waitFor(() => expect($('#typeChosenBox').hidden).toBe(true));
     expect(document.activeElement).toBe($('#autoByType'));
-    expect($('#settingsStatus').textContent).toBe('Mode and detail follow the video type again.');
+    expect($('#settingsStatus').textContent).toBe('Mode, detail and how much to describe follow the video type again.');
   });
 
   it('labels the video type settings in Chinese', async () => {
@@ -440,7 +474,8 @@ describe('settings page', () => {
     expect($('#autoByType').labels[0].textContent).toBe('按视频类型自动调整');
     expect([...document.querySelectorAll('.type-grid legend')].map((l) => l.textContent)).toEqual(['娱乐类：影视、音乐、Vlog、游戏', '教程讲解类：教学、操作演示、科普、新闻图表']);
     expect($('select[data-setting=tutorialMode] option[value=pause]').textContent).toBe('暂停视频');
-    expect($('#typeChosen').textContent).toBe('详细程度是你自己选的，所以只有模式会按视频类型调整。');
+    expect($('#typeChosen').textContent).toBe('详细程度是你自己选的，所以只有模式和描述密度会按视频类型调整。');
+    expect($('select[data-setting=entertainmentDensity] option[value=full]').textContent).toBe('尽量多');
     expect($('#typeAgain').textContent).toBe('重新按视频类型调整');
   });
 
@@ -448,6 +483,34 @@ describe('settings page', () => {
     await openPage('options', { sync: { settings: { autoByType: false, mode: 'pause', modeChosen: true } } });
     await vi.waitFor(() => expect($('#typeTutorial').disabled).toBe(true));
     expect($('#typeChosenBox').hidden).toBe(true);
+  });
+
+  it('shows on-screen text exactly as written in the transcript, where the description does not quote it in full', async () => {
+    const cues = [
+      { start: 3, gap: 2, kind: 'text', priority: 1, onScreenText: 'hello@joes.example / 555-0199', brief: 'Contact: email and phone', standard: 'Contact: email hello at joes dot example, phone 555-0199', detailed: 'x' },
+      { start: 9, gap: 2, kind: 'text', priority: 1, onScreenText: 'OPEN', brief: 'Sign: OPEN', standard: 'Sign: OPEN', detailed: 'Sign: OPEN' },
+      { start: 12, gap: 2, kind: 'visual', priority: 1, brief: 'She smiles.', standard: 'She smiles.', detailed: 'She smiles.' },
+    ];
+    jsdom.reconfigure({ url: 'https://extension.test/transcript.html?v=abcdefghijk&lang=en&title=Diner' });
+    URL.createObjectURL = vi.fn(() => 'blob:transcript');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const html = readFileSync(join(root, 'src', 'transcript', 'transcript.html'), 'utf8');
+      document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
+      fake = fakeChrome({ local: { 'script:abcdefghijk:en': { version: 2, cues, model: 'gemini-test' } } });
+      globalThis.chrome = fake.chrome;
+      vi.resetModules();
+      await import('../src/transcript/transcript.js');
+      await vi.waitFor(() => expect($('#table').hidden).toBe(false));
+      const cells = [...document.querySelectorAll('#rows td:not(.time)')];
+      expect(cells[0].querySelector('.exact').textContent).toBe('Exact text: hello@joes.example / 555-0199');
+      // Already quoted in full, or not text: nothing added.
+      expect(cells[1].querySelector('.exact')).toBeNull();
+      expect(cells[2].querySelector('.exact')).toBeNull();
+      expect(cells[0].textContent).toBe('On screenContact: email hello at joes dot example, phone 555-0199Exact text: hello@joes.example / 555-0199');
+    } finally {
+      jsdom.reconfigure({ url: 'http://localhost:3000/' });
+    }
   });
 
   it('lists the new speed shortcuts, unset by default', async () => {

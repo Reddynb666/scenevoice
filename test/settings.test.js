@@ -86,35 +86,41 @@ describe('video type settings', () => {
       autoByType: true,
       modeChosen: false,
       detailChosen: false,
+      densityChosen: false,
       entertainmentMode: 'gaps',
       entertainmentDetail: 'brief',
+      entertainmentDensity: 'essential',
       tutorialMode: 'pause',
       tutorialDetail: 'detailed',
+      tutorialDensity: 'standard',
     });
   });
 
   it('keeps valid choices for each type and replaces bad ones', () => {
     expect(normalizeSettings({ tutorialMode: 'manual', entertainmentDetail: 'standard', autoByType: false })).toMatchObject({ tutorialMode: 'manual', entertainmentDetail: 'standard', autoByType: false });
-    const bad = normalizeSettings({ tutorialMode: 'loud', tutorialDetail: 3, entertainmentMode: null, autoByType: 'no', modeChosen: 1 });
-    expect(bad).toMatchObject({ tutorialMode: 'pause', tutorialDetail: 'detailed', entertainmentMode: 'gaps', autoByType: true, modeChosen: false });
+    expect(normalizeSettings({ entertainmentDensity: 'full', tutorialDensity: 'essential' })).toMatchObject({ entertainmentDensity: 'full', tutorialDensity: 'essential' });
+    const bad = normalizeSettings({ tutorialMode: 'loud', tutorialDetail: 3, entertainmentMode: null, entertainmentDensity: 'lots', autoByType: 'no', modeChosen: 1, densityChosen: 'yes' });
+    expect(bad).toMatchObject({ tutorialMode: 'pause', tutorialDetail: 'detailed', entertainmentMode: 'gaps', entertainmentDensity: 'essential', autoByType: true, modeChosen: false, densityChosen: false });
   });
 
-  it('treats a mode or detail saved before this version as chosen, unless it is the default', () => {
+  it('treats a mode, detail or density saved before this version as chosen, unless it is the default', () => {
     expect(normalizeSettings({ mode: 'manual', detail: 'standard' })).toMatchObject({ modeChosen: true, detailChosen: false });
     expect(normalizeSettings({ mode: 'gaps', detail: 'detailed' })).toMatchObject({ modeChosen: false, detailChosen: true });
+    expect(normalizeSettings({ density: 'full' })).toMatchObject({ densityChosen: true });
+    expect(normalizeSettings({ density: 'standard' })).toMatchObject({ densityChosen: false });
     expect(normalizeSettings({ mode: 'bogus' }).modeChosen).toBe(false);
     // Once the flags are saved they are taken as they are.
     expect(normalizeSettings({ mode: 'manual', modeChosen: false }).modeChosen).toBe(false);
     expect(normalizeSettings({ mode: 'gaps', modeChosen: true }).modeChosen).toBe(true);
   });
 
-  it('marks a saved mode or detail as the user\'s own', () => {
+  it('marks a saved mode, detail or density as the user\'s own', () => {
     expect(markChoices({ mode: 'pause' })).toEqual({ mode: 'pause', modeChosen: true });
-    expect(markChoices({ detail: 'brief', density: 'full' })).toEqual({ detail: 'brief', density: 'full', detailChosen: true });
-    expect(markChoices({ density: 'full' })).toEqual({ density: 'full' });
-    expect(markChoices({ tutorialMode: 'manual' })).toEqual({ tutorialMode: 'manual' });
+    expect(markChoices({ detail: 'brief', density: 'full' })).toEqual({ detail: 'brief', density: 'full', detailChosen: true, densityChosen: true });
+    expect(markChoices({ density: 'full' })).toEqual({ density: 'full', densityChosen: true });
+    expect(markChoices({ tutorialMode: 'manual', entertainmentDensity: 'full', onScreenText: false })).toEqual({ tutorialMode: 'manual', entertainmentDensity: 'full', onScreenText: false });
     // "Let the video type decide again" clears the flags without choosing a value.
-    expect(markChoices({ modeChosen: false, detailChosen: false })).toEqual({ modeChosen: false, detailChosen: false });
+    expect(markChoices({ modeChosen: false, detailChosen: false, densityChosen: false })).toEqual({ modeChosen: false, detailChosen: false, densityChosen: false });
   });
 });
 

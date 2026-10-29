@@ -95,20 +95,20 @@
         <p id="readerSpeedHint" class="small muted" data-i18n="set_reader_speed_hint">SceneVoice cannot hear your screen reader, so it uses this to decide which descriptions fit in a pause.</p>
       </div>
 
-      <fieldset>
+      <fieldset aria-describedby="typeNote">
         <legend data-i18n="set_density">How much to describe</legend>
         <div class="choices choices-inline">
-          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials</span></label>
-          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Standard</span></label>
-          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">Everything</span></label>
+          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials only</span></label>
+          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Moderate</span></label>
+          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">As much as possible</span></label>
         </div>
       </fieldset>
 
       <label class="check">
-        <input type="checkbox" data-setting="onScreenText">
+        <input type="checkbox" data-setting="onScreenText" aria-describedby="onScreenTextHint">
         <span data-i18n="set_on_screen_text">Read on-screen text</span>
-        <span class="hint" data-i18n="set_on_screen_text_hint">Titles, burned-in captions, signs and slides.</span>
       </label>
+      <p id="onScreenTextHint" class="small muted" data-i18n="set_on_screen_text_hint">Titles, names, slides, chart figures, prices, contact details, code and menus, word for word and before other descriptions. Text you already hear in the dialogue is not read again.</p>
 
       <label class="field">
         <span data-i18n="set_language">Description language</span>

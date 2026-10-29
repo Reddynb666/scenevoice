@@ -55,10 +55,33 @@ describe('describer instructions', () => {
       expect(text).toContain(rule);
     }
   });
-  it('set a density target so sections are not sparse', () => {
-    expect(text).toMatch(/every 10 to 20 seconds/);
-    expect(text).toMatch(/15 to 40 descriptions/);
-    expect(text).not.toMatch(/at least 3 seconds apart/);
+  it('leave quiet moments quiet instead of filling every pause', () => {
+    expect(text).toMatch(/never describe just to fill a pause/);
+    expect(text).toMatch(/There is no quota/);
+    expect(text).toMatch(/Music, scenery and other atmospheric passages: let them play/);
+    expect(text).toMatch(/empty "cues" list: that is a correct answer/);
+    // The old targets asked for a description every 10 to 20 seconds whatever the picture.
+    expect(text).not.toMatch(/every 10 to 20 seconds|15 to 40 descriptions|never leave more than 30 seconds|when there is room/);
+    // Fast pictures may still be described closely.
+    expect(text).toMatch(/as close as 2 seconds apart/);
+  });
+  it('put on-screen text first, as its own cue, transcribed word for word', () => {
+    expect(text.indexOf('Meaningful on-screen text')).toBeLessThan(text.indexOf('Every change of place or time'));
+    for (const kind of ['prices', 'phone numbers', 'email and web addresses', 'code', 'menu items', 'chart and graph labels with their numbers']) {
+      expect(text).toContain(kind);
+    }
+    expect(text).toMatch(/"onScreenText" is a transcription: copy the text exactly as written/);
+    expect(text).toMatch(/Never translate, summarise, correct or reword it/);
+    expect(text).toMatch(/Skip text the viewer already hears/);
+    // Translated with the original quoted when it is in another language than the descriptions.
+    expect(text).toMatch(/If the text is not in Simplified Chinese, quote the original and add a short translation/);
+  });
+  it('ask for the transcription in its own field, before the spoken versions', () => {
+    const cue = buildScriptRequest({ videoId: 'abcdefghijk', meta: {}, chunk: { start: 0, end: 60 }, duration: 60, characters: [], lang: 'en' }).generationConfig.responseSchema.properties.cues.items;
+    expect(cue.properties.onScreenText).toEqual({ type: 'STRING' });
+    expect(cue.properties.kind.enum).toEqual(['visual', 'text']);
+    expect(cue.required).toContain('onScreenText');
+    expect(cue.propertyOrdering.indexOf('onScreenText')).toBeLessThan(cue.propertyOrdering.indexOf('brief'));
   });
   it('ask for the video type in the same answer, so it costs no extra request', () => {
     expect(text).toMatch(/"tutorial": made to teach or explain/);
@@ -87,6 +110,7 @@ describe('request builders', () => {
   it('builds a short clip around the asked moment', () => {
     const req = buildAskRequest({ videoId: 'abcdefghijk', meta: {}, time: 100, duration: 300, question: 'Who?', nearbyText: '', lang: 'en' });
     expect(req.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '80s', endOffset: '104s' });
+    expect(req.systemInstruction.parts[0].text).toContain('Quote any text on screen that bears on the question exactly as written.');
     const early = buildAskRequest({ videoId: 'abcdefghijk', meta: {}, time: 1, duration: 3, question: 'Who?', lang: 'en' });
     expect(early.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '0s', endOffset: '3s' });
   });
