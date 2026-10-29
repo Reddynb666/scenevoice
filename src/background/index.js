@@ -9,8 +9,21 @@
 // finished section to the cache, and tells the YouTube tabs what happened.
 
 import { MSG } from '../shared/constants.js';
-import { getLocal, setLocal } from '../shared/storage.js';
+import { authorizeBackgroundMessage } from '../shared/sender.js';
+import { getLocal, protectLocalStorage, setLocal } from '../shared/storage.js';
 import { cacheInfo, clearCache, deleteScript, getScript, putScript } from '../shared/cache.js';
+
+// Content scripts share the YouTube process and must not read the API key or
+// the description cache. The level does not always survive a browser restart,
+// so set it on every worker start, before handling messages. Stored records
+// are left as they are: existing users keep their key and cached scripts.
+function restrictStorage() {
+  return protectLocalStorage().catch((err) => {
+    console.error('[SceneVoice] could not restrict local storage to trusted contexts', err);
+  });
+}
+
+const storageAccess = restrictStorage();
 
 // ---------- install ----------
 
@@ -25,7 +38,12 @@ async function openWelcome(attempt = 0) {
 }
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
+  restrictStorage();
   if (reason === 'install') openWelcome();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  restrictStorage();
 });
 
 // ---------- speech ----------
@@ -181,11 +199,14 @@ async function shortcuts() {
 }
 
 async function handle(msg, sender) {
+  await storageAccess;
   switch (msg?.type) {
     case MSG.GET_STATUS: {
       const local = await getLocal();
       return { hasKey: Boolean(local.apiKey), model: local.model, shortcuts: await shortcuts() };
     }
+    case MSG.GET_SCRIPT:
+      return { script: await getScript(msg.videoId, msg.lang) };
     case MSG.DELETE_SCRIPT:
       await stopGeneration(msg).catch(() => {});
       await deleteScript(msg.videoId, msg.lang);
@@ -223,8 +244,18 @@ async function handle(msg, sender) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg?.type?.startsWith('sv:')) return false;
-  if (msg.type === MSG.OFFSCREEN) return false; // addressed to the offscreen document
+  try {
+    if (!msg?.type?.startsWith('sv:')) return false;
+    // Answered by the offscreen document. Responding here would race with it.
+    if (msg.type === MSG.OFFSCREEN) return false;
+    if (!authorizeBackgroundMessage(msg.type, sender, chrome.runtime.id)) {
+      sendResponse({ error: 'forbidden' });
+      return false;
+    }
+  } catch {
+    sendResponse({ error: 'forbidden' });
+    return false;
+  }
   handle(msg, sender)
     .then(sendResponse)
     .catch((err) => sendResponse({ error: 'unknown', detail: String(err?.message || '') }));

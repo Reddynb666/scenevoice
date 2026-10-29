@@ -2,6 +2,7 @@
 // regions) or through the browser's voices (chrome.tts in the background).
 
 import { MSG } from '../shared/constants.js';
+import { authorizeContentMessage } from '../shared/sender.js';
 import { estimateSeconds } from '../shared/script.js';
 import { containerForOverlays } from './youtube.js';
 
@@ -55,8 +56,13 @@ export class Announcer {
     this.seq = 0;
     this.mount();
     document.addEventListener('fullscreenchange', () => this.mount());
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg?.type === MSG.TTS_EVENT && this.pending && msg.id === this.pending.id) this.finish();
+    chrome.runtime.onMessage.addListener((msg, sender) => {
+      if (msg?.type !== MSG.TTS_EVENT || !this.pending || msg.id !== this.pending.id) return;
+      try {
+        if (authorizeContentMessage(msg.type, sender, chrome.runtime?.id)) this.finish();
+      } catch {
+        // Ignore a message we cannot attribute.
+      }
     });
   }
 

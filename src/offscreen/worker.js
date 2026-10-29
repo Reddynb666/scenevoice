@@ -108,6 +108,9 @@ async function ask({ config, params }) {
   }
 }
 
+// No chrome.runtime listener here. offscreen.js creates this worker and is the
+// only caller; it forwards a command only after the service worker is confirmed
+// as the sender. Messages that are not one of those commands are ignored below.
 self.onmessage = async ({ data }) => {
   const { id, cmd } = data || {};
   let reply;

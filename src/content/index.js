@@ -2,10 +2,10 @@
 
 import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS } from '../shared/constants.js';
 import { t, errorMessage } from '../shared/i18n.js';
+import { authorizeContentMessage } from '../shared/sender.js';
 import { resolveLanguage, setSettings, watchSettings } from '../shared/storage.js';
 import { chooseUtterance, cueAt, estimateSeconds, formatTime, passesDensity } from '../shared/script.js';
 import { CueScheduler, pickOne } from '../shared/scheduler.js';
-import { getScript } from '../shared/cache.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { askAboutMoment, startGeneration, stopGeneration } from './generator.js';
@@ -89,7 +89,10 @@ function main() {
     return undefined;
   }
 
-  /** Whether an API key is set up. The key itself never enters this page. */
+  /**
+   * Whether an API key is saved. The key stays in the service worker: this page
+   * only hears yes or no. chrome.storage.local is not readable from here.
+   */
   async function hasKey() {
     const res = await send({ type: MSG.GET_STATUS });
     if (res?.error === 'extension-reloaded') {
@@ -99,8 +102,24 @@ function main() {
     return Boolean(res?.hasKey);
   }
 
+  /**
+   * One cached description script. The cache lives in chrome.storage.local,
+   * which content scripts cannot read, so the service worker looks it up.
+   */
+  async function fetchScript(id, l) {
+    const res = await send({ type: MSG.GET_SCRIPT, videoId: id, lang: l });
+    if (res?.error === 'extension-reloaded') {
+      die();
+      return null;
+    }
+    if (!res || res.error) return null;
+    return res.script ?? null;
+  }
+
   // ---------- settings ----------
 
+  // Preferences live in chrome.storage.sync and include no secrets, so this
+  // page reads them directly. Shortcuts come from the service worker.
   watchSettings((s) => {
     const prevLang = lang;
     const wasEnabled = settings.enabled;
@@ -162,13 +181,8 @@ function main() {
     const id = videoId;
     const l = lang;
     status = 'loading';
-    let cached = null;
-    try {
-      cached = await getScript(id, l);
-    } catch {
-      if (!chrome.runtime?.id) return die();
-    }
-    if (id !== videoId || l !== lang) return undefined;
+    const cached = await fetchScript(id, l);
+    if (dead || id !== videoId || l !== lang) return undefined;
     if (cached) {
       setScript(cached);
       console.info(`[SceneVoice] ${cached.cues.length} saved descriptions for ${id} (${l})${cached.complete ? '' : ', incomplete'}`);
@@ -331,8 +345,8 @@ function main() {
     if (id !== videoId || l !== lang || seq !== beginSeq) return undefined;
     if (!res || res.error) return onGenerationError(res?.error || 'unknown', res?.detail);
     if (res.status === 'ready') {
-      const sc = await getScript(id, l).catch(() => null);
-      if (id !== videoId || l !== lang) return undefined;
+      const sc = await fetchScript(id, l);
+      if (dead || id !== videoId || l !== lang) return undefined;
       if (sc) onGenerationDone(sc);
       else onGenerationError('unknown', 'no script after ready');
       return undefined;
@@ -346,8 +360,8 @@ function main() {
   async function onGenerationChunk(ev) {
     following = true;
     applyProgress(ev);
-    const sc = await getScript(ev.videoId, ev.lang).catch(() => null);
-    if (ev.videoId !== videoId || ev.lang !== lang) return;
+    const sc = await fetchScript(ev.videoId, ev.lang);
+    if (dead || ev.videoId !== videoId || ev.lang !== lang) return;
     if (sc?.cues?.length) {
       setScript(sc);
       status = 'generating';
@@ -408,8 +422,8 @@ function main() {
         await onGenerationChunk(ev);
         break;
       case 'done': {
-        const sc = await getScript(ev.videoId, ev.lang).catch(() => null);
-        if (ev.videoId !== videoId || ev.lang !== lang) return;
+        const sc = await fetchScript(ev.videoId, ev.lang);
+        if (dead || ev.videoId !== videoId || ev.lang !== lang) return;
         if (sc) onGenerationDone(sc);
         break;
       }
@@ -714,21 +728,30 @@ function main() {
     };
   }
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === MSG.COMMAND) {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    const type = msg?.type;
+    if (type !== MSG.COMMAND && type !== MSG.GEN_EVENT && type !== MSG.TAB_STATE && type !== MSG.TAB_ACTION) return false;
+    let allowed = false;
+    try {
+      allowed = authorizeContentMessage(type, sender, chrome.runtime?.id);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) return false;
+    if (type === MSG.COMMAND) {
       runCommand(msg.command);
       return false;
     }
-    if (msg?.type === MSG.GEN_EVENT) {
+    if (type === MSG.GEN_EVENT) {
       onGenerationEvent(msg);
       return false;
     }
-    if (msg?.type === MSG.TAB_STATE) {
+    if (type === MSG.TAB_STATE) {
       if (isFrame && !shouldHandle()) return false;
       sendResponse(tabState());
       return false;
     }
-    if (msg?.type === MSG.TAB_ACTION) {
+    if (type === MSG.TAB_ACTION) {
       if (isFrame && !shouldHandle()) return false;
       (async () => {
         // Generation can wait minutes for an ad to end: kick it off and answer with the current state.

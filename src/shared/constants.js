@@ -88,6 +88,8 @@ export const CACHE_LIMIT = 300;
 export const MSG = Object.freeze({
   // content/popup/options -> background
   GET_STATUS: 'sv:get-status',
+  /** Content script asks the service worker for one cached description script. */
+  GET_SCRIPT: 'sv:get-script',
   DELETE_SCRIPT: 'sv:delete-script',
   SPEAK: 'sv:speak',
   STOP_SPEAKING: 'sv:stop-speaking',

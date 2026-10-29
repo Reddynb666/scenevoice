@@ -5,6 +5,7 @@
 // API key and saved script with each job and writes results to the cache.
 
 import { MSG } from '../shared/constants.js';
+import { authorizeOffscreenMessage } from '../shared/sender.js';
 
 const worker = new Worker(chrome.runtime.getURL('offscreen-worker.js'), { type: 'classic' });
 const pending = new Map();
@@ -35,8 +36,26 @@ worker.onerror = (ev) => {
   console.error('[SceneVoice] worker error', ev.message);
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask']);
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== MSG.OFFSCREEN) return false;
+  // Content scripts can message this document directly. Only the service
+  // worker may start jobs, and it is the only context that holds the API key.
+  let allowed = false;
+  try {
+    allowed = authorizeOffscreenMessage(msg.type, sender, chrome.runtime?.id);
+  } catch {
+    allowed = false;
+  }
+  if (!allowed) {
+    sendResponse({ error: 'forbidden' });
+    return false;
+  }
+  if (!OFFSCREEN_CMDS.has(msg.data?.cmd)) {
+    sendResponse({ error: 'unknown-command' });
+    return false;
+  }
   call(msg.data).then(sendResponse);
   return true;
 });

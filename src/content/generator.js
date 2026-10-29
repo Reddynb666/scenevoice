@@ -2,9 +2,11 @@
 //
 // The work itself runs in a worker inside the extension's offscreen document
 // (see offscreen/worker.js): a YouTube page may not reach the Gemini API under
-// the page's own policies, and the API key never has to enter the page. This
+// the page's own policies, and the API key stays in the service worker. This
 // module only asks the service worker to start, stop or report a job; progress
-// arrives as MSG.GEN_EVENT messages, handled in index.js.
+// arrives as MSG.GEN_EVENT messages, handled in index.js. Cached scripts are
+// loaded the same way (MSG.GET_SCRIPT): content scripts cannot read
+// chrome.storage.local, where the key and the cache are stored.
 
 import { MSG } from '../shared/constants.js';
 

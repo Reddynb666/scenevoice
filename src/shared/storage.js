@@ -1,7 +1,26 @@
-// Settings live in chrome.storage.sync (follow the user across browsers);
-// the API key and per-device options live in chrome.storage.local only.
+// Settings live in chrome.storage.sync (follow the user across browsers) and
+// contain no secrets, so content scripts may read and update them directly.
+// The API key and per-device options live in chrome.storage.local only.
+// protectLocalStorage() limits that area to the service worker and extension
+// pages. Content scripts cannot read it; they ask the service worker for a
+// cached description script instead.
+//
+// The key stays in local storage, next to the description cache. Session
+// storage is trusted by default but is wiped when the browser closes, which
+// would drop the key. Existing installs already have both the key (`local`)
+// and cached scripts (`script:*`) here, so nothing is moved or rewritten.
 
 import { DEFAULT_LOCAL, DEFAULT_SETTINGS } from './constants.js';
+
+/**
+ * Stop content scripts from reading chrome.storage.local.
+ * Call on every service worker start: Chrome does not reliably keep the
+ * access level across restarts. Does not read or write stored records, so an
+ * existing key and cached scripts stay put.
+ */
+export function protectLocalStorage() {
+  return chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+}
 
 export async function getSettings() {
   try {

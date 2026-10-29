@@ -1,5 +1,9 @@
 // Description scripts cached in chrome.storage.local, keyed by video and language.
 // An index keeps last-use times so the oldest scripts can be evicted.
+//
+// This module is for the service worker and extension pages only. Content
+// scripts cannot read chrome.storage.local (see protectLocalStorage); they
+// request a script with MSG.GET_SCRIPT.
 
 import { CACHE_LIMIT, SCRIPT_VERSION } from './constants.js';
 
