@@ -217,16 +217,16 @@ export function chooseUtterance(cue, { mode, detail, rate, onScreenText, playbac
   if (!cue) return null;
   if (cue.kind === 'text' && !onScreenText) return null;
   const order = DETAIL_ORDER[detail] || DETAIL_ORDER.standard;
-  // The gap is measured in video seconds; at 2x it passes twice as fast.
-  const room = cue.gap / Math.max(0.25, playbackRate || 1) + 0.5;
+  // The gap is in video seconds; at 2x it passes twice as fast. The model's own
+  // estimate gets half a second of leeway; a gap measured from captions gets none.
+  const room = cue.gap / Math.max(0.25, playbackRate || 1) + (cue.gapMeasured ? 0 : 0.5);
 
   if (mode === 'gaps') {
     for (const key of order) {
       const text = cue[key];
       if (text && estimateSeconds(text, rate) <= room) return { text, needsPause: false };
     }
-    // Nothing fits. Say the shortest version of important cues anyway; drop the rest.
-    if (cue.priority <= 2) return { text: cue.brief || cue.standard, needsPause: false };
+    // Nothing fits: skip it rather than talk over dialogue, however important.
     return null;
   }
 

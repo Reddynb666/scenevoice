@@ -461,12 +461,13 @@ def main():
             check(e1["live"] == "polite", "scheduled descriptions are polite by default")
         e2 = wait_for_log(page, r"Dumplings 101", 10)
         check(e2 is not None, "on-screen text cue read")
-        e3 = wait_for_log(page, r"folds a dumpling", 12)
-        check(e3 is not None and e3["text"] == "She folds a dumpling.", "tight 0.5 s gap: important cue shortened to brief")
         vol = video(page, "return v.volume;")
         check(vol < 0.6, f"video volume ducked while describing ({vol})")
         time.sleep(1.2)
         check(video(page, "return v.volume;") > 0.95, "volume restored afterwards")
+        # The 0.5 s gap at 0:12 is too short even for the brief version: skipped, not spoken over dialogue.
+        check(wait_until(page, "() => document.querySelector('video').currentTime > 13.5", 12), "playback passes 0:13")
+        check(not any("folds a dumpling" in t for t in log_texts(page)), "tight 0.5 s gap: description skipped rather than talking over dialogue")
 
         # Density: the priority-3 "tray" cue at 0:20 is skipped at the default, spoken on "everything".
         page.evaluate("window.__log = []")

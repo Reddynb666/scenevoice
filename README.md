@@ -9,7 +9,7 @@ It is built for screen reader users first. Every control works from the keyboard
 ## What it does
 
 - **Describes any YouTube video on demand.** Press `Alt+Shift+D` on a video and SceneVoice creates descriptions in about half a minute per five minutes of video. The first part is ready before the rest is finished, and everything is saved on your computer, so a video is described only once.
-- **Fits into the pauses.** Every moment is written in three lengths (brief, standard, detailed). SceneVoice picks the longest one that fits the silence, so descriptions never talk over dialogue. If you prefer, it can pause the video and read the full description instead, or stay silent until you ask.
+- **Fits into the pauses.** Every moment is written in three lengths (brief, standard, detailed). SceneVoice picks the longest one that fits the silence and skips a description when even the brief one does not fit, rather than talk over dialogue. When the video has captions (including YouTube's automatic ones), their timing is used to find the real pauses. If you prefer, it can pause the video and read the full description instead, or stay silent until you ask.
 - **Reads on-screen text.** Title cards, burned-in captions, signs, slides and chat messages are read out, in the video's language with a translation if needed. You can turn this off separately.
 - **Describe now and ask anything.** `Alt+Shift+S` describes the current moment at once. `Alt+Shift+Q` opens a dialog where you can type a question — "who is speaking?", "what does the sign say?" — and get an answer about that exact moment.
 - **Your screen reader, or a built-in voice.** By default descriptions go to a live region that NVDA, JAWS and VoiceOver read with your own settings. People without a screen reader can switch to the browser's built-in voices.
@@ -58,7 +58,7 @@ The first time you play a video that has no descriptions, SceneVoice says so onc
 
 ### Settings worth knowing
 
-- **When a description does not fit** — *Keep playing* (default) shortens it to fit the pause; *Pause the video* reads the full description and continues; *Only when I ask* keeps quiet until you press Describe now.
+- **When a description does not fit** — *Keep playing* (default) uses a shorter version that fits the pause, or skips it; *Pause the video* reads the full description and continues; *Only when I ask* keeps quiet until you press Describe now.
 - **Detail** — Brief, Standard or Detailed: how long each description is. Standard is close to professional audio description.
 - **How much to describe** — Essentials (scene changes, who is there, the main action, important text), Standard (adds expressions, gestures, objects, appearance) or Everything (also scenery and background, like a radio play). The model writes everything once; this only filters, so changing it is instant.
 - **How fast does your screen reader speak?** — SceneVoice cannot hear your screen reader, so it uses this to judge what fits in a pause. If descriptions get cut off, pick a slower setting; if they are too short, pick a faster one.
@@ -76,7 +76,8 @@ YouTube page ──(video link, title)──▶ Gemini API (your key) ──(tim
 - The video itself is never downloaded or uploaded. Gemini reads public YouTube videos by URL, in sections of five minutes. Requests are made from a worker in the extension's own hidden page (an offscreen document), not from the YouTube tab: your key never enters the page, YouTube's page policies cannot block the requests, and the job carries on if you leave the video. Progress is saved after every section, so an interruption costs at most one section. Two tabs showing the same video share one run.
 - If the chosen model is overloaded or no longer available for your key, the extension retries with increasing pauses and then continues with the next best model.
 - For every moment the model writes three versions of the description, how long the following pause is, whether it is on-screen text or action, and how important it is.
-- While you watch, the extension checks the video's position several times a second. When a cue's time arrives it chooses the longest version that fits the pause at your reading speed and playback rate, lowers the video volume a little, and hands the text to a live region (or the built-in voice).
+- If the video has captions, the extension reads their timing (from YouTube, in the page itself; nothing is sent elsewhere) and uses it to correct the pauses the model estimated. A description that starts just before someone stops talking is moved to the end of their sentence.
+- While you watch, the extension checks the video's position several times a second. When a cue's time arrives it chooses the longest version that fits the pause at your reading speed and playback rate (or skips the cue, or pauses the video in pause mode, if none fits), lowers the video volume a little, and hands the text to a live region (or the built-in voice).
 - People found in one section are passed to the next so names stay consistent.
 
 Descriptions are generated by a language model and can be wrong. SceneVoice asks the model to say "appears to" when unsure and never to invent names, but treat anything safety-critical with care.

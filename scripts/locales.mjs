@@ -106,8 +106,8 @@ export const STRINGS = {
   announce_detail_brief: { en: 'Detail: brief.', zh_CN: '详细程度：简洁。' },
   announce_detail_standard: { en: 'Detail: standard.', zh_CN: '详细程度：标准。' },
   announce_detail_detailed: { en: 'Detail: detailed.', zh_CN: '详细程度：详细。' },
-  announce_mode_gaps: { en: 'Mode: keep playing, fit descriptions into pauses.', zh_CN: '模式：不暂停，在对白空隙描述。' },
-  announce_mode_pause: { en: 'Mode: pause the video for longer descriptions.', zh_CN: '模式：描述较长时暂停视频。' },
+  announce_mode_gaps: { en: 'Mode: keep playing, describe only in pauses and skip what does not fit.', zh_CN: '模式：不暂停，只在对白空隙描述，放不下的跳过。' },
+  announce_mode_pause: { en: 'Mode: pause the video when a description does not fit a pause.', zh_CN: '模式：描述放不进对白空隙时暂停视频。' },
   announce_mode_manual: { en: 'Mode: describe only when I ask.', zh_CN: '模式：只在我要求时描述。' },
 
   // ----- errors -----
@@ -200,7 +200,10 @@ export const STRINGS = {
   set_enabled_hint: { en: 'Speak descriptions automatically during playback.', zh_CN: '播放时自动朗读口述。' },
   set_mode: { en: 'When a description does not fit', zh_CN: '描述放不进对白空隙时' },
   mode_gaps: { en: 'Keep playing', zh_CN: '不暂停' },
-  mode_gaps_hint: { en: 'Shorten it to fit the pause. The video never stops.', zh_CN: '缩短描述以放进空隙，视频不会停。' },
+  mode_gaps_hint: {
+    en: 'Use a shorter version that fits the pause, or skip it rather than talk over dialogue. The video never stops.',
+    zh_CN: '换用放得下的较短版本，仍放不下就跳过，避免压住对白。视频不会停。',
+  },
   mode_pause: { en: 'Pause the video', zh_CN: '暂停视频' },
   mode_pause_hint: { en: 'Pause, describe in full, then continue.', zh_CN: '先暂停，完整描述后继续播放。' },
   mode_manual: { en: 'Only when I ask', zh_CN: '只在我要求时' },

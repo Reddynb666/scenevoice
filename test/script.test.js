@@ -156,10 +156,23 @@ describe('chooseUtterance', () => {
     expect(chooseUtterance(roomy, { mode: 'gaps', detail: 'detailed', rate: 1, onScreenText: true }).text).toBe(roomy.detailed);
     expect(chooseUtterance(roomy, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true }).text).toBe(roomy.brief);
   });
-  it('gaps mode still says important cues briefly, drops minor ones', () => {
+  it('gaps mode skips a cue that does not fit, however important', () => {
     const tight = cue(0, { gap: 0.2, brief: 'A very long brief description that will not fit at all here' });
-    expect(chooseUtterance({ ...tight, priority: 1 }, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true }).needsPause).toBe(false);
-    expect(chooseUtterance({ ...tight, priority: 3 }, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true })).toBeNull();
+    for (const priority of [1, 2, 3]) {
+      expect(chooseUtterance({ ...tight, priority }, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true })).toBeNull();
+    }
+  });
+  it('pause mode pauses for a cue that does not fit instead of skipping it', () => {
+    const tight = cue(0, { gap: 0.2, priority: 1 });
+    const u = chooseUtterance(tight, { mode: 'pause', detail: 'standard', rate: 1, onScreenText: true });
+    expect(u).toEqual({ text: tight.standard, needsPause: true });
+  });
+  it('a gap measured from captions gets no extra leeway', () => {
+    // "A door opens." takes about 1.3 s at rate 1.
+    const c = cue(0, { gap: 1.2 });
+    expect(chooseUtterance(c, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true }).text).toBe(c.brief);
+    expect(chooseUtterance({ ...c, gapMeasured: true }, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true })).toBeNull();
+    expect(chooseUtterance({ ...c, gapMeasured: true }, { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
   });
   it('pause mode pauses only when needed', () => {
     expect(chooseUtterance(cue(0, { gap: 1 }), { mode: 'pause', detail: 'detailed', rate: 1, onScreenText: true }).needsPause).toBe(true);

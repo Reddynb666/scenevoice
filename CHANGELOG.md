@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Descriptions no longer talk over dialogue. When the video has captions, their timing corrects the pauses the model estimated, and a description that starts at the tail of a sentence waits for it to end.
+- In *Keep playing* mode a description that does not fit is now skipped, even an important one (previously its brief version was spoken anyway). In *Pause the video* mode it pauses the video instead.
+
 ## 1.0.0 — 2026-10-29
 
 First release.

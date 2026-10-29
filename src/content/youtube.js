@@ -104,6 +104,102 @@ export function onNavigate(fn) {
   setInterval(check, 1000);
 }
 
+// ---------- captions (for real dialogue timing) ----------
+
+/**
+ * The caption tracks listed in a watch page's player response.
+ * @returns {Array<{baseUrl: string, languageCode: string, kind: string}>}
+ */
+export function extractCaptionTracks(html) {
+  const key = '"captionTracks":';
+  const at = typeof html === 'string' ? html.indexOf(key) : -1;
+  if (at < 0) return [];
+  const from = html.indexOf('[', at + key.length);
+  if (from < 0) return [];
+  // Find the matching bracket, skipping over strings.
+  let depth = 0;
+  let inString = false;
+  for (let i = from; i < html.length; i += 1) {
+    const ch = html[i];
+    if (inString) {
+      if (ch === '\\') i += 1;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '[' || ch === '{') depth += 1;
+    else if (ch === ']' || ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const list = JSON.parse(html.slice(from, i + 1));
+          return Array.isArray(list)
+            ? list
+              .filter((tr) => tr && typeof tr.baseUrl === 'string')
+              .map((tr) => ({ baseUrl: tr.baseUrl, languageCode: tr.languageCode || '', kind: tr.kind || '' }))
+            : [];
+        } catch {
+          return [];
+        }
+      }
+    }
+  }
+  return [];
+}
+
+/**
+ * The track whose timing best follows the spoken dialogue: subtitles written for
+ * the spoken language, then auto-generated captions (always in the spoken
+ * language, timed word by word), then any subtitles.
+ */
+export function pickCaptionTrack(tracks) {
+  if (!tracks?.length) return null;
+  const asr = tracks.find((tr) => tr.kind === 'asr');
+  const manual = tracks.filter((tr) => tr.kind !== 'asr');
+  return (asr && manual.find((tr) => tr.languageCode === asr.languageCode)) || asr || manual[0] || null;
+}
+
+/** A timedtext URL for one track, asking for the json3 format. Null for anything but YouTube's timedtext API. */
+export function timedTextUrl(baseUrl, origin = location.origin) {
+  let url;
+  try {
+    url = new URL(baseUrl, origin);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)youtube\.com$/.test(url.hostname) || url.pathname !== '/api/timedtext') return null;
+  url.searchParams.set('fmt', 'json3');
+  return url.href;
+}
+
+/**
+ * Remember the caption requests the player itself makes (when captions are
+ * turned on). They carry tokens a plain request may lack, so they are the most
+ * reliable source. Calls fn(videoId, url) for each one.
+ */
+export function watchTimedTextRequests(fn) {
+  const seen = (entry) => {
+    if (!entry.name.includes('/api/timedtext')) return;
+    try {
+      const url = new URL(entry.name);
+      const v = url.searchParams.get('v');
+      if (url.origin === location.origin && v) fn(v, url.href);
+    } catch {
+      /* not a URL */
+    }
+  };
+  try {
+    new PerformanceObserver((list) => list.getEntries().forEach(seen)).observe({ type: 'resource', buffered: true });
+  } catch {
+    /* PerformanceObserver unavailable */
+  }
+}
+
+/** Fetch the caption tracks listed on this video's watch page. Same origin as the page. */
+export async function fetchCaptionTracks(videoId) {
+  const res = await fetch(`${location.origin}/watch?v=${encodeURIComponent(videoId)}`, { credentials: 'same-origin' });
+  if (!res.ok) return [];
+  return extractCaptionTracks(await res.text());
+}
+
 export function rightControls() {
   return getPlayer()?.querySelector('.ytp-right-controls') || null;
 }

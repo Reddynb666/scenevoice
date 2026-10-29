@@ -6,10 +6,22 @@ import { authorizeContentMessage } from '../shared/sender.js';
 import { resolveLanguage, setSettings, watchSettings } from '../shared/storage.js';
 import { chooseUtterance, cueAt, estimateSeconds, formatTime, passesDensity } from '../shared/script.js';
 import { CueScheduler, pickOne } from '../shared/scheduler.js';
+import { fitCuesToDialogue, parseTimedText, speechIntervals } from '../shared/dialogue.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { askAboutMoment, startGeneration, stopGeneration } from './generator.js';
-import { getMeta, getPageDuration, getVideo, isAdShowing, onNavigate, videoIdFromUrl } from './youtube.js';
+import {
+  fetchCaptionTracks,
+  getMeta,
+  getPageDuration,
+  getVideo,
+  isAdShowing,
+  onNavigate,
+  pickCaptionTrack,
+  timedTextUrl,
+  videoIdFromUrl,
+  watchTimedTextRequests,
+} from './youtube.js';
 
 if (!window.__sceneVoiceLoaded) {
   window.__sceneVoiceLoaded = true;
@@ -34,6 +46,10 @@ function main() {
   let announcedPartial = false;
   /** Bumped to cancel a generate() that is still waiting for the player. */
   let beginSeq = 0;
+  /** Stretches of speech in the current video, from its captions; null when unknown. */
+  let dialogue = null;
+  /** Caption URLs already tried for the current video. */
+  let captionUrlsTried = new Set();
   let lastSpoken = null;
   let speechToken = 0;
   /** Token of the utterance that paused the video, or 0 when the video is not paused by us. */
@@ -137,6 +153,9 @@ function main() {
         if (document.visibilityState === 'visible' && !dead) refreshShortcuts();
       });
       onNavigate(onPage);
+      watchTimedTextRequests((id, url) => {
+        if (id === videoId && !dialogue && !dead) loadDialogue(id, [url]);
+      });
       onPage();
       timers.push(setInterval(tick, 120));
       return;
@@ -171,10 +190,43 @@ function main() {
     stopJob();
     stopSpeaking();
     videoId = id;
+    dialogue = null;
+    captionUrlsTried = new Set();
     resetVideoState();
     if (!id) return;
     ui.mount();
     loadScript();
+    loadDialogue(id);
+  }
+
+  /**
+   * Learn when people speak from the video's captions, so descriptions fit the
+   * real pauses rather than the model's estimate. Without captions the model's
+   * estimate is used as before.
+   */
+  async function loadDialogue(id, urls = null) {
+    try {
+      if (!urls) {
+        const track = pickCaptionTrack(await fetchCaptionTracks(id));
+        const url = track && timedTextUrl(track.baseUrl);
+        urls = url ? [url] : [];
+      }
+      for (const url of urls) {
+        if (dead || id !== videoId || dialogue || captionUrlsTried.has(url)) return;
+        captionUrlsTried.add(url);
+        const res = await fetch(url, { credentials: 'same-origin' });
+        const intervals = res.ok ? speechIntervals(parseTimedText(await res.text())) : [];
+        if (dead || id !== videoId || dialogue) return;
+        if (intervals.length) {
+          dialogue = intervals;
+          console.info(`[SceneVoice] dialogue timing from captions: ${intervals.length} stretches of speech`);
+          if (script) scheduleCues();
+          return;
+        }
+      }
+    } catch (err) {
+      console.info('[SceneVoice] no caption timing', String(err));
+    }
   }
 
   async function loadScript() {
@@ -210,10 +262,16 @@ function main() {
 
   function setScript(sc) {
     script = sc;
-    scheduler.setCues(sc.cues || []);
+    scheduleCues();
+    status = sc.complete ? 'ready' : 'partial';
+  }
+
+  /** Hand the script's cues to the scheduler, moved and trimmed to the real dialogue when it is known. */
+  function scheduleCues() {
+    const cues = script?.cues || [];
+    scheduler.setCues(dialogue ? fitCuesToDialogue(cues, dialogue) : cues);
     const v = getVideo();
     scheduler.reset(v && !isAdShowing() ? v.currentTime : null);
-    status = sc.complete ? 'ready' : 'partial';
   }
 
   /**
@@ -510,7 +568,7 @@ function main() {
       playbackRate: video?.playbackRate || 1,
     });
     if (!u) {
-      console.info(`[SceneVoice] ${formatTime(cue.start)} skipped (gap ${cue.gap}s, priority ${cue.priority})`);
+      console.info(`[SceneVoice] ${formatTime(cue.start)} skipped: does not fit (gap ${cue.gap}s${cue.gapMeasured ? ' from captions' : ''})`);
       return;
     }
     console.info(`[SceneVoice] ${formatTime(cue.start)} ${cue.kind}${u.needsPause ? ' (pause)' : ''}: ${u.text}`);

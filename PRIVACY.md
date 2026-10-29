@@ -25,6 +25,8 @@ Google processes this under the [Gemini API Terms of Service](https://ai.google.
 
 If you change the API address in Advanced settings to a relay service, the same data is sent to that service instead, and the extension asks your permission for that address first. The relay can see your key and requests; only use a relay you trust.
 
+On a YouTube video page, SceneVoice also asks YouTube itself for that video's caption timing (the watch page and its caption file), the same way the YouTube player does when you turn on captions. These requests go only to YouTube, from the YouTube page you are already on, and contain nothing but the video's address. The timing is used to fit descriptions between lines of dialogue and is not stored or sent anywhere else.
+
 No other network requests are made.
 
 ## What is stored on your computer
@@ -37,7 +39,7 @@ Nothing is stored anywhere else.
 
 ## Permissions the extension asks for
 
-- **Read and change data on youtube.com** — to follow the video's playback and show the player button, overlay and question dialog.
+- **Read and change data on youtube.com** — to follow the video's playback, read its caption timing, and show the player button, overlay and question dialog.
 - **generativelanguage.googleapis.com** — to call the Gemini API.
 - **Storage** — to keep your key, settings and generated descriptions on your computer.
 - **Text-to-speech** — for the optional built-in voice.
