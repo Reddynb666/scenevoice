@@ -203,6 +203,17 @@ describe('listeners are wired to the checks', () => {
     expect(source('src/content/announcer.js')).toContain('authorizeContentMessage');
   });
 
+  it('preference helpers shared with content scripts use sync storage only', () => {
+    for (const file of ['settings.js', 'voices.js', 'labels.js', 'form.js']) {
+      const text = source(join('src/shared', file));
+      expect(text, file).not.toMatch(/chrome\.storage\.local/);
+      expect(text, file).not.toMatch(/apiKey/);
+    }
+    // Restoring defaults clears preferences, never the key or the cache.
+    expect(source('src/shared/storage.js')).toMatch(/export function resetSettings\(\) \{[\s\S]*?chrome\.storage\.sync\.remove\('settings'\)[\s\S]*?\n\}/);
+    expect(source('src/shared/storage.js')).not.toMatch(/chrome\.storage\.local\.(remove|clear)/);
+  });
+
   it('the offscreen document and its worker check where commands come from', () => {
     const offscreen = source('src/offscreen/offscreen.js');
     expect(offscreen).toContain('authorizeOffscreenMessage');

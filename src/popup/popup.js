@@ -2,6 +2,8 @@ import { LANGUAGES, MSG } from '../shared/constants.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
+import { voiceTestMessage } from '../shared/settings.js';
+import { getSettings, resolveLanguage } from '../shared/storage.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -128,10 +130,42 @@ async function act(action) {
   render(await tabRequest({ type: MSG.TAB_ACTION, action }));
 }
 
+/** Speed is the built-in voice's rate, or the speed SceneVoice assumes for the screen reader. */
+function onSettings(settings) {
+  $('ttsSpeed').hidden = settings.output !== 'tts';
+  $('readerSpeed').hidden = settings.output !== 'screenreader';
+}
+
+function onSaveError() {
+  $('settingsStatus').textContent = t('opt_settings_save_failed');
+}
+
+/** Name the keys for the quick settings, or say where to set them (Chrome gives them none by default). */
+function renderQuickKeys(sc) {
+  const items = [
+    ['cycle-detail', t('quick_detail')],
+    ['cycle-mode', t('quick_mode')],
+    ['speed-up', t('quick_faster')],
+    ['speed-down', t('quick_slower')],
+  ]
+    .filter(([name]) => sc[name])
+    .map(([name, label]) => `${sc[name]} ${label}`);
+  $('quickKeys').textContent = items.length ? t('popup_quick_keys', items.join(' · ')) : t('popup_quick_keys_none');
+}
+
+async function testVoice() {
+  const settings = await getSettings();
+  chrome.runtime.sendMessage(voiceTestMessage(settings, resolveLanguage(settings.language, chrome.i18n.getUILanguage())));
+}
+
 async function init() {
   localizeDocument();
   fillLanguages($('language'));
-  await bindSettings(document);
+  await bindSettings(document, onSettings, onSaveError);
+  // The next change replaces an earlier "could not save" (it says so again if it fails too).
+  document.addEventListener('change', () => {
+    $('settingsStatus').textContent = '';
+  });
 
   const status = await chrome.runtime.sendMessage({ type: MSG.GET_STATUS });
   $('keyBanner').hidden = Boolean(status?.hasKey);
@@ -139,6 +173,8 @@ async function init() {
   if (sc['toggle-descriptions'] || sc['describe-now']) {
     $('shortcutHint').textContent = t('popup_shortcut_hint', sc['toggle-descriptions'] || '—', sc['describe-now'] || '—');
   }
+  renderQuickKeys(sc);
+  $('testVoice').addEventListener('click', testVoice);
 
   $('setupKey').addEventListener('click', () => chrome.runtime.openOptionsPage());
   $('openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());

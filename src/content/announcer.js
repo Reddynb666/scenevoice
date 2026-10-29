@@ -4,6 +4,7 @@
 import { MSG } from '../shared/constants.js';
 import { authorizeContentMessage } from '../shared/sender.js';
 import { estimateSeconds } from '../shared/script.js';
+import { voiceFor } from '../shared/settings.js';
 import { containerForOverlays } from './youtube.js';
 
 const HIDDEN_STYLE = [
@@ -123,14 +124,15 @@ export class Announcer {
     }
     const id = `u${(this.seq += 1)}`;
     const fallback = (estimateSeconds(text, s.ttsRate) * 2 + 3) * 1000;
+    const msg = { type: MSG.SPEAK, text, lang: this.lang, rate: s.ttsRate, pitch: s.ttsPitch, ...voiceFor(s, this.lang), id };
     return new Promise((resolve) => {
       if (enqueue) {
-        sendSafe({ type: MSG.SPEAK, text, lang: this.lang, rate: s.ttsRate, voice: s.ttsVoice, id, enqueue: true });
+        sendSafe({ ...msg, enqueue: true });
         resolve();
         return;
       }
       this.pending = { id, resolve, timer: setTimeout(() => this.finish(), fallback) };
-      sendSafe({ type: MSG.SPEAK, text, lang: this.lang, rate: s.ttsRate, voice: s.ttsVoice, id }).then((res) => {
+      sendSafe(msg).then((res) => {
         if (!res) this.finish();
       });
     });

@@ -27,7 +27,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   interrupt: false,
   /** How fast the user's screen reader talks, relative to a typical default. */
   readerSpeed: 1.6,
+  /** Built-in voice only: rate (1 = the voice's normal speed) and pitch (1 = normal). */
   ttsRate: 1.2,
+  ttsPitch: 1,
+  /** Built-in voice chosen for each description language, e.g. { 'zh-CN': 'Tingting' }.
+   *  '' = pick automatically. Voice names are per computer; a missing one falls back. */
+  ttsVoices: Object.freeze({}),
+  /** One voice for every language, from before voices were per language. Used only
+   *  for a language without its own choice, and only when the voice speaks it. */
   ttsVoice: '',
   /** Lower the video volume while a description is spoken. */
   duck: true,
@@ -40,6 +47,35 @@ export const DEFAULT_SETTINGS = Object.freeze({
   announceStatus: true,
   /** Pause the video while the "ask a question" dialog is open. */
   pauseOnAsk: true,
+});
+
+/** Allowed values for the choice settings, in the order the cycle shortcuts step through them. */
+export const MODES = Object.freeze(['gaps', 'pause', 'manual']);
+export const DETAILS = Object.freeze(['brief', 'standard', 'detailed']);
+export const DENSITIES = Object.freeze(['essential', 'standard', 'full']);
+export const OUTPUTS = Object.freeze(['screenreader', 'tts']);
+
+/** Screen reader speeds offered in settings, slowest first. */
+export const READER_SPEEDS = Object.freeze([1, 1.6, 2.4, 3.2]);
+
+/** Slider ranges for the built-in voice. The speed shortcuts step by `step`. */
+export const TTS_RATE = Object.freeze({ min: 0.6, max: 3, step: 0.1 });
+export const TTS_PITCH = Object.freeze({ min: 0.5, max: 1.5, step: 0.1 });
+
+/** Spoken by "Test voice", in the description language (not the interface language). */
+export const VOICE_SAMPLES = Object.freeze({
+  en: 'A woman in a red coat crosses the snowy street.',
+  'zh-CN': '一位穿红色大衣的女人走过积雪的街道。',
+  'zh-TW': '一位穿紅色大衣的女人走過積雪的街道。',
+  es: 'Una mujer con un abrigo rojo cruza la calle nevada.',
+  fr: 'Une femme en manteau rouge traverse la rue enneigée.',
+  de: 'Eine Frau im roten Mantel überquert die verschneite Straße.',
+  pt: 'Uma mulher de casaco vermelho atravessa a rua coberta de neve.',
+  ja: '赤いコートの女性が雪の積もった通りを渡っていく。',
+  ko: '빨간 코트를 입은 여자가 눈 덮인 거리를 건넌다.',
+  ru: 'Женщина в красном пальто переходит заснеженную улицу.',
+  ar: 'امرأة ترتدي معطفًا أحمر تعبر الشارع المغطى بالثلج.',
+  hi: 'लाल कोट पहने एक महिला बर्फ़ से ढकी सड़क पार करती है।',
 });
 
 /** Secrets and per-device data, stored in chrome.storage.local only. */
@@ -122,5 +158,7 @@ export const COMMANDS = Object.freeze([
   'cycle-detail',
   'cycle-mode',
   'cycle-density',
+  'speed-up',
+  'speed-down',
   'stop-speaking',
 ]);

@@ -60,6 +60,8 @@
     "cycle-detail": { "description": "__MSG_cmd_cycle_detail__" },
     "cycle-mode": { "description": "__MSG_cmd_cycle_mode__" },
     "cycle-density": { "description": "__MSG_cmd_cycle_density__" },
+    "speed-up": { "description": "__MSG_cmd_speed_up__" },
+    "speed-down": { "description": "__MSG_cmd_speed_down__" },
     "stop-speaking": { "description": "__MSG_cmd_stop__" }
   }
 }

@@ -33,7 +33,7 @@ No other network requests are made.
 
 - **Your API key**, in the browser's local extension storage (`chrome.storage.local`). It never leaves your computer except as described above, and it is never placed in a URL. Remove it at any time on the settings page.
 - **Descriptions** that have been generated, keyed by video and language, so a video is described only once. The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
-- **Settings** such as mode, detail level and language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Settings** such as mode, detail level, language and the built-in voice you chose for each language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
 
 Nothing is stored anywhere else.
 

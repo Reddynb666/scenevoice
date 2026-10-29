@@ -1,7 +1,9 @@
 // Content script: follows YouTube playback and delivers descriptions at the right moments.
 
-import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS } from '../shared/constants.js';
+import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS, DENSITIES, DETAILS, MODES } from '../shared/constants.js';
 import { t, errorMessage } from '../shared/i18n.js';
+import { readerSpeedLabel } from '../shared/labels.js';
+import { nextValue, stepSpeed } from '../shared/settings.js';
 import { authorizeContentMessage } from '../shared/sender.js';
 import { resolveLanguage, setSettings, watchSettings } from '../shared/storage.js';
 import { chooseUtterance, cueAt, estimateSeconds, formatTime, passesDensity } from '../shared/script.js';
@@ -727,11 +729,39 @@ function main() {
     });
   }
 
+  /**
+   * Save a setting changed by a shortcut, then say the new value (or that it
+   * was not saved). The local copy changes at once, so a quick second press
+   * steps on from the new value and the announcement already uses it (a new
+   * speaking rate, for example).
+   */
+  async function change(patch, announcement) {
+    const before = Object.fromEntries(Object.keys(patch).map((k) => [k, settings[k]]));
+    settings = { ...settings, ...patch };
+    try {
+      await setSettings(patch);
+    } catch {
+      settings = { ...settings, ...before };
+      feedback(t('opt_settings_save_failed'));
+      return;
+    }
+    feedback(announcement);
+  }
+
   async function cycle(key, values, prefix) {
-    const i = values.indexOf(settings[key]);
-    const next = values[(i + 1) % values.length];
-    await setSettings({ [key]: next }).catch(() => {});
-    feedback(t(`${prefix}${next}`));
+    const next = nextValue(values, settings[key]);
+    await change({ [key]: next }, t(`${prefix}${next}`));
+  }
+
+  /** Faster or slower: the built-in voice's rate, or the screen reader speed SceneVoice plans for. */
+  async function changeSpeed(direction) {
+    const { key, value, atLimit } = stepSpeed(settings, direction);
+    const said = key === 'ttsRate' ? t('announce_rate', value.toFixed(1)) : t('announce_reader_speed', readerSpeedLabel(value));
+    if (atLimit) {
+      feedback(`${said} ${t(direction > 0 ? 'announce_fastest' : 'announce_slowest')}`);
+      return;
+    }
+    await change({ [key]: value }, said);
   }
 
   /** In an embedded player, only act if this player has been used. */
@@ -754,11 +784,15 @@ function main() {
       case 'ask-question':
         return openAsk();
       case 'cycle-detail':
-        return cycle('detail', ['brief', 'standard', 'detailed'], 'announce_detail_');
+        return cycle('detail', DETAILS, 'announce_detail_');
       case 'cycle-mode':
-        return cycle('mode', ['gaps', 'pause', 'manual'], 'announce_mode_');
+        return cycle('mode', MODES, 'announce_mode_');
       case 'cycle-density':
-        return cycle('density', ['essential', 'standard', 'full'], 'announce_density_');
+        return cycle('density', DENSITIES, 'announce_density_');
+      case 'speed-up':
+        return changeSpeed(1);
+      case 'speed-down':
+        return changeSpeed(-1);
       case 'stop-speaking':
         return stopSpeaking();
       default:

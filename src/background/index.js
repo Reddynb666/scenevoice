@@ -12,6 +12,7 @@ import { MSG } from '../shared/constants.js';
 import { authorizeBackgroundMessage } from '../shared/sender.js';
 import { getLocal, protectLocalStorage, setLocal } from '../shared/storage.js';
 import { cacheInfo, clearCache, deleteScript, getScript, putScript } from '../shared/cache.js';
+import { speechOptions } from '../shared/voices.js';
 
 // Content scripts share the YouTube process and must not read the API key or
 // the description cache. The level does not always survive a browser restart,
@@ -48,19 +49,20 @@ chrome.runtime.onStartup.addListener(() => {
 
 // ---------- speech ----------
 
-function speak({ text, lang, rate, voice, id, enqueue }, tabId) {
+// The chosen voice is checked against the voices on this computer: settings
+// sync between computers, and Chrome does not look for a voice that speaks the
+// language when asked for one it does not have. Then Chrome chooses by language.
+async function speak(msg, tabId) {
+  const installed = msg.voice ? await chrome.tts.getVoices().catch(() => []) : [];
   const opts = {
-    lang,
-    rate: Math.min(4, Math.max(0.5, Number(rate) || 1)),
-    enqueue: Boolean(enqueue),
+    ...speechOptions(msg, installed),
     onEvent: (ev) => {
       if (['end', 'interrupted', 'cancelled', 'error'].includes(ev.type) && tabId != null) {
-        chrome.tabs.sendMessage(tabId, { type: MSG.TTS_EVENT, id, event: ev.type }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { type: MSG.TTS_EVENT, id: msg.id, event: ev.type }).catch(() => {});
       }
     },
   };
-  if (voice) opts.voiceName = voice;
-  chrome.tts.speak(text, opts);
+  chrome.tts.speak(String(msg.text ?? ''), opts);
 }
 
 // ---------- offscreen document ----------
@@ -223,7 +225,7 @@ async function handle(msg, sender) {
       await onJobEvent(msg);
       return { ok: true };
     case MSG.SPEAK:
-      speak(msg, sender.tab?.id ?? null);
+      await speak(msg, sender.tab?.id ?? null);
       return { ok: true };
     case MSG.STOP_SPEAKING:
       chrome.tts.stop();

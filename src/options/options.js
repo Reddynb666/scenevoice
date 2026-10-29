@@ -1,11 +1,14 @@
 import { DEFAULT_API_BASE, LANGUAGES, MSG } from '../shared/constants.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
-import { getLocal, getSettings, resolveLanguage, setLocal } from '../shared/storage.js';
+import { voiceFor, voicePatch, voiceTestMessage } from '../shared/settings.js';
+import { getLocal, getSettings, resetSettings, resolveLanguage, setLocal, setSettings } from '../shared/storage.js';
+import { groupVoices, languageMatch, pickVoice } from '../shared/voices.js';
 import { GeminiClient, GeminiError, chooseModel, usableModels } from '../shared/gemini.js';
 
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
+const uiLanguage = () => chrome.i18n.getUILanguage();
 
 function option(value, label, lang) {
   const o = document.createElement('option');
@@ -21,12 +24,83 @@ function fillLanguages() {
   for (const l of LANGUAGES) select.append(option(l.code, l.name, l.code));
 }
 
-async function fillVoices() {
-  const select = $('voice');
-  select.append(option('', t('set_voice_auto')));
+/** A language tag in the interface language: "zh-CN" → "Simplified Chinese" / "简体中文". */
+function languageName(tag) {
+  const display = { 'zh-CN': 'zh-Hans', 'zh-TW': 'zh-Hant' }[tag] || tag;
+  try {
+    return new Intl.DisplayNames([uiLanguage()], { type: 'language' }).of(display) || tag;
+  } catch {
+    return LANGUAGES.find((l) => l.code === tag)?.name || tag;
+  }
+}
+
+// ---------- built-in voices ----------
+
+/** Voices on this computer, from the service worker: [{ name, lang }]. */
+let voices = [];
+/** Description language the voice list was last built for. */
+let voicesFor = null;
+
+async function loadVoices() {
   const res = await send({ type: MSG.GET_VOICES });
-  const voices = (res?.voices || []).filter((v) => v.name).sort((a, b) => (a.lang || '').localeCompare(b.lang || '') || a.name.localeCompare(b.name));
-  for (const v of voices) select.append(option(v.name, v.lang ? `${v.name} (${v.lang})` : v.name));
+  voices = (res?.voices || []).filter((v) => v.name);
+}
+
+function voiceOption(v) {
+  return option(v.name, v.lang ? t('voice_option', v.name, languageName(v.lang)) : v.name, v.lang);
+}
+
+/**
+ * The voice list for the current description language: its voices first,
+ * then the rest. Rebuilt only when the language changes, so a screen reader
+ * does not lose its place in the list after each choice.
+ */
+function renderVoices(settings) {
+  const lang = resolveLanguage(settings.language, uiLanguage());
+  const name = languageName(lang);
+  const select = $('voice');
+  const { voice, voiceMustMatch } = voiceFor(settings, lang);
+  const installed = voices.find((v) => v.name === voice);
+  const { matching, other } = groupVoices(voices, lang);
+
+  if (voicesFor !== lang) {
+    voicesFor = lang;
+    $('voiceLabel').textContent = t('set_voice_for', name);
+    select.replaceChildren(option('', t('set_voice_auto')));
+    for (const [label, list] of [[t('set_voice_group_matching', name), matching], [t('set_voice_group_other'), other]]) {
+      if (!list.length) continue;
+      const group = document.createElement('optgroup');
+      group.label = label;
+      group.append(...list.map(voiceOption));
+      select.append(group);
+    }
+  }
+
+  // A voice chosen on another computer that this one does not have.
+  select.querySelector('option[data-missing]')?.remove();
+  if (voice && !voiceMustMatch && !installed) {
+    const o = option(voice, t('set_voice_unavailable', voice));
+    o.dataset.missing = 'true';
+    select.append(o);
+  }
+  // The old single voice counts only where it would be used: in its own language.
+  select.value = voiceMustMatch ? pickVoice(voices, voice, lang, true) : voice;
+
+  let note = '';
+  if (!matching.length) note = t('set_voice_none', name);
+  else if (voice && !voiceMustMatch && !installed) note = t('set_voice_unavailable_note');
+  else if (installed?.lang && !voiceMustMatch && !languageMatch(installed.lang, lang)) note = t('set_voice_mismatch', languageName(installed.lang), name);
+  if ($('voiceNote').textContent !== note) $('voiceNote').textContent = note;
+}
+
+async function onVoiceChange(e) {
+  const settings = await getSettings();
+  const lang = resolveLanguage(settings.language, uiLanguage());
+  try {
+    await setSettings(voicePatch(settings, lang, e.target.value));
+  } catch {
+    onSaveError();
+  }
 }
 
 function setStatus(el, text, kind) {
@@ -70,16 +144,32 @@ async function loadModels({ announce }) {
   if (announce) setStatus(statusEl, models.length ? t('opt_key_ok', current) : errorMessage('no-model'), models.length ? 'good' : 'bad');
 }
 
-function updateVisibility(settings, live) {
-  const shown = live || settings;
+function onSettings(settings, live) {
   $('srOptions').hidden = settings.output !== 'screenreader';
   $('ttsOptions').hidden = settings.output !== 'tts';
-  $('rateOut').textContent = `${Number(shown.ttsRate).toFixed(1)}×`;
-  $('duckOut').textContent = `${Math.round(shown.duckLevel * 100)}%`;
+  if (!live) renderVoices(settings); // live: a slider is moving, nothing else changed
+}
+
+/** Messages about settings, kept in view at the bottom of the window and read by screen readers. */
+function setToast(text, kind) {
+  $('settingsStatus').className = kind ? `toast status-${kind}` : 'toast';
+  $('settingsStatus').textContent = text;
 }
 
 function onSaveError() {
-  setStatus($('keyStatus'), t('opt_settings_save_failed'), 'bad');
+  setToast(t('opt_settings_save_failed'), 'bad');
+}
+
+async function restoreDefaults() {
+  if (!window.confirm(t('opt_reset_confirm'))) return;
+  try {
+    await resetSettings();
+  } catch {
+    setToast(t('opt_reset_failed'), 'bad');
+    return;
+  }
+  // The form follows on its own, through storage.onChanged.
+  setToast(t('opt_reset_done'), 'good');
 }
 
 async function renderShortcuts() {
@@ -114,8 +204,20 @@ async function renderCache() {
 async function init() {
   localizeDocument();
   fillLanguages();
-  await fillVoices();
-  await bindSettings(document, updateVisibility, onSaveError);
+  await loadVoices();
+  await bindSettings(document, onSettings, onSaveError);
+  $('voice').addEventListener('change', onVoiceChange);
+  // The next change replaces the last settings message (a failed save says so again).
+  document.addEventListener('change', () => setToast(''));
+  if (!voices.length) {
+    // Some systems load their voices only after the first request.
+    setTimeout(async () => {
+      await loadVoices();
+      if (!voices.length) return;
+      voicesFor = null;
+      renderVoices(await getSettings());
+    }, 1500);
+  }
   $('version').textContent = `v${chrome.runtime.getManifest().version}`;
 
   const local = await getLocal();
@@ -194,12 +296,16 @@ async function init() {
 
   $('testVoice').addEventListener('click', async () => {
     const s = await getSettings();
-    const lang = resolveLanguage(s.language, chrome.i18n.getUILanguage());
-    send({ type: MSG.SPEAK, text: t('set_test_voice_sample'), lang, rate: s.ttsRate, voice: s.ttsVoice, id: 'test' });
+    send(voiceTestMessage(s, resolveLanguage(s.language, uiLanguage())));
   });
+  $('resetSettings').addEventListener('click', restoreDefaults);
 
   await renderShortcuts();
   $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
+  // Back from Chrome's shortcuts page: show the keys just set.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') renderShortcuts();
+  });
 
   await renderCache();
   $('clearCache').addEventListener('click', async () => {

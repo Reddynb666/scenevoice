@@ -18,6 +18,8 @@ export const STRINGS = {
   cmd_cycle_mode: { en: 'Change what happens when a description does not fit', zh_CN: '切换口述放不下时的处理方式' },
   cmd_stop: { en: 'Stop speaking', zh_CN: '停止朗读' },
   cmd_cycle_density: { en: 'Change how much is described', zh_CN: '切换口述多少' },
+  cmd_speed_up: { en: 'Speak faster', zh_CN: '加快语速' },
+  cmd_speed_down: { en: 'Speak slower', zh_CN: '放慢语速' },
 
   // ----- on the YouTube page -----
   player_button_label: { en: 'SceneVoice audio description', zh_CN: 'SceneVoice 口述影像' },
@@ -109,6 +111,10 @@ export const STRINGS = {
   announce_mode_gaps: { en: 'Mode: keep playing, describe only in pauses and skip what does not fit.', zh_CN: '模式：不暂停，只在对白空隙描述，放不下的跳过。' },
   announce_mode_pause: { en: 'Mode: pause the video when a description does not fit a pause.', zh_CN: '模式：描述放不进对白空隙时暂停视频。' },
   announce_mode_manual: { en: 'Mode: describe only when I ask.', zh_CN: '模式：只在我要求时描述。' },
+  announce_rate: { en: 'Speaking rate: $1 times normal.', zh_CN: '语速：$1 倍。' },
+  announce_reader_speed: { en: 'Screen reader speed: $1.', zh_CN: '读屏语速：$1。' },
+  announce_fastest: { en: 'That is the fastest.', zh_CN: '已经是最快了。' },
+  announce_slowest: { en: 'That is the slowest.', zh_CN: '已经是最慢了。' },
 
   // ----- errors -----
   error_no_key: {
@@ -194,6 +200,15 @@ export const STRINGS = {
   popup_loading: { en: 'Loading…', zh_CN: '加载中……' },
   popup_none: { en: 'No descriptions yet.', zh_CN: '还没有口述。' },
   popup_shortcut_hint: { en: 'Shortcuts: $1 create or toggle · $2 describe now', zh_CN: '快捷键：$1 生成/开关 · $2 描述当前画面' },
+  popup_quick_keys: { en: 'Shortcuts: $1', zh_CN: '快捷键：$1' },
+  popup_quick_keys_none: {
+    en: 'Detail, mode and speed can each have a shortcut. Set them under All settings, Keyboard shortcuts.',
+    zh_CN: '详细程度、模式和语速都可以设快捷键，在“全部设置”的“快捷键”部分设置。',
+  },
+  quick_detail: { en: 'detail', zh_CN: '详细程度' },
+  quick_mode: { en: 'mode', zh_CN: '模式' },
+  quick_faster: { en: 'faster', zh_CN: '加快语速' },
+  quick_slower: { en: 'slower', zh_CN: '放慢语速' },
 
   // ----- shared settings -----
   set_enabled: { en: 'Describe while I watch', zh_CN: '观看时自动口述' },
@@ -260,13 +275,35 @@ export const STRINGS = {
     zh_CN: '口述会打断读屏正在朗读的内容，以便与画面同步。',
   },
   set_voice: { en: 'Voice', zh_CN: '语音' },
+  set_voice_for: { en: 'Voice for $1 descriptions', zh_CN: '朗读$1口述的语音' },
   set_voice_auto: { en: 'Automatic (matches the description language)', zh_CN: '自动（与口述语言匹配）' },
-  set_tts_rate: { en: 'Speaking rate', zh_CN: '语速' },
-  set_test_voice: { en: 'Test voice', zh_CN: '试听' },
-  set_test_voice_sample: {
-    en: 'A woman in a red coat crosses the snowy street.',
-    zh_CN: '一位穿红色大衣的女人走过积雪的街道。',
+  set_voice_hint: {
+    en: 'Voices for the description language are listed first. Each description language remembers its own voice.',
+    zh_CN: '列表先列出适合当前口述语言的语音。每种口述语言会分别记住你选的语音。',
   },
+  set_voice_group_matching: { en: '$1 voices', zh_CN: '$1语音' },
+  set_voice_group_other: { en: 'Other languages', zh_CN: '其他语言' },
+  voice_option: { en: '$1 ($2)', zh_CN: '$1（$2）' },
+  set_voice_unavailable: { en: '$1 (not on this computer)', zh_CN: '$1（这台电脑上没有）' },
+  set_voice_unavailable_note: {
+    en: 'The chosen voice is not on this computer, so SceneVoice picks one automatically here.',
+    zh_CN: '这台电脑上没有所选的语音，会自动换用其他语音。',
+  },
+  set_voice_none: {
+    en: 'This computer has no $1 voice, so the built-in voice may not read descriptions properly. Add one in your system’s speech settings, or use your screen reader.',
+    zh_CN: '这台电脑上没有$1语音，内置语音可能读不好口述。可以在系统的语音设置里添加，或改用读屏软件。',
+  },
+  set_voice_mismatch: {
+    en: 'This voice is for $1. It may not read $2 descriptions properly.',
+    zh_CN: '这是$1语音，用它朗读$2口述可能不正常。',
+  },
+  set_tts_rate: { en: 'Speaking rate', zh_CN: '语速' },
+  set_tts_pitch: { en: 'Pitch', zh_CN: '音调' },
+  set_tts_pitch_hint: { en: 'Some voices do not change pitch.', zh_CN: '部分语音不支持调节音调。' },
+  value_rate: { en: '$1×', zh_CN: '$1 倍' },
+  value_pitch_normal: { en: 'Normal', zh_CN: '标准' },
+  value_percent: { en: '$1%', zh_CN: '$1%' },
+  set_test_voice: { en: 'Test voice', zh_CN: '试听' },
   set_duck: { en: 'Lower the video volume while describing', zh_CN: '口述时降低视频音量' },
   set_duck_level: { en: 'Video volume while describing', zh_CN: '口述时的视频音量' },
   set_show_text: { en: 'Show descriptions as large text on the video', zh_CN: '在视频上用大字显示口述' },
@@ -361,6 +398,21 @@ export const STRINGS = {
   privacy_3: {
     en: 'Descriptions are saved on this computer so a video is described only once.',
     zh_CN: '口述保存在这台电脑上，同一个视频只需生成一次。',
+  },
+  opt_reset_title: { en: '6. Restore defaults', zh_CN: '6. 恢复默认设置' },
+  opt_reset_intro: {
+    en: 'Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. Keyboard shortcuts stay too; change them on Chrome’s shortcuts page.',
+    zh_CN: '把口述、语音和声音方面的设置全部恢复到刚安装时的样子。API 密钥、模型和已保存的口述都会保留。快捷键也不会变，要改请到 Chrome 的快捷键页面。',
+  },
+  opt_reset_button: { en: 'Restore default settings', zh_CN: '恢复默认设置' },
+  opt_reset_confirm: {
+    en: 'Restore all SceneVoice settings to their defaults? Your API key and saved descriptions stay.',
+    zh_CN: '确定把 SceneVoice 的设置全部恢复为默认吗？API 密钥和已保存的口述会保留。',
+  },
+  opt_reset_done: { en: 'Default settings restored.', zh_CN: '已恢复默认设置。' },
+  opt_reset_failed: {
+    en: 'The settings could not be restored just now. Try again in a moment.',
+    zh_CN: '暂时没能恢复默认设置，请稍后再试。',
   },
   opt_footer: { en: 'SceneVoice is free and open source.', zh_CN: 'SceneVoice 免费且开源。' },
 };

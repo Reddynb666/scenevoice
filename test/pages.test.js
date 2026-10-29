@@ -1,0 +1,341 @@
+// @vitest-environment jsdom
+// The popup and settings page, loaded from their real HTML with a fake chrome.*:
+// quick settings, voices, restore defaults, and what screen readers are told.
+
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MSG } from '../src/shared/constants.js';
+import { fakeChrome } from './fake-chrome.js';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+const VOICES = [
+  { name: 'Samantha', lang: 'en-US' },
+  { name: 'Thomas', lang: 'fr-FR' },
+  { name: 'Meijia', lang: 'zh-TW' },
+  { name: 'Tingting', lang: 'zh-CN' },
+  { name: 'Google 普通话（中国大陆）', lang: 'zh-CN' },
+];
+
+const COMMANDS = [
+  { name: 'toggle-descriptions', description: 'Create descriptions, or turn them on and off', shortcut: 'Alt+Shift+D' },
+  { name: 'cycle-detail', description: 'Change the level of detail', shortcut: '' },
+  { name: 'speed-up', description: 'Speak faster', shortcut: '' },
+];
+
+let fake;
+
+/** Load an extension page's HTML (without running its script tag) and then its module. */
+async function openPage(page, opts = {}) {
+  const html = readFileSync(join(root, 'src', page, `${page}.html`), 'utf8');
+  document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
+  fake = fakeChrome({
+    commands: COMMANDS,
+    ...opts,
+    reply: (msg) => {
+      if (msg.type === MSG.GET_VOICES) return { voices: opts.voices ?? VOICES };
+      if (msg.type === MSG.GET_STATUS) return { hasKey: true, shortcuts: opts.shortcuts ?? { 'toggle-descriptions': 'Alt+Shift+D', 'describe-now': 'Alt+Shift+S' } };
+      if (msg.type === MSG.CACHE_INFO) return { count: 0, bytes: 0 };
+      return { ok: true };
+    },
+  });
+  globalThis.chrome = fake.chrome;
+  window.confirm = vi.fn(() => true);
+  vi.resetModules();
+  await import(`../src/${page}/${page}.js`);
+  // Wait for init() to finish: these are filled in after every listener is attached.
+  const last = page === 'options' ? '#cacheInfo' : '#quickKeys';
+  await vi.waitFor(() => expect(document.querySelector(last).textContent).not.toBe(''));
+}
+
+const $ = (sel) => document.querySelector(sel);
+const settle = () => new Promise((r) => setTimeout(r, 10));
+const stored = () => fake.areas.sync.settings || {};
+
+function choose(el) {
+  if (el.type === 'radio' || el.type === 'checkbox') el.checked = true;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function selectValue(el, value) {
+  el.value = value;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/** Every control a keyboard user can reach has a name a screen reader can read. */
+function unnamedControls() {
+  return [...document.querySelectorAll('input, select, button, textarea')].filter((el) => {
+    if (el.type === 'hidden') return false;
+    const labelled = [...(el.labels || [])].some((l) => l.textContent.trim());
+    const aria = el.getAttribute('aria-label') || (el.getAttribute('aria-labelledby') || '').split(' ').some((id) => document.getElementById(id)?.textContent.trim());
+    const text = el.tagName === 'BUTTON' && el.textContent.trim();
+    return !(labelled || aria || text);
+  });
+}
+
+/** axe-core accessibility rules that work without layout (jsdom has none; the e2e test runs the rest in Chromium). */
+async function axeViolations() {
+  const axe = (await import('axe-core')).default;
+  const { violations } = await axe.run(document, { rules: { 'color-contrast': { enabled: false } }, resultTypes: ['violations'] });
+  return violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
+}
+
+afterEach(() => {
+  document.documentElement.innerHTML = '';
+});
+
+describe('accessibility checks', () => {
+  it('popup, in both voice modes', async () => {
+    await openPage('popup');
+    expect(await axeViolations()).toEqual([]);
+    choose($('input[name=output][value=tts]'));
+    await vi.waitFor(() => expect($('#ttsSpeed').hidden).toBe(false));
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('settings page, with the built-in voice options shown', async () => {
+    await openPage('options', { sync: { settings: { output: 'tts', language: 'zh-CN' } } });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    expect(await axeViolations()).toEqual([]);
+  });
+});
+
+describe('popup quick settings', () => {
+  it('shows the screen reader speed for screen reader output, with a hint, and names every control', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('#readerSpeed').hidden).toBe(false));
+    expect($('#ttsSpeed').hidden).toBe(true);
+    const select = $('#readerSpeed select');
+    expect(select.value).toBe('1.6');
+    expect(select.getAttribute('aria-describedby')).toBe('readerSpeedHint');
+    expect($('#readerSpeedHint').textContent).toMatch(/cannot hear your screen reader/);
+    // Detail and mode are in the popup too.
+    expect(document.querySelectorAll('input[name=detail]')).toHaveLength(3);
+    expect(document.querySelectorAll('input[name=mode]')).toHaveLength(3);
+    expect(unnamedControls()).toEqual([]);
+  });
+
+  it('saves the screen reader speed', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('#readerSpeed').hidden).toBe(false));
+    selectValue($('#readerSpeed select'), '3.2');
+    await vi.waitFor(() => expect(stored().readerSpeed).toBe(3.2));
+  });
+
+  it('switches to the speaking rate slider for the built-in voice, read out as "1.2×"', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('#readerSpeed').hidden).toBe(false));
+    choose($('input[name=output][value=tts]'));
+    await vi.waitFor(() => expect($('#ttsSpeed').hidden).toBe(false));
+    expect($('#readerSpeed').hidden).toBe(true);
+    const rate = $('#rate');
+    expect(rate.getAttribute('aria-valuetext')).toBe('1.2×');
+    expect($('#rateOut').textContent).toBe('1.2×');
+    expect($('#rateOut').getAttribute('aria-hidden')).toBe('true');
+
+    // Moving the slider updates what is read out at once, and saves on release.
+    rate.value = '1.5';
+    rate.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(rate.getAttribute('aria-valuetext')).toBe('1.5×');
+    await settle();
+    expect(stored().ttsRate).toBe(1.2);
+    rate.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(stored().ttsRate).toBe(1.5));
+  });
+
+  it('changes detail and mode with a single choice each', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('input[name=detail][value=standard]').checked).toBe(true));
+    choose($('input[name=detail][value=detailed]'));
+    choose($('input[name=mode][value=pause]'));
+    await vi.waitFor(() => expect(stored()).toMatchObject({ detail: 'detailed', mode: 'pause' }));
+  });
+
+  it('tests the voice in the description language, with the saved rate, pitch and voice', async () => {
+    await openPage('popup', {
+      locale: 'zh_CN',
+      uiLanguage: 'zh-CN',
+      sync: { settings: { output: 'tts', language: 'auto', ttsRate: 1.4, ttsPitch: 1.2, ttsVoices: { 'zh-CN': 'Tingting' } } },
+    });
+    await vi.waitFor(() => expect($('#ttsSpeed').hidden).toBe(false));
+    expect($('#testVoice').textContent).toBe('试听');
+    expect($('#rate').getAttribute('aria-valuetext')).toBe('1.4 倍');
+    $('#testVoice').click();
+    await vi.waitFor(() => expect(fake.sent.some((m) => m.type === MSG.SPEAK)).toBe(true));
+    expect(fake.sent.find((m) => m.type === MSG.SPEAK)).toMatchObject({
+      text: '一位穿红色大衣的女人走过积雪的街道。',
+      lang: 'zh-CN',
+      rate: 1.4,
+      pitch: 1.2,
+      voice: 'Tingting',
+    });
+  });
+
+  it('says where to set shortcuts for the quick settings, or which keys they have', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('#quickKeys').textContent).toMatch(/can each have a shortcut/));
+    await openPage('popup', { shortcuts: { 'cycle-detail': 'Alt+Shift+1', 'speed-up': 'Alt+Shift+Up' } });
+    await vi.waitFor(() => expect($('#quickKeys').textContent).toBe('Shortcuts: Alt+Shift+1 detail · Alt+Shift+Up faster'));
+  });
+
+  it('says so when a setting could not be saved, and clears the message on the next change', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('input[name=detail][value=standard]').checked).toBe(true));
+    const status = $('#settingsStatus');
+    expect(status.getAttribute('role')).toBe('status');
+    fake.failSyncWrites(1);
+    choose($('input[name=detail][value=brief]'));
+    await vi.waitFor(() => expect(status.textContent).toMatch(/could not be saved/));
+    choose($('input[name=detail][value=detailed]'));
+    expect(status.textContent).toBe('');
+    await vi.waitFor(() => expect(stored().detail).toBe('detailed'));
+  });
+});
+
+describe('settings page', () => {
+  const ttsChinese = { settings: { output: 'tts', language: 'zh-CN' } };
+
+  it('lists voices for the description language first, Chinese included', async () => {
+    await openPage('options', { sync: ttsChinese });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    expect($('#voiceLabel').textContent).toBe('Voice for Simplified Chinese descriptions');
+    const groups = [...document.querySelectorAll('#voice optgroup')];
+    expect(groups.map((g) => g.label)).toEqual(['Simplified Chinese voices', 'Other languages']);
+    expect([...groups[0].querySelectorAll('option')].map((o) => o.value)).toEqual(['Google 普通话（中国大陆）', 'Tingting', 'Meijia']);
+    expect([...groups[1].querySelectorAll('option')].map((o) => o.value)).toEqual(['Samantha', 'Thomas']);
+    expect($('#voice option[value=Tingting]').textContent).toBe('Tingting (Simplified Chinese)');
+    expect($('#voice option[value=Tingting]').lang).toBe('zh-CN');
+    expect($('#voice').value).toBe('');
+    expect($('#voice').getAttribute('aria-describedby')).toBe('voiceHint voiceNote');
+    expect(unnamedControls()).toEqual([]);
+  });
+
+  it('remembers a voice for each description language', async () => {
+    await openPage('options', { sync: ttsChinese });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    selectValue($('#voice'), 'Tingting');
+    await vi.waitFor(() => expect(stored().ttsVoices).toEqual({ 'zh-CN': 'Tingting' }));
+
+    selectValue($('#language'), 'en');
+    await vi.waitFor(() => expect($('#voiceLabel').textContent).toBe('Voice for English descriptions'));
+    expect($('#voice').value).toBe('');
+    expect($('#voice optgroup').label).toBe('English voices');
+    selectValue($('#voice'), 'Samantha');
+    await vi.waitFor(() => expect(stored().ttsVoices).toEqual({ 'zh-CN': 'Tingting', en: 'Samantha' }));
+
+    selectValue($('#language'), 'zh-CN');
+    await vi.waitFor(() => expect($('#voice').value).toBe('Tingting'));
+  });
+
+  it('labels the voice list in Chinese for a Chinese interface', async () => {
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN', sync: ttsChinese });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    expect($('#voiceLabel').textContent).toBe('朗读简体中文口述的语音');
+    expect($('#voice optgroup').label).toBe('简体中文语音');
+    expect($('#voice option[value=Tingting]').textContent).toBe('Tingting（简体中文）');
+    expect($('#pitch').getAttribute('aria-valuetext')).toBe('标准');
+  });
+
+  it('warns when no installed voice speaks the description language', async () => {
+    await openPage('options', { sync: ttsChinese, voices: [{ name: 'Samantha', lang: 'en-US' }] });
+    await vi.waitFor(() => expect($('#voiceNote').textContent).toMatch(/no Simplified Chinese voice/));
+    expect($('#voiceNote').getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('keeps a voice chosen on another computer, and says it is not available here', async () => {
+    await openPage('options', { sync: { settings: { ...ttsChinese.settings, ttsVoices: { 'zh-CN': 'Microsoft Huihui' } } } });
+    await vi.waitFor(() => expect($('#voice').value).toBe('Microsoft Huihui'));
+    expect($('#voice option[value="Microsoft Huihui"]').textContent).toBe('Microsoft Huihui (not on this computer)');
+    expect($('#voiceNote').textContent).toMatch(/not on this computer/);
+  });
+
+  it('warns when the chosen voice is for another language', async () => {
+    await openPage('options', { sync: ttsChinese });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    selectValue($('#voice'), 'Samantha');
+    await vi.waitFor(() => expect($('#voiceNote').textContent).toBe('This voice is for American English. It may not read Simplified Chinese descriptions properly.'));
+  });
+
+  it('adjusts pitch, and reads slider values as words', async () => {
+    await openPage('options', { sync: ttsChinese });
+    await vi.waitFor(() => expect($('#pitch').getAttribute('aria-valuetext')).toBe('Normal'));
+    expect($('#rate').getAttribute('aria-valuetext')).toBe('1.2×');
+    expect($('#duckLevel').getAttribute('aria-valuetext')).toBe('35%');
+    expect($('#duckOut').textContent).toBe('35%');
+    expect($('#pitch').getAttribute('aria-describedby')).toBe('pitchHint');
+    const pitch = $('#pitch');
+    pitch.value = '1.3';
+    pitch.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(pitch.getAttribute('aria-valuetext')).toBe('130%');
+    expect($('#pitchOut').textContent).toBe('130%');
+    pitch.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(stored().ttsPitch).toBe(1.3));
+  });
+
+  it('tests the chosen voice with a sentence in the description language, not the interface language', async () => {
+    await openPage('options', { sync: { settings: { ...ttsChinese.settings, ttsPitch: 0.8, ttsVoices: { 'zh-CN': 'Tingting' } } } });
+    await vi.waitFor(() => expect($('#voice').value).toBe('Tingting'));
+    $('#testVoice').click();
+    await vi.waitFor(() => expect(fake.sent.some((m) => m.type === MSG.SPEAK)).toBe(true));
+    expect(fake.sent.find((m) => m.type === MSG.SPEAK)).toMatchObject({ text: '一位穿红色大衣的女人走过积雪的街道。', lang: 'zh-CN', pitch: 0.8, voice: 'Tingting', id: 'test' });
+  });
+
+  it('restores the default settings after asking, and keeps the key and saved descriptions', async () => {
+    const local = { local: { apiKey: '', model: 'gemini-2.5-flash' }, 'script:abcdefghijk:en': { cues: [] } };
+    await openPage('options', {
+      local,
+      sync: { settings: { output: 'tts', detail: 'brief', mode: 'manual', ttsRate: 2.5, ttsPitch: 1.4, ttsVoices: { en: 'Samantha' }, duckLevel: 0.6 } },
+    });
+    await vi.waitFor(() => expect($('input[name=detail][value=brief]').checked).toBe(true));
+    const button = $('#resetSettings');
+    expect(button.getAttribute('aria-describedby')).toBe('resetIntro');
+
+    window.confirm.mockReturnValueOnce(false);
+    button.click();
+    await settle();
+    expect(stored().detail).toBe('brief');
+
+    button.click();
+    expect(window.confirm).toHaveBeenLastCalledWith(expect.stringMatching(/API key and saved descriptions stay/));
+    await vi.waitFor(() => expect($('#settingsStatus').textContent).toBe('Default settings restored.'));
+    expect($('#settingsStatus').getAttribute('role')).toBe('status');
+    expect(fake.areas.sync.settings).toBeUndefined();
+    expect(fake.areas.local).toEqual(local);
+    await vi.waitFor(() => expect($('input[name=detail][value=standard]').checked).toBe(true));
+    expect($('input[name=mode][value=gaps]').checked).toBe(true);
+    expect($('input[name=output][value=screenreader]').checked).toBe(true);
+    expect($('#ttsOptions').hidden).toBe(true);
+    expect($('#rate').getAttribute('aria-valuetext')).toBe('1.2×');
+    expect($('#pitch').getAttribute('aria-valuetext')).toBe('Normal');
+    expect($('#duckOut').textContent).toBe('35%');
+  });
+
+  it('says when restoring the defaults failed', async () => {
+    await openPage('options', { sync: ttsChinese });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    fake.chrome.storage.sync.remove = async () => {
+      throw new Error('quota');
+    };
+    $('#resetSettings').click();
+    await vi.waitFor(() => expect($('#settingsStatus').textContent).toMatch(/could not be restored/));
+    expect($('#settingsStatus').className).toContain('status-bad');
+  });
+
+  it('shows save errors next to the settings, not in the API key section', async () => {
+    await openPage('options', { sync: ttsChinese });
+    await vi.waitFor(() => expect($('#voice optgroup')).not.toBeNull());
+    fake.failSyncWrites(1);
+    choose($('input[name=detail][value=brief]'));
+    await vi.waitFor(() => expect($('#settingsStatus').textContent).toMatch(/could not be saved/));
+    expect($('#keyStatus').textContent).not.toMatch(/could not be saved/);
+  });
+
+  it('lists the new speed shortcuts, unset by default', async () => {
+    await openPage('options');
+    await vi.waitFor(() => expect(document.querySelectorAll('#shortcuts tr')).toHaveLength(3));
+    const rows = [...document.querySelectorAll('#shortcuts tr')].map((tr) => tr.textContent);
+    expect(rows).toContain('Speak fasterNot set');
+  });
+});

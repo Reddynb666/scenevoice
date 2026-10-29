@@ -126,20 +126,27 @@
 
       <div id="ttsOptions" class="stack">
         <label class="field">
-          <span data-i18n="set_voice">Voice</span>
-          <select id="voice" data-setting="ttsVoice"></select>
+          <span id="voiceLabel" data-i18n="set_voice">Voice</span>
+          <select id="voice" aria-describedby="voiceHint voiceNote"></select>
         </label>
-        <label class="field">
-          <span><span data-i18n="set_tts_rate">Speaking rate</span> <output id="rateOut" for="rate"></output></span>
-          <input type="range" id="rate" min="0.6" max="3" step="0.1" data-setting="ttsRate" data-number>
+        <p id="voiceHint" class="small muted" data-i18n="set_voice_hint">Voices for the description language are listed first. Each description language remembers its own voice.</p>
+        <p id="voiceNote" class="small status-warn" aria-live="polite"></p>
+        <label class="field" for="rate">
+          <span><span data-i18n="set_tts_rate">Speaking rate</span> <output id="rateOut" for="rate" aria-hidden="true"></output></span>
+          <input type="range" id="rate" min="0.6" max="3" step="0.1" data-setting="ttsRate" data-number data-format="rate">
         </label>
+        <label class="field" for="pitch">
+          <span><span data-i18n="set_tts_pitch">Pitch</span> <output id="pitchOut" for="pitch" aria-hidden="true"></output></span>
+          <input type="range" id="pitch" min="0.5" max="1.5" step="0.1" data-setting="ttsPitch" data-number data-format="pitch" aria-describedby="pitchHint">
+        </label>
+        <p id="pitchHint" class="small muted" data-i18n="set_tts_pitch_hint">Some voices do not change pitch.</p>
         <div class="row"><button type="button" id="testVoice" class="secondary" data-i18n="set_test_voice">Test voice</button></div>
       </div>
 
       <label class="check"><input type="checkbox" data-setting="duck"><span data-i18n="set_duck">Lower the video volume while describing</span></label>
-      <label class="field">
-        <span><span data-i18n="set_duck_level">Video volume while describing</span> <output id="duckOut" for="duckLevel"></output></span>
-        <input type="range" id="duckLevel" min="0.05" max="0.9" step="0.05" data-setting="duckLevel" data-number>
+      <label class="field" for="duckLevel">
+        <span><span data-i18n="set_duck_level">Video volume while describing</span> <output id="duckOut" for="duckLevel" aria-hidden="true"></output></span>
+        <input type="range" id="duckLevel" min="0.05" max="0.9" step="0.05" data-setting="duckLevel" data-number data-format="percent">
       </label>
       <label class="check"><input type="checkbox" data-setting="showText"><span data-i18n="set_show_text">Show descriptions as large text on the video</span><span class="hint" data-i18n="set_show_text_hint">Helpful for low vision, and for people watching with you.</span></label>
     </section>
@@ -168,6 +175,15 @@
         <li data-i18n="privacy_3">Descriptions are saved on this computer so a video is described only once.</li>
       </ul>
     </section>
+
+    <!-- 6. Defaults -->
+    <section class="card stack" aria-labelledby="h-reset">
+      <h2 id="h-reset" data-i18n="opt_reset_title">6. Restore defaults</h2>
+      <p id="resetIntro" data-i18n="opt_reset_intro">Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. Keyboard shortcuts stay too; change them on Chrome’s shortcuts page.</p>
+      <div class="row"><button type="button" id="resetSettings" class="danger" aria-describedby="resetIntro" data-i18n="opt_reset_button">Restore default settings</button></div>
+    </section>
+
+    <p id="settingsStatus" class="toast" role="status" aria-live="polite"></p>
 
     <p class="small muted center"><span data-i18n="opt_footer">SceneVoice is free and open source.</span> <span id="version"></span></p>
   </main>

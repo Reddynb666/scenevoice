@@ -50,9 +50,13 @@ Open any YouTube video.
 | Change the level of detail | *(set your own)* |
 | Change what happens when a description does not fit | *(set your own)* |
 | Change how much is described | *(set your own)* |
+| Speak faster | *(set your own)* |
+| Speak slower | *(set your own)* |
 | Stop speaking | *(set your own)* |
 
-Shortcuts can be changed at `chrome://extensions/shortcuts` — do this if one clashes with your screen reader. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
+Shortcuts can be changed at `chrome://extensions/shortcuts` — do this if one clashes with your screen reader. Chrome lets an extension suggest only four shortcuts, so the others start unset; the settings page lists them all and has a button that opens Chrome's shortcut page. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
+
+The shortcuts that change a setting say the new value, for example "Detail: brief." or "Speaking rate: 1.4 times normal." *Speak faster* and *Speak slower* change the built-in voice's rate; with your screen reader they change the speed SceneVoice plans for (the setting below), not the screen reader itself.
 
 The first time you play a video that has no descriptions, SceneVoice says so once and tells you the shortcut.
 
@@ -64,6 +68,11 @@ The first time you play a video that has no descriptions, SceneVoice says so onc
 - **How fast does your screen reader speak?** — SceneVoice cannot hear your screen reader, so it uses this to judge what fits in a pause. If descriptions get cut off, pick a slower setting; if they are too short, pick a faster one.
 - **Interrupt other speech** — descriptions cut off whatever the screen reader is saying, so they stay in time with the picture. Off by default.
 - **Create descriptions automatically** — starts as soon as you open a video. Off by default because it uses your API quota on every video you open.
+- **Built-in voice** — voice, speaking rate and pitch, each set separately, with a *Test voice* button that reads a sentence in the description language. Voices for the description language are listed first, and each description language remembers its own voice. A voice chosen on another computer that this one does not have is replaced by an automatic one.
+- **Quick settings in the popup** — detail, mode and speed (the rate of the built-in voice, or your screen reader speed) are in the toolbar popup as well as on the settings page.
+- **Restore default settings** — at the end of the settings page. It resets every preference but keeps your API key, model, saved descriptions and keyboard shortcuts.
+
+Settings other than the key are saved in your browser profile (`chrome.storage.sync`) and follow you to your other browsers if sync is on.
 
 ## How it works
 

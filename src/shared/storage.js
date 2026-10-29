@@ -10,7 +10,8 @@
 // would drop the key. Existing installs already have both the key (`local`)
 // and cached scripts (`script:*`) here, so nothing is moved or rewritten.
 
-import { DEFAULT_LOCAL, DEFAULT_SETTINGS } from './constants.js';
+import { DEFAULT_LOCAL } from './constants.js';
+import { normalizeSettings } from './settings.js';
 
 /**
  * Stop content scripts from reading chrome.storage.local.
@@ -22,20 +23,48 @@ export function protectLocalStorage() {
   return chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
 }
 
-export async function getSettings() {
+async function storedSettings() {
   try {
-    const stored = await chrome.storage.sync.get('settings');
-    return { ...DEFAULT_SETTINGS, ...(stored.settings || {}) };
+    const { settings } = await chrome.storage.sync.get('settings');
+    return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return {};
   }
 }
 
-export async function setSettings(patch) {
-  const current = await getSettings();
-  const next = { ...current, ...patch };
-  await chrome.storage.sync.set({ settings: next });
-  return next;
+export async function getSettings() {
+  return normalizeSettings(await storedSettings());
+}
+
+// Saving reads the stored settings and writes them back with the change. Two
+// saves from the same page (two quick choices) run one after the other, or
+// the second would write back what it read before the first had saved.
+let queue = Promise.resolve();
+const inTurn = (fn) => {
+  const run = queue.then(fn);
+  queue = run.catch(() => {});
+  return run;
+};
+
+/**
+ * Save some settings. Keys this version does not know are kept as stored, so
+ * a newer SceneVoice on another synced computer does not lose them.
+ */
+export function setSettings(patch) {
+  return inTurn(async () => {
+    const stored = await storedSettings();
+    const next = normalizeSettings({ ...stored, ...patch });
+    await chrome.storage.sync.set({ settings: { ...stored, ...next } });
+    return next;
+  });
+}
+
+/** Back to the defaults. Only preferences: the API key, model and cache are not touched. */
+export function resetSettings() {
+  return inTurn(async () => {
+    await chrome.storage.sync.remove('settings');
+    return normalizeSettings({});
+  });
 }
 
 export async function getLocal() {
@@ -53,7 +82,7 @@ export async function setLocal(patch) {
 /** Call fn(settings) now and whenever settings change. Returns an unsubscribe function. */
 export function watchSettings(fn) {
   const listener = (changes, area) => {
-    if (area === 'sync' && changes.settings) fn({ ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) });
+    if (area === 'sync' && changes.settings) fn(normalizeSettings(changes.settings.newValue));
   };
   chrome.storage.onChanged.addListener(listener);
   getSettings().then(fn);

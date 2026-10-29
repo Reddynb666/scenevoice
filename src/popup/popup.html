@@ -66,6 +66,34 @@
       </fieldset>
 
       <fieldset>
+        <legend data-i18n="set_output">Voice</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
+          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listeners without a screen reader.</span></label>
+        </div>
+      </fieldset>
+
+      <div id="ttsSpeed" class="stack" hidden>
+        <label class="field" for="rate">
+          <span><span data-i18n="set_tts_rate">Speaking rate</span> <output id="rateOut" for="rate" aria-hidden="true"></output></span>
+          <input type="range" id="rate" min="0.6" max="3" step="0.1" data-setting="ttsRate" data-number data-format="rate">
+        </label>
+        <div class="row"><button type="button" id="testVoice" class="secondary" data-i18n="set_test_voice">Test voice</button></div>
+      </div>
+      <div id="readerSpeed" class="stack" hidden>
+        <label class="field">
+          <span data-i18n="set_reader_speed">How fast does your screen reader speak?</span>
+          <select data-setting="readerSpeed" data-number aria-describedby="readerSpeedHint">
+            <option value="1" data-i18n="speed_normal">Default speed</option>
+            <option value="1.6" data-i18n="speed_fast">Fast</option>
+            <option value="2.4" data-i18n="speed_very_fast">Very fast</option>
+            <option value="3.2" data-i18n="speed_fastest">Extremely fast</option>
+          </select>
+        </label>
+        <p id="readerSpeedHint" class="small muted" data-i18n="set_reader_speed_hint">SceneVoice cannot hear your screen reader, so it uses this to decide which descriptions fit in a pause.</p>
+      </div>
+
+      <fieldset>
         <legend data-i18n="set_density">How much to describe</legend>
         <div class="choices choices-inline">
           <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials</span></label>
@@ -80,18 +108,13 @@
         <span class="hint" data-i18n="set_on_screen_text_hint">Titles, burned-in captions, signs and slides.</span>
       </label>
 
-      <fieldset>
-        <legend data-i18n="set_output">Voice</legend>
-        <div class="choices">
-          <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
-          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listeners without a screen reader.</span></label>
-        </div>
-      </fieldset>
-
       <label class="field">
         <span data-i18n="set_language">Description language</span>
         <select id="language" data-setting="language"></select>
       </label>
+
+      <p id="quickKeys" class="small muted"></p>
+      <p id="settingsStatus" class="small status-bad" role="status" aria-live="polite"></p>
     </section>
 
     <footer class="row">
