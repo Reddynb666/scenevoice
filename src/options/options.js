@@ -144,10 +144,37 @@ async function loadModels({ announce }) {
   if (announce) setStatus(statusEl, models.length ? t('opt_key_ok', current) : errorMessage('no-model'), models.length ? 'good' : 'bad');
 }
 
+/**
+ * The video type settings: a type's mode and detail can be changed only while
+ * adjusting is on; a mode or detail the user picked is named, with a way back.
+ */
+function renderTypeSettings(settings) {
+  for (const id of ['typeEntertainment', 'typeTutorial']) $(id).disabled = !settings.autoByType;
+  const { modeChosen, detailChosen } = settings;
+  const key = modeChosen && detailChosen ? 'type_chosen_both' : modeChosen ? 'type_chosen_mode' : detailChosen ? 'type_chosen_detail' : '';
+  const text = settings.autoByType && key ? t(key) : '';
+  if ($('typeChosen').textContent !== text) $('typeChosen').textContent = text;
+  $('typeChosenBox').hidden = !text;
+}
+
+async function letTypeDecide() {
+  try {
+    await setSettings({ modeChosen: false, detailChosen: false });
+  } catch {
+    onSaveError();
+    return;
+  }
+  // The button is gone now: keep focus nearby, on the switch it belongs to.
+  $('autoByType').focus();
+  setToast(t('type_again_done'), 'good');
+}
+
 function onSettings(settings, live) {
   $('srOptions').hidden = settings.output !== 'screenreader';
   $('ttsOptions').hidden = settings.output !== 'tts';
-  if (!live) renderVoices(settings); // live: a slider is moving, nothing else changed
+  if (live) return; // a slider is moving, nothing else changed
+  renderVoices(settings);
+  renderTypeSettings(settings);
 }
 
 /** Messages about settings, kept in view at the bottom of the window and read by screen readers. */
@@ -299,6 +326,7 @@ async function init() {
     send(voiceTestMessage(s, resolveLanguage(s.language, uiLanguage())));
   });
   $('resetSettings').addEventListener('click', restoreDefaults);
+  $('typeAgain').addEventListener('click', letTypeDecide);
 
   await renderShortcuts();
   $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));

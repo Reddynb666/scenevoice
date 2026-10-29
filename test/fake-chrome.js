@@ -14,8 +14,10 @@ const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)
  * @param {object} [opts.local]         initial chrome.storage.local contents
  * @param {(msg: object) => any} [opts.reply]  answers chrome.runtime.sendMessage
  * @param {object[]} [opts.commands]    chrome.commands.getAll()
+ * @param {(msg: object) => any} [opts.tabReply]  answers chrome.tabs.sendMessage, as a YouTube tab would;
+ *   without it the active tab has no content script
  */
-export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, local = {}, reply = () => ({}), commands = [] } = {}) {
+export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, local = {}, reply = () => ({}), commands = [], tabReply = null } = {}) {
   const areas = { sync: clone(sync), local: clone(local) };
   const listeners = new Set();
   const sent = [];
@@ -94,7 +96,8 @@ export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, loc
       async query() {
         return [{ id: 1, url: 'https://example.com/' }];
       },
-      async sendMessage() {
+      async sendMessage(_tabId, msg) {
+        if (tabReply) return tabReply(msg);
         throw new Error('Could not establish connection. Receiving end does not exist.');
       },
       async create() {},

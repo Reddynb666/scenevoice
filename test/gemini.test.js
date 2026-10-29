@@ -60,6 +60,14 @@ describe('describer instructions', () => {
     expect(text).toMatch(/15 to 40 descriptions/);
     expect(text).not.toMatch(/at least 3 seconds apart/);
   });
+  it('ask for the video type in the same answer, so it costs no extra request', () => {
+    expect(text).toMatch(/"tutorial": made to teach or explain/);
+    expect(text).toMatch(/"entertainment": watched for enjoyment/);
+    const schema = buildScriptRequest({ videoId: 'abcdefghijk', meta: {}, chunk: { start: 0, end: 60 }, duration: 60, characters: [], lang: 'en' }).generationConfig.responseSchema;
+    expect(schema.properties.videoType).toEqual({ type: 'STRING', enum: ['entertainment', 'tutorial', 'other'] });
+    expect(schema.required).toContain('videoType');
+    expect(schema.propertyOrdering[0]).toBe('videoType');
+  });
 });
 
 describe('request builders', () => {

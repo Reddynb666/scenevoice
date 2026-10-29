@@ -28,3 +28,8 @@ output { font-weight: 400; color: var(--muted); }
 }
 .toast:empty { padding: 0; border: 0; box-shadow: none; }
 .toast.status-bad { border-color: var(--bad); }
+h3 { font-size: 16px; margin-top: 6px; }
+/* One column per video type, side by side when there is room. */
+.type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.type-grid fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.type-grid fieldset:disabled { opacity: .6; }

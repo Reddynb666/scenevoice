@@ -13,6 +13,20 @@ export const formatPitch = (pitch) =>
 /** 0.35 → "35%". */
 export const formatPercent = (value) => t('value_percent', String(Math.round(Number(value) * 100)));
 
+/**
+ * What the video type changed, from typeAdjustments(): "Tutorial video:
+ * SceneVoice will pause when needed, with detailed descriptions." '' if nothing.
+ */
+export function typeAdjustedText(type, changes) {
+  const name = t(`type_name_${type}`);
+  const mode = changes.mode ? t(`type_mode_${changes.mode}`) : '';
+  const detail = changes.detail ? t(`type_detail_${changes.detail}`) : '';
+  if (mode && detail) return t('type_switched_both', name, mode, detail);
+  if (mode) return t('type_switched_mode', name, mode);
+  if (detail) return t('type_switched_detail', name, detail);
+  return '';
+}
+
 /** The name of a screen reader speed preset, as in the settings list. */
 export function readerSpeedLabel(speed) {
   const labels = { 1: t('speed_normal'), 1.6: t('speed_fast'), 2.4: t('speed_very_fast'), 3.2: t('speed_fastest') };

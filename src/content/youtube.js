@@ -193,11 +193,35 @@ export function watchTimedTextRequests(fn) {
   }
 }
 
-/** Fetch the caption tracks listed on this video's watch page. Same origin as the page. */
-export async function fetchCaptionTracks(videoId) {
+/**
+ * The category the uploader chose ("Education", "Music"…), from a watch page's
+ * player response, or its <meta itemprop="genre">. '' when neither is there.
+ */
+export function extractCategory(html) {
+  if (typeof html !== 'string') return '';
+  const at = html.indexOf('"playerMicroformatRenderer"');
+  // The renderer holds the title, the (escaped) description and then the category.
+  const json = at >= 0 && /"category":("(?:[^"\\]|\\.)*")/.exec(html.slice(at, at + 50000));
+  if (json) {
+    try {
+      return JSON.parse(json[1]); // "Howto \u0026 Style" → "Howto & Style"
+    } catch {
+      /* fall through to the meta tag */
+    }
+  }
+  const meta = /<meta\s+itemprop="genre"\s+content="([^"]*)"/i.exec(html);
+  return meta ? meta[1].replace(/&amp;/g, '&') : '';
+}
+
+/**
+ * What this video's watch page says about it: caption tracks (for dialogue
+ * timing) and category (for the video type). Same origin as the page.
+ */
+export async function fetchWatchPage(videoId) {
   const res = await fetch(`${location.origin}/watch?v=${encodeURIComponent(videoId)}`, { credentials: 'same-origin' });
-  if (!res.ok) return [];
-  return extractCaptionTracks(await res.text());
+  if (!res.ok) return { tracks: [], category: '' };
+  const html = await res.text();
+  return { tracks: extractCaptionTracks(html), category: extractCategory(html) };
 }
 
 export function rightControls() {

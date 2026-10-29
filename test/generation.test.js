@@ -7,7 +7,7 @@ const ok = (text) => ({ candidates: [{ content: { parts: [{ text }] }, finishRea
 const m = (name) => ({ name: `models/${name}`, supportedGenerationMethods: ['generateContent'] });
 
 /** A fake Gemini that answers per section; `fail` decides which calls throw. */
-function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.0-flash'], fail = () => null } = {}) {
+function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.0-flash'], fail = () => null, videoType } = {}) {
   const calls = [];
   return {
     model,
@@ -21,7 +21,7 @@ function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 
       const err = fail(call, calls.length);
       if (err) throw err;
       if (call.ask) return ok('A chef holds up a dumpling.');
-      return ok(JSON.stringify({ characters: [], cues: [cue(start + 1), cue(start + 100)] }));
+      return ok(JSON.stringify({ videoType, characters: [], cues: [cue(start + 1), cue(start + 100)] }));
     }),
   };
 }
@@ -40,6 +40,25 @@ describe('runGeneration', () => {
     ]);
     expect(script.cues.map((c) => c.start)).toEqual([1, 100, 301, 400]);
     expect(script.model).toBe('gemini-2.5-flash');
+  });
+
+  it("saves Gemini's video type with the descriptions, from the first section", async () => {
+    const seen = [];
+    const script = await runGeneration({ client: fakeClient({ videoType: 'tutorial' }), ...params, script: null, onChunk: (sc) => seen.push(sc.videoType) });
+    expect(seen).toEqual(['tutorial', 'tutorial']);
+    expect(script.videoType).toBe('tutorial');
+    expect((await runGeneration({ client: fakeClient({ videoType: 'other' }), ...params, script: null })).videoType).toBe('');
+  });
+
+  it('keeps the video type when a section is split in two', async () => {
+    let calls = 0;
+    const client = fakeClient({
+      videoType: 'entertainment',
+      fail: () => (calls++ === 0 ? new GeminiError('truncated') : null),
+    });
+    const script = await runGeneration({ client, ...params, duration: 200, script: null });
+    expect(client.calls.length).toBe(3);
+    expect(script.videoType).toBe('entertainment');
   });
 
   it('resumes from the saved section and counts sections from the start of the video', async () => {

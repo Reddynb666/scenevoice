@@ -2,8 +2,10 @@ import { LANGUAGES, MSG } from '../shared/constants.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
+import { typeAdjustedText } from '../shared/labels.js';
 import { voiceTestMessage } from '../shared/settings.js';
 import { getSettings, resolveLanguage } from '../shared/storage.js';
+import { typeAdjustments } from '../shared/videotype.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -113,6 +115,28 @@ function render(state) {
   }
   clearTimeout(pollTimer);
   if (state?.status === 'generating' || state?.status === 'loading') pollTimer = setTimeout(refresh, 1000);
+  renderType();
+}
+
+let savedSettings = null;
+
+/**
+ * Show mode and detail as they apply to the video in this tab: when its type
+ * changed them, those values are selected, and a note says so. Choosing
+ * another value makes it the user's own, for every video.
+ */
+function renderType() {
+  const type = current?.supported ? current.videoType : '';
+  const changes = savedSettings ? typeAdjustments(savedSettings, type) : {};
+  for (const [key, value] of Object.entries(changes)) {
+    const radio = document.querySelector(`input[name="${key}"][value="${value}"]`);
+    if (radio) radio.checked = true;
+  }
+  const text = typeAdjustedText(type, changes);
+  const note = $('typeNote');
+  // Cleared when hidden: the fieldsets point at it with aria-describedby.
+  note.textContent = text ? `${text} ${t('popup_type_hint')}` : '';
+  note.hidden = !text;
 }
 
 async function refresh() {
@@ -134,6 +158,8 @@ async function act(action) {
 function onSettings(settings) {
   $('ttsSpeed').hidden = settings.output !== 'tts';
   $('readerSpeed').hidden = settings.output !== 'screenreader';
+  savedSettings = settings;
+  renderType();
 }
 
 function onSaveError() {

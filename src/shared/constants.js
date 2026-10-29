@@ -13,6 +13,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   mode: 'gaps',
   /** 'brief' | 'standard' | 'detailed' */
   detail: 'standard',
+  /** The user picked the mode / the detail themselves (popup, settings page or shortcut).
+   *  A choice of their own is never adjusted to the video type. */
+  modeChosen: false,
+  detailChosen: false,
+  /** Use the mode and detail set below for entertainment and tutorial videos
+   *  (see videotype.js), for whichever of the two the user has not picked. */
+  autoByType: true,
+  entertainmentMode: 'gaps',
+  entertainmentDetail: 'brief',
+  tutorialMode: 'pause',
+  tutorialDetail: 'detailed',
   /** How many of the generated descriptions to speak: 'essential' (priority 1),
    *  'standard' (1-2) or 'full' (everything). Filters without regenerating. */
   density: 'standard',
@@ -54,6 +65,9 @@ export const MODES = Object.freeze(['gaps', 'pause', 'manual']);
 export const DETAILS = Object.freeze(['brief', 'standard', 'detailed']);
 export const DENSITIES = Object.freeze(['essential', 'standard', 'full']);
 export const OUTPUTS = Object.freeze(['screenreader', 'tts']);
+
+/** Video types with their own mode and detail. Anything else uses the general settings. */
+export const VIDEO_TYPES = Object.freeze(['entertainment', 'tutorial']);
 
 /** Screen reader speeds offered in settings, slowest first. */
 export const READER_SPEEDS = Object.freeze([1, 1.6, 2.4, 3.2]);

@@ -2,18 +2,19 @@
 
 import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS, DENSITIES, DETAILS, MODES } from '../shared/constants.js';
 import { t, errorMessage } from '../shared/i18n.js';
-import { readerSpeedLabel } from '../shared/labels.js';
-import { nextValue, stepSpeed } from '../shared/settings.js';
+import { readerSpeedLabel, typeAdjustedText } from '../shared/labels.js';
+import { markChoices, nextValue, stepSpeed } from '../shared/settings.js';
 import { authorizeContentMessage } from '../shared/sender.js';
 import { resolveLanguage, setSettings, watchSettings } from '../shared/storage.js';
 import { chooseUtterance, cueAt, estimateSeconds, formatTime, passesDensity } from '../shared/script.js';
 import { CueScheduler, pickOne } from '../shared/scheduler.js';
 import { fitCuesToDialogue, parseTimedText, speechIntervals } from '../shared/dialogue.js';
+import { pageVideoType, resolveVideoType, typeAdjustments } from '../shared/videotype.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { askAboutMoment, startGeneration, stopGeneration } from './generator.js';
 import {
-  fetchCaptionTracks,
+  fetchWatchPage,
   getMeta,
   getPageDuration,
   getVideo,
@@ -52,6 +53,16 @@ function main() {
   let dialogue = null;
   /** Caption URLs already tried for the current video. */
   let captionUrlsTried = new Set();
+  /** The video type the watch page suggests, '' until known. A type in the script (Gemini's) comes first. */
+  let pageType = '';
+  /** 'entertainment' | 'tutorial' | '' for the current video. */
+  let videoType = '';
+  /** Mode and detail used for this video instead of the settings, because of its type. */
+  let adjusted = {};
+  /** `${videoId}:${type}` once the user has heard what the type changed. */
+  let typeAnnouncedFor = '';
+  /** How to undo an adjustment is said once per tab, with the first one. */
+  let typeUndoHintGiven = false;
   let lastSpoken = null;
   let speechToken = 0;
   /** Token of the utterance that paused the video, or 0 when the video is not paused by us. */
@@ -80,6 +91,8 @@ function main() {
   };
 
   const readerRate = () => (settings.output === 'tts' ? settings.ttsRate : settings.readerSpeed);
+  /** A setting as it applies to this video: mode and detail may follow the video type. */
+  const setting = (key) => (key in adjusted ? adjusted[key] : settings[key]);
   const shortcut = (name) => shortcuts[name] || '';
 
   /** Direct feedback to a user action: always delivered, cutting off any description in flight. */
@@ -142,6 +155,7 @@ function main() {
     const prevLang = lang;
     const wasEnabled = settings.enabled;
     settings = s;
+    updateType();
     lang = resolveLanguage(s.language, chrome.i18n.getUILanguage());
     announcer.lang = lang;
     ui.setButtonState(s.enabled, shortcut('toggle-descriptions'));
@@ -184,6 +198,7 @@ function main() {
     lastSpoken = null;
     scheduler.setCues([]);
     ui.hideText();
+    updateType();
   }
 
   function onPage() {
@@ -194,11 +209,32 @@ function main() {
     videoId = id;
     dialogue = null;
     captionUrlsTried = new Set();
+    pageType = '';
     resetVideoState();
     if (!id) return;
     ui.mount();
     loadScript();
-    loadDialogue(id);
+    loadWatchPage(id);
+  }
+
+  /**
+   * Read the video's watch page once: its category gives the video type before
+   * any description exists, and its caption tracks give the dialogue timing.
+   */
+  async function loadWatchPage(id) {
+    let page = { tracks: [], category: '' };
+    try {
+      page = await fetchWatchPage(id);
+    } catch (err) {
+      console.info('[SceneVoice] could not read the watch page', String(err));
+    }
+    if (dead || id !== videoId) return;
+    pageType = pageVideoType({ category: page.category, title: getMeta().title });
+    updateType();
+    announceType();
+    const track = pickCaptionTrack(page.tracks);
+    const url = track && timedTextUrl(track.baseUrl);
+    if (url) loadDialogue(id, [url]);
   }
 
   /**
@@ -206,13 +242,8 @@ function main() {
    * real pauses rather than the model's estimate. Without captions the model's
    * estimate is used as before.
    */
-  async function loadDialogue(id, urls = null) {
+  async function loadDialogue(id, urls) {
     try {
-      if (!urls) {
-        const track = pickCaptionTrack(await fetchCaptionTracks(id));
-        const url = track && timedTextUrl(track.baseUrl);
-        urls = url ? [url] : [];
-      }
       for (const url of urls) {
         if (dead || id !== videoId || dialogue || captionUrlsTried.has(url)) return;
         captionUrlsTried.add(url);
@@ -240,6 +271,7 @@ function main() {
     if (cached) {
       setScript(cached);
       console.info(`[SceneVoice] ${cached.cues.length} saved descriptions for ${id} (${l})${cached.complete ? '' : ', incomplete'}`);
+      announceType();
       // A previous run stopped part-way (tab closed, quota): carry on where it left off.
       if (!cached.complete) generate({ quiet: true });
       return undefined;
@@ -264,8 +296,34 @@ function main() {
 
   function setScript(sc) {
     script = sc;
+    updateType();
     scheduleCues();
     status = sc.complete ? 'ready' : 'partial';
+  }
+
+  // ---------- video type ----------
+
+  /** Work out the video type and what it changes. Run whenever the settings, the script or the page type change. */
+  function updateType() {
+    const type = videoId ? resolveVideoType({ scriptType: script?.videoType, pageType }) : '';
+    if (type !== videoType) console.info(`[SceneVoice] video type: ${type || 'unknown'}${type && type === script?.videoType ? ' (from Gemini)' : ''}`);
+    videoType = type;
+    adjusted = typeAdjustments(settings, type);
+  }
+
+  /**
+   * Say once per video what its type changed, as soon as there are
+   * descriptions to play. The first time in a tab, also say how to undo it.
+   * @param {boolean} enabled  descriptions are on (just turned on: the settings may not have caught up yet)
+   */
+  function announceType(enabled = settings.enabled) {
+    if (!videoId || !script || !enabled || !Object.keys(adjusted).length) return;
+    const key = `${videoId}:${videoType}`;
+    if (typeAnnouncedFor === key) return;
+    typeAnnouncedFor = key;
+    const text = typeAdjustedText(videoType, adjusted);
+    announcer.status(typeUndoHintGiven ? text : `${text} ${t('type_switched_undo')}`);
+    typeUndoHintGiven = true;
   }
 
   /** Hand the script's cues to the scheduler, moved and trimmed to the real dialogue when it is known. */
@@ -437,6 +495,7 @@ function main() {
         announcer.status(t('status_progress', String(done), String(total)));
       }
     }
+    announceType();
   }
 
   function onGenerationDone(sc) {
@@ -448,6 +507,7 @@ function main() {
     const n = sc.cues.length;
     console.info(`[SceneVoice] done: ${n} descriptions, model ${sc.model}`, sc.cues.slice(0, 5));
     announcer.status(n ? t('status_ready', String(n), shortcut('describe-now') || t('status_the_describe_button')) : t('status_ready_empty'));
+    announceType();
   }
 
   function onGenerationError(code, detail) {
@@ -563,8 +623,8 @@ function main() {
   function deliver(cue, { manual = false } = {}) {
     const video = getVideo();
     const u = chooseUtterance(cue, {
-      mode: manual ? 'manual' : settings.mode,
-      detail: settings.detail,
+      mode: manual ? 'manual' : setting('mode'),
+      detail: setting('detail'),
       rate: readerRate(),
       onScreenText: manual ? true : settings.onScreenText,
       playbackRate: video?.playbackRate || 1,
@@ -612,7 +672,7 @@ function main() {
       scheduler.reset(null);
       return;
     }
-    if (!settings.enabled || !script || settings.mode === 'manual') {
+    if (!settings.enabled || !script || setting('mode') === 'manual') {
       scheduler.reset(video.currentTime);
       return;
     }
@@ -641,6 +701,8 @@ function main() {
     await setSettings({ enabled }).catch(() => {});
     if (!enabled) stopSpeaking();
     feedback(enabled ? t('status_on') : t('status_off'));
+    // Descriptions were off when the video opened: say now what its type changed.
+    if (enabled) announceType(true);
   }
 
   function nearbyText(time) {
@@ -733,23 +795,28 @@ function main() {
    * Save a setting changed by a shortcut, then say the new value (or that it
    * was not saved). The local copy changes at once, so a quick second press
    * steps on from the new value and the announcement already uses it (a new
-   * speaking rate, for example).
+   * speaking rate, for example). A mode or detail chosen here is the user's
+   * own, so the video type no longer changes it.
    */
   async function change(patch, announcement) {
-    const before = Object.fromEntries(Object.keys(patch).map((k) => [k, settings[k]]));
-    settings = { ...settings, ...patch };
+    const marked = markChoices(patch);
+    const before = Object.fromEntries(Object.keys(marked).map((k) => [k, settings[k]]));
+    settings = { ...settings, ...marked };
+    updateType();
     try {
-      await setSettings(patch);
+      await setSettings(marked);
     } catch {
       settings = { ...settings, ...before };
+      updateType();
       feedback(t('opt_settings_save_failed'));
       return;
     }
     feedback(announcement);
   }
 
+  /** Step to the next value, from the one in use for this video (which may come from its type). */
   async function cycle(key, values, prefix) {
-    const next = nextValue(values, settings[key]);
+    const next = nextValue(values, setting(key));
     await change({ [key]: next }, t(`${prefix}${next}`));
   }
 
@@ -817,6 +884,7 @@ function main() {
       complete: Boolean(script?.complete),
       model: script?.model || '',
       lang,
+      videoType,
     };
   }
 

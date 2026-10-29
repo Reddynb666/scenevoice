@@ -194,6 +194,60 @@ describe('popup quick settings', () => {
   });
 });
 
+describe('popup and the video type', () => {
+  const tab = (videoType) => (msg) =>
+    msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'abcdefghijk', title: 'Tie a bowline', status: 'ready', cueCount: 4, firstCue: 1, lang: 'en', videoType } : null;
+  const checked = (name) => $(`input[name=${name}]:checked`)?.value;
+
+  it('shows the mode and detail a tutorial uses, and says why', async () => {
+    await openPage('popup', { tabReply: tab('tutorial') });
+    await vi.waitFor(() => expect($('#typeNote').hidden).toBe(false));
+    expect($('#typeNote').textContent).toBe('Tutorial or explainer: SceneVoice will pause when needed, with detailed descriptions. Choose another option below to keep it for every video.');
+    expect(checked('mode')).toBe('pause');
+    expect(checked('detail')).toBe('detailed');
+    // Nothing is saved: the type only applies to this video.
+    expect(stored()).toEqual({});
+    for (const fieldset of document.querySelectorAll('fieldset:has(input[name=mode]), fieldset:has(input[name=detail])')) {
+      expect(fieldset.getAttribute('aria-describedby')).toBe('typeNote');
+    }
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it("makes a choice in the popup the user's own, for every video", async () => {
+    await openPage('popup', { tabReply: tab('tutorial') });
+    await vi.waitFor(() => expect(checked('mode')).toBe('pause'));
+    choose($('input[name=mode][value=gaps]'));
+    await vi.waitFor(() => expect(stored()).toMatchObject({ mode: 'gaps', modeChosen: true, detailChosen: false }));
+    await vi.waitFor(() => expect($('#typeNote').textContent).toMatch(/^Tutorial or explainer: SceneVoice switches to detailed descriptions\./));
+    expect(checked('mode')).toBe('gaps');
+    expect(checked('detail')).toBe('detailed');
+  });
+
+  it('shows the saved settings when adjusting is off, the type is unknown or there is no video', async () => {
+    await openPage('popup', { tabReply: tab('tutorial'), sync: { settings: { autoByType: false } } });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/4 descriptions ready/));
+    expect($('#typeNote').hidden).toBe(true);
+    expect($('#typeNote').textContent).toBe('');
+    expect(checked('mode')).toBe('gaps');
+    expect(checked('detail')).toBe('standard');
+
+    await openPage('popup', { tabReply: tab('') });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/4 descriptions ready/));
+    expect($('#typeNote').hidden).toBe(true);
+
+    await openPage('popup');
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/Open a YouTube video/));
+    expect($('#typeNote').hidden).toBe(true);
+  });
+
+  it('explains it in Chinese for a Chinese interface', async () => {
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab('entertainment') });
+    await vi.waitFor(() => expect($('#typeNote').hidden).toBe(false));
+    expect($('#typeNote').textContent).toBe('娱乐类视频，已切换为简短口述。 在下面另选一项，之后每个视频都按你的选择。');
+    expect(checked('detail')).toBe('brief');
+  });
+});
+
 describe('settings page', () => {
   const ttsChinese = { settings: { output: 'tts', language: 'zh-CN' } };
 
@@ -330,6 +384,70 @@ describe('settings page', () => {
     choose($('input[name=detail][value=brief]'));
     await vi.waitFor(() => expect($('#settingsStatus').textContent).toMatch(/could not be saved/));
     expect($('#keyStatus').textContent).not.toMatch(/could not be saved/);
+  });
+
+  it('sets the mode and detail for each video type, changeable while adjusting is on', async () => {
+    await openPage('options');
+    const box = $('#autoByType');
+    await vi.waitFor(() => expect(box.checked).toBe(true));
+    expect(box.getAttribute('aria-describedby')).toBe('autoByTypeHint');
+    expect($('#autoByTypeHint').textContent).toMatch(/A mode or detail you choose yourself .* always comes first/);
+    expect($('#h-type').tagName).toBe('H3');
+    const select = (key) => $(`select[data-setting=${key}]`);
+    expect([select('entertainmentMode').value, select('entertainmentDetail').value]).toEqual(['gaps', 'brief']);
+    expect([select('tutorialMode').value, select('tutorialDetail').value]).toEqual(['pause', 'detailed']);
+    // Each list is named by its own label, inside a group named for the type.
+    expect(select('tutorialMode').labels[0].querySelector('span').textContent).toBe('When a description does not fit');
+    expect(select('tutorialMode').closest('fieldset').querySelector('legend').textContent).toMatch(/^Tutorials and explainers/);
+    expect(unnamedControls()).toEqual([]);
+    expect($('#typeChosenBox').hidden).toBe(true);
+
+    selectValue(select('tutorialMode'), 'manual');
+    await vi.waitFor(() => expect(stored().tutorialMode).toBe('manual'));
+    // A type's setting is not a choice of the general mode.
+    expect(stored().modeChosen).toBe(false);
+
+    box.checked = false;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(stored().autoByType).toBe(false));
+    await vi.waitFor(() => expect($('#typeTutorial').disabled).toBe(true));
+    expect($('#typeEntertainment').disabled).toBe(true);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('says which of mode and detail the user chose, and lets the video type decide again', async () => {
+    await openPage('options', { sync: { settings: { mode: 'manual', modeChosen: true } } });
+    await vi.waitFor(() => expect($('#typeChosenBox').hidden).toBe(false));
+    expect($('#typeChosen').textContent).toBe('You chose the mode yourself, so only the detail follows the video type.');
+    expect($('#typeAgain').getAttribute('aria-describedby')).toBe('typeChosen');
+    expect(await axeViolations()).toEqual([]);
+
+    choose($('input[name=detail][value=brief]'));
+    await vi.waitFor(() => expect($('#typeChosen').textContent).toBe('You chose the mode and the detail yourself, so every video uses your choice.'));
+
+    $('#typeAgain').click();
+    await vi.waitFor(() => expect(stored()).toMatchObject({ modeChosen: false, detailChosen: false }));
+    // The values stay; they are just no longer the user's own choice.
+    expect(stored()).toMatchObject({ mode: 'manual', detail: 'brief' });
+    await vi.waitFor(() => expect($('#typeChosenBox').hidden).toBe(true));
+    expect(document.activeElement).toBe($('#autoByType'));
+    expect($('#settingsStatus').textContent).toBe('Mode and detail follow the video type again.');
+  });
+
+  it('labels the video type settings in Chinese', async () => {
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN', sync: { settings: { detail: 'brief', detailChosen: true } } });
+    await vi.waitFor(() => expect($('#typeChosenBox').hidden).toBe(false));
+    expect($('#autoByType').labels[0].textContent).toBe('按视频类型自动调整');
+    expect([...document.querySelectorAll('.type-grid legend')].map((l) => l.textContent)).toEqual(['娱乐类：影视、音乐、Vlog、游戏', '教程讲解类：教学、操作演示、科普、新闻图表']);
+    expect($('select[data-setting=tutorialMode] option[value=pause]').textContent).toBe('暂停视频');
+    expect($('#typeChosen').textContent).toBe('详细程度是你自己选的，所以只有模式会按视频类型调整。');
+    expect($('#typeAgain').textContent).toBe('重新按视频类型调整');
+  });
+
+  it('hides the note about own choices when adjusting is off', async () => {
+    await openPage('options', { sync: { settings: { autoByType: false, mode: 'pause', modeChosen: true } } });
+    await vi.waitFor(() => expect($('#typeTutorial').disabled).toBe(true));
+    expect($('#typeChosenBox').hidden).toBe(true);
   });
 
   it('lists the new speed shortcuts, unset by default', async () => {

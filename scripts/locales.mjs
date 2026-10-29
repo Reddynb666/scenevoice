@@ -312,6 +312,52 @@ export const STRINGS = {
     zh_CN: '方便低视力用户，以及和你一起观看的人。',
   },
 
+  // ----- video type -----
+  opt_type_title: { en: 'By video type', zh_CN: '按视频类型' },
+  set_auto_by_type: { en: 'Adjust mode and detail to the video type', zh_CN: '按视频类型自动调整' },
+  set_auto_by_type_hint: {
+    en: 'By default, entertainment keeps playing with brief descriptions, so the pace is not broken, and tutorials and explainers pause for detailed ones, so nothing on screen is missed. Other videos use the mode and detail above. A mode or detail you choose yourself (above, in the popup or with a shortcut) always comes first. The type comes from the video’s YouTube category and title, and from Gemini once descriptions exist.',
+    zh_CN: '默认情况下，娱乐类视频不暂停、简短口述，不打断节奏；教程讲解类视频会暂停并详细口述，屏幕上的关键信息不会漏掉。其他视频按上面的设置。你自己选过的模式或详细程度（在上面、弹出窗口里或用快捷键）始终优先。视频类型根据它在 YouTube 上的分类和标题判断，生成口述后以 Gemini 的判断为准。',
+  },
+  type_entertainment_legend: { en: 'Entertainment: films, music, vlogs, games', zh_CN: '娱乐类：影视、音乐、Vlog、游戏' },
+  type_tutorial_legend: {
+    en: 'Tutorials and explainers: lessons, how-to, science, news with charts',
+    zh_CN: '教程讲解类：教学、操作演示、科普、新闻图表',
+  },
+  type_chosen_both: {
+    en: 'You chose the mode and the detail yourself, so every video uses your choice.',
+    zh_CN: '模式和详细程度都是你自己选的，所以每个视频都按你的选择，不再按类型调整。',
+  },
+  type_chosen_mode: {
+    en: 'You chose the mode yourself, so only the detail follows the video type.',
+    zh_CN: '模式是你自己选的，所以只有详细程度会按视频类型调整。',
+  },
+  type_chosen_detail: {
+    en: 'You chose the detail yourself, so only the mode follows the video type.',
+    zh_CN: '详细程度是你自己选的，所以只有模式会按视频类型调整。',
+  },
+  type_again: { en: 'Let the video type decide again', zh_CN: '重新按视频类型调整' },
+  type_again_done: { en: 'Mode and detail follow the video type again.', zh_CN: '模式和详细程度已改回按视频类型调整。' },
+  type_name_entertainment: { en: 'Entertainment video', zh_CN: '娱乐类视频' },
+  type_name_tutorial: { en: 'Tutorial or explainer', zh_CN: '教程讲解类视频' },
+  type_mode_gaps: { en: 'keep playing', zh_CN: '空隙模式' },
+  type_mode_pause: { en: 'pause when needed', zh_CN: '暂停模式' },
+  type_mode_manual: { en: 'describe only when you ask', zh_CN: '手动模式' },
+  type_detail_brief: { en: 'brief descriptions', zh_CN: '简短口述' },
+  type_detail_standard: { en: 'standard descriptions', zh_CN: '标准口述' },
+  type_detail_detailed: { en: 'detailed descriptions', zh_CN: '详细口述' },
+  type_switched_both: { en: '$1: SceneVoice will $2, with $3.', zh_CN: '$1，已切换为$2、$3。' },
+  type_switched_mode: { en: '$1: SceneVoice will $2.', zh_CN: '$1，已切换为$2。' },
+  type_switched_detail: { en: '$1: SceneVoice switches to $2.', zh_CN: '$1，已切换为$2。' },
+  type_switched_undo: {
+    en: 'To change it back, choose again in the SceneVoice popup, or turn off “Adjust mode and detail to the video type” in settings.',
+    zh_CN: '想改回来，可以在 SceneVoice 弹出窗口里重新选，或在设置中关闭“按视频类型自动调整”。',
+  },
+  popup_type_hint: {
+    en: 'Choose another option below to keep it for every video.',
+    zh_CN: '在下面另选一项，之后每个视频都按你的选择。',
+  },
+
   // ----- options page -----
   options_title: { en: 'SceneVoice settings', zh_CN: 'SceneVoice 设置' },
   options_skip: { en: 'Skip to settings', zh_CN: '跳到设置' },

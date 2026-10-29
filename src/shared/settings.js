@@ -58,6 +58,13 @@ const CLEAN = {
   enabled: bool,
   mode: oneOf(MODES),
   detail: oneOf(DETAILS),
+  modeChosen: bool,
+  detailChosen: bool,
+  autoByType: bool,
+  entertainmentMode: oneOf(MODES),
+  entertainmentDetail: oneOf(DETAILS),
+  tutorialMode: oneOf(MODES),
+  tutorialDetail: oneOf(DETAILS),
   density: oneOf(DENSITIES),
   onScreenText: bool,
   language: (v, d) => (v === 'auto' || LANGUAGE_CODES.has(v) ? v : d),
@@ -76,6 +83,9 @@ const CLEAN = {
   pauseOnAsk: bool,
 };
 
+/** Settings the user can pick for themselves instead of leaving them to the video type. */
+const CHOICES = ['mode', 'detail'];
+
 /**
  * Stored settings, with every known key present and valid. Unknown keys are
  * dropped (they stay in storage; see storage.js).
@@ -84,6 +94,25 @@ export function normalizeSettings(raw) {
   const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const out = {};
   for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) out[key] = CLEAN[key](src[key], fallback);
+  // Saved before these flags existed: a mode or detail other than the default
+  // can only have been picked by the user.
+  for (const key of CHOICES) {
+    const flag = `${key}Chosen`;
+    if (typeof src[flag] !== 'boolean') out[flag] = key in src && out[key] !== DEFAULT_SETTINGS[key];
+  }
+  return out;
+}
+
+/**
+ * A patch with the user's own choices marked. Mode and detail are only ever
+ * saved when the user picks them (the video type adjusts them in the page,
+ * never in storage), so saving one means the user chose it.
+ */
+export function markChoices(patch) {
+  const out = { ...patch };
+  for (const key of CHOICES) {
+    if (key in out && !(`${key}Chosen` in out)) out[`${key}Chosen`] = true;
+  }
   return out;
 }
 

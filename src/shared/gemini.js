@@ -17,6 +17,9 @@ export class GeminiError extends Error {
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    // Chooses the default mode and detail for the video (see videotype.js). It
+    // comes with the descriptions, so knowing it costs no extra request.
+    videoType: { type: 'STRING', enum: ['entertainment', 'tutorial', 'other'] },
     characters: {
       type: 'ARRAY',
       items: {
@@ -46,8 +49,8 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ['characters', 'cues'],
-  propertyOrdering: ['characters', 'cues'],
+  required: ['videoType', 'characters', 'cues'],
+  propertyOrdering: ['videoType', 'characters', 'cues'],
 };
 
 export function languageName(code) {
@@ -123,6 +126,11 @@ export function scriptInstructions(lang) {
     '- 1 = needed to follow what happens: scene changes, who is present, the main action and its result, on-screen text that matters, who is speaking.',
     '- 2 = helpful: secondary actions, expressions and gestures, objects, appearance details on first sight.',
     '- 3 = atmosphere: decor, lighting, scenery, minor background activity.',
+    '',
+    'Video type ("videoType"), for the whole video, judged from the title, the uploader\'s description and the picture:',
+    '- "tutorial": made to teach or explain, so what is on screen must not be missed: lessons and lectures, how-to and product demonstrations, cooking and craft tutorials, science explainers, news or analysis built on charts, maps or slides.',
+    '- "entertainment": watched for enjoyment: films, series, animation, music videos and performances, vlogs, gameplay, comedy, sport.',
+    '- "other": neither, or you cannot tell.',
     '',
     'Output JSON only, matching the schema. If truly nothing visual happens in this section, return an empty "cues" list.',
   ].join('\n');

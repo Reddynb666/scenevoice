@@ -104,6 +104,14 @@ describe('normalizeChunk', () => {
   it('accepts a bare array', () => {
     expect(normalizeChunk([{ start: 1, standard: 'x' }]).cues).toHaveLength(1);
   });
+
+  it('keeps the video type only when it is one SceneVoice has settings for', () => {
+    expect(normalizeChunk({ videoType: 'tutorial', cues: [] }).videoType).toBe('tutorial');
+    expect(normalizeChunk({ videoType: 'entertainment', cues: [] }).videoType).toBe('entertainment');
+    expect(normalizeChunk({ videoType: 'other', cues: [] }).videoType).toBe('');
+    expect(normalizeChunk({ videoType: 'constructor', cues: [] }).videoType).toBe('');
+    expect(normalizeChunk([{ start: 1, standard: 'x' }]).videoType).toBe('');
+  });
 });
 
 describe('mergeScript', () => {
@@ -113,6 +121,14 @@ describe('mergeScript', () => {
     expect(merged.cues.map((c) => c.start)).toEqual([1, 500]);
     expect(merged.characters.map((c) => c.label)).toEqual(['Ann', 'Bo']);
     expect(merged.completedUntil).toBe(960);
+  });
+
+  it('takes the video type from the first section that names one', () => {
+    const first = mergeScript({ cues: [], characters: [] }, { cues: [], characters: [], videoType: '' }, 300);
+    expect(first.videoType).toBe('');
+    const second = mergeScript(first, { cues: [], characters: [], videoType: 'tutorial' }, 600);
+    expect(second.videoType).toBe('tutorial');
+    expect(mergeScript(second, { cues: [], characters: [], videoType: 'entertainment' }, 900).videoType).toBe('tutorial');
   });
 });
 

@@ -204,7 +204,7 @@ describe('listeners are wired to the checks', () => {
   });
 
   it('preference helpers shared with content scripts use sync storage only', () => {
-    for (const file of ['settings.js', 'voices.js', 'labels.js', 'form.js']) {
+    for (const file of ['settings.js', 'voices.js', 'labels.js', 'form.js', 'videotype.js']) {
       const text = source(join('src/shared', file));
       expect(text, file).not.toMatch(/chrome\.storage\.local/);
       expect(text, file).not.toMatch(/apiKey/);

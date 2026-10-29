@@ -25,15 +25,15 @@ Google processes this under the [Gemini API Terms of Service](https://ai.google.
 
 If you change the API address in Advanced settings to a relay service, the same data is sent to that service instead, and the extension asks your permission for that address first. The relay can see your key and requests; only use a relay you trust.
 
-On a YouTube video page, SceneVoice also asks YouTube itself for that video's caption timing (the watch page and its caption file), the same way the YouTube player does when you turn on captions. These requests go only to YouTube, from the YouTube page you are already on, and contain nothing but the video's address. The timing is used to fit descriptions between lines of dialogue and is not stored or sent anywhere else.
+On a YouTube video page, SceneVoice also asks YouTube itself for that video's caption timing and category (the watch page and its caption file), the same way the YouTube player does when you turn on captions. These requests go only to YouTube, from the YouTube page you are already on, and contain nothing but the video's address. The timing is used to fit descriptions between lines of dialogue, and the category (for example "Education" or "Music") to choose the mode and detail for the kind of video; neither is stored or sent anywhere else.
 
 No other network requests are made.
 
 ## What is stored on your computer
 
 - **Your API key**, in the browser's local extension storage (`chrome.storage.local`). It never leaves your computer except as described above, and it is never placed in a URL. Remove it at any time on the settings page.
-- **Descriptions** that have been generated, keyed by video and language, so a video is described only once. The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
-- **Settings** such as mode, detail level, language and the built-in voice you chose for each language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Descriptions** that have been generated, keyed by video and language, so a video is described only once, with the kind of video Gemini judged it to be (entertainment or tutorial). The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
+- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, language and the built-in voice you chose for each language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
 
 Nothing is stored anywhere else.
 

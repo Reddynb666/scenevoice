@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, DETAILS, MODES, MSG, READER_SPEEDS, TTS_RATE, VOICE_SAMPLES, LANGUAGES } from '../src/shared/constants.js';
 import {
+  markChoices,
   nearestReaderSpeed,
   nextValue,
   normalizeSettings,
@@ -76,6 +77,44 @@ describe('normalizeSettings', () => {
   it('never returns the frozen defaults object for voices', () => {
     const s = normalizeSettings({});
     expect(Object.isFrozen(s.ttsVoices)).toBe(false);
+  });
+});
+
+describe('video type settings', () => {
+  it('adjusts to the video type by default, with nothing chosen by the user', () => {
+    expect(normalizeSettings({})).toMatchObject({
+      autoByType: true,
+      modeChosen: false,
+      detailChosen: false,
+      entertainmentMode: 'gaps',
+      entertainmentDetail: 'brief',
+      tutorialMode: 'pause',
+      tutorialDetail: 'detailed',
+    });
+  });
+
+  it('keeps valid choices for each type and replaces bad ones', () => {
+    expect(normalizeSettings({ tutorialMode: 'manual', entertainmentDetail: 'standard', autoByType: false })).toMatchObject({ tutorialMode: 'manual', entertainmentDetail: 'standard', autoByType: false });
+    const bad = normalizeSettings({ tutorialMode: 'loud', tutorialDetail: 3, entertainmentMode: null, autoByType: 'no', modeChosen: 1 });
+    expect(bad).toMatchObject({ tutorialMode: 'pause', tutorialDetail: 'detailed', entertainmentMode: 'gaps', autoByType: true, modeChosen: false });
+  });
+
+  it('treats a mode or detail saved before this version as chosen, unless it is the default', () => {
+    expect(normalizeSettings({ mode: 'manual', detail: 'standard' })).toMatchObject({ modeChosen: true, detailChosen: false });
+    expect(normalizeSettings({ mode: 'gaps', detail: 'detailed' })).toMatchObject({ modeChosen: false, detailChosen: true });
+    expect(normalizeSettings({ mode: 'bogus' }).modeChosen).toBe(false);
+    // Once the flags are saved they are taken as they are.
+    expect(normalizeSettings({ mode: 'manual', modeChosen: false }).modeChosen).toBe(false);
+    expect(normalizeSettings({ mode: 'gaps', modeChosen: true }).modeChosen).toBe(true);
+  });
+
+  it('marks a saved mode or detail as the user\'s own', () => {
+    expect(markChoices({ mode: 'pause' })).toEqual({ mode: 'pause', modeChosen: true });
+    expect(markChoices({ detail: 'brief', density: 'full' })).toEqual({ detail: 'brief', density: 'full', detailChosen: true });
+    expect(markChoices({ density: 'full' })).toEqual({ density: 'full' });
+    expect(markChoices({ tutorialMode: 'manual' })).toEqual({ tutorialMode: 'manual' });
+    // "Let the video type decide again" clears the flags without choosing a value.
+    expect(markChoices({ modeChosen: false, detailChosen: false })).toEqual({ modeChosen: false, detailChosen: false });
   });
 });
 
@@ -175,6 +214,17 @@ describe('settings storage', () => {
     expect(fake.areas.sync.settings).toMatchObject({ mode: 'pause', ttsPitch: 1.3, detail: 'standard', futureOption: 'kept' });
     expect(fake.areas.local.settings).toBeUndefined();
     expect(JSON.stringify(fake.areas.sync)).not.toContain('secret-key');
+  });
+
+  it('remembers that the user chose a mode or detail, until the type may decide again or defaults are restored', async () => {
+    await setSettings({ density: 'full', tutorialMode: 'manual' });
+    expect(fake.areas.sync.settings).toMatchObject({ modeChosen: true, detailChosen: false, tutorialMode: 'manual' });
+    await setSettings({ detail: 'brief' });
+    expect(fake.areas.sync.settings).toMatchObject({ modeChosen: true, detailChosen: true });
+    await setSettings({ modeChosen: false, detailChosen: false });
+    expect(fake.areas.sync.settings).toMatchObject({ mode: 'pause', detail: 'brief', modeChosen: false, detailChosen: false });
+    await setSettings({ detail: 'standard' });
+    expect(await resetSettings()).toMatchObject({ modeChosen: false, detailChosen: false, autoByType: true });
   });
 
   it('restores the defaults without touching the key, the model or saved descriptions', async () => {

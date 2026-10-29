@@ -82,6 +82,54 @@
         </div>
       </fieldset>
 
+      <h3 id="h-type" data-i18n="opt_type_title">By video type</h3>
+      <label class="check"><input type="checkbox" id="autoByType" data-setting="autoByType" aria-describedby="autoByTypeHint"><span data-i18n="set_auto_by_type">Adjust mode and detail to the video type</span></label>
+      <p id="autoByTypeHint" class="small muted" data-i18n="set_auto_by_type_hint">By default, entertainment keeps playing with brief descriptions, so the pace is not broken, and tutorials and explainers pause for detailed ones, so nothing on screen is missed. Other videos use the mode and detail above. A mode or detail you choose yourself (above, in the popup or with a shortcut) always comes first. The type comes from the video’s YouTube category and title, and from Gemini once descriptions exist.</p>
+      <div class="type-grid">
+        <fieldset id="typeEntertainment" class="stack">
+          <legend data-i18n="type_entertainment_legend">Entertainment: films, music, vlogs, games</legend>
+          <label class="field">
+            <span data-i18n="set_mode">When a description does not fit</span>
+            <select data-setting="entertainmentMode">
+              <option value="gaps" data-i18n="mode_gaps">Keep playing</option>
+              <option value="pause" data-i18n="mode_pause">Pause the video</option>
+              <option value="manual" data-i18n="mode_manual">Only when I ask</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="set_detail">Detail</span>
+            <select data-setting="entertainmentDetail">
+              <option value="brief" data-i18n="detail_brief">Brief</option>
+              <option value="standard" data-i18n="detail_standard">Standard</option>
+              <option value="detailed" data-i18n="detail_detailed">Detailed</option>
+            </select>
+          </label>
+        </fieldset>
+        <fieldset id="typeTutorial" class="stack">
+          <legend data-i18n="type_tutorial_legend">Tutorials and explainers: lessons, how-to, science, news with charts</legend>
+          <label class="field">
+            <span data-i18n="set_mode">When a description does not fit</span>
+            <select data-setting="tutorialMode">
+              <option value="gaps" data-i18n="mode_gaps">Keep playing</option>
+              <option value="pause" data-i18n="mode_pause">Pause the video</option>
+              <option value="manual" data-i18n="mode_manual">Only when I ask</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="set_detail">Detail</span>
+            <select data-setting="tutorialDetail">
+              <option value="brief" data-i18n="detail_brief">Brief</option>
+              <option value="standard" data-i18n="detail_standard">Standard</option>
+              <option value="detailed" data-i18n="detail_detailed">Detailed</option>
+            </select>
+          </label>
+        </fieldset>
+      </div>
+      <div id="typeChosenBox" class="stack" hidden>
+        <p id="typeChosen"></p>
+        <div class="row"><button type="button" id="typeAgain" class="secondary" aria-describedby="typeChosen" data-i18n="type_again">Let the video type decide again</button></div>
+      </div>
+
       <fieldset>
         <legend data-i18n="set_density">How much to describe</legend>
         <div class="choices">

@@ -43,7 +43,7 @@ async function generateChunk(client, req, chunk, signal, depth = 0) {
       const mid = Math.round((chunk.start + chunk.end) / 2);
       const a = await generateChunk(client, req, { start: chunk.start, end: mid }, signal, depth + 1);
       const b = await generateChunk(client, { ...req, characters: [...req.characters, ...a.characters] }, { start: mid, end: chunk.end }, signal, depth + 1);
-      return { cues: [...a.cues, ...b.cues], characters: [...a.characters, ...b.characters] };
+      return { cues: [...a.cues, ...b.cues], characters: [...a.characters, ...b.characters], videoType: a.videoType || b.videoType };
     }
     throw err;
   }

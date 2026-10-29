@@ -2,7 +2,7 @@
 // estimating speech time and choosing which text to speak.
 // No browser APIs here, so everything is unit-testable.
 
-import { SCRIPT_VERSION } from './constants.js';
+import { SCRIPT_VERSION, VIDEO_TYPES } from './constants.js';
 
 /** Highest priority number spoken for each density setting. */
 export const DENSITY_MAX_PRIORITY = Object.freeze({ essential: 1, standard: 2, full: 3 });
@@ -80,7 +80,8 @@ export function extractJson(text) {
  * Validate and normalise one chunk of model output.
  * @param {object} raw  parsed JSON from the model
  * @param {{duration?: number, chunkStart?: number, chunkEnd?: number}} ctx
- * @returns {{cues: Array, characters: Array}}
+ * @returns {{cues: Array, characters: Array, videoType: string}}
+ *   videoType: 'entertainment' | 'tutorial', or '' when the model gave neither
  */
 export function normalizeChunk(raw, ctx = {}) {
   const duration = Number.isFinite(ctx.duration) && ctx.duration > 0 ? ctx.duration : Infinity;
@@ -141,7 +142,8 @@ export function normalizeChunk(raw, ctx = {}) {
     seen.add(label.toLowerCase());
     characters.push({ label, description: cleanText(ch?.description, 200) });
   }
-  return { cues, characters };
+  const videoType = VIDEO_TYPES.includes(raw?.videoType) ? raw.videoType : '';
+  return { cues, characters, videoType };
 }
 
 /** Collapse cues of the same kind that start within 1 second of each other. */
@@ -158,7 +160,7 @@ export function dedupeCues(sorted) {
   return out;
 }
 
-/** Merge a new chunk into an existing script. */
+/** Merge a new chunk into an existing script. The first section that names a video type decides it. */
 export function mergeScript(script, chunk, untilSeconds) {
   const cues = dedupeCues([...(script.cues || []), ...chunk.cues].sort((a, b) => a.start - b.start));
   const characters = [...(script.characters || [])];
@@ -174,6 +176,7 @@ export function mergeScript(script, chunk, untilSeconds) {
     version: SCRIPT_VERSION,
     cues,
     characters,
+    videoType: script.videoType || chunk.videoType || '',
     completedUntil: Math.max(script.completedUntil || 0, untilSeconds || 0),
     updatedAt: Date.now(),
   };

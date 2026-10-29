@@ -11,7 +11,7 @@
 // and cached scripts (`script:*`) here, so nothing is moved or rewritten.
 
 import { DEFAULT_LOCAL } from './constants.js';
-import { normalizeSettings } from './settings.js';
+import { markChoices, normalizeSettings } from './settings.js';
 
 /**
  * Stop content scripts from reading chrome.storage.local.
@@ -48,12 +48,13 @@ const inTurn = (fn) => {
 
 /**
  * Save some settings. Keys this version does not know are kept as stored, so
- * a newer SceneVoice on another synced computer does not lose them.
+ * a newer SceneVoice on another synced computer does not lose them. A mode or
+ * detail saved here is the user's own choice (see markChoices).
  */
 export function setSettings(patch) {
   return inTurn(async () => {
     const stored = await storedSettings();
-    const next = normalizeSettings({ ...stored, ...patch });
+    const next = normalizeSettings({ ...stored, ...markChoices(patch) });
     await chrome.storage.sync.set({ settings: { ...stored, ...next } });
     return next;
   });
