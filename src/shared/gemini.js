@@ -169,6 +169,7 @@ export function scriptInstructions(lang) {
     '- There is no quota. A talking head, a slide already read, or a long take may need nothing for a minute or more; a fast demonstration or an action scene may need a description every few seconds (as close as 2 seconds apart).',
     '- Music, scenery and other atmospheric passages: let them play. Describe only a key change in the picture (a new place, a new person, a cut to something different), in a few words, with priority 3 unless it matters to the story or the subject.',
     '- Each description says one thing. Do not pad: the viewer hears the video first and the description second.',
+    '- No filler: never start with "We see", "The video shows", "In this scene", "The camera shows" or "画面中可以看到", "镜头里", "视频中"; say what is there ("A dog runs across the beach.", "一只狗跑过沙滩。"). Do not repeat what the title or the dialogue already says.',
     '',
     'Timing:',
     '- "start" is the moment in seconds from the beginning of the full video when the description should begin. Place it as close as possible to the action, preferably in a pause in speech.',

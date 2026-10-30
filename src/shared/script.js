@@ -23,7 +23,28 @@ export const DETAIL_ORDER = Object.freeze({
   detailed: ['detailed', 'standard', 'brief'],
 });
 
+/** Hard limits in characters: on-screen text, quoted word for word, may run long. */
 const MAX_LEN = { brief: 160, standard: 360, detailed: 800 };
+/**
+ * Limits for a visual description, about 1.5 times what the model is asked for
+ * (gemini.js: brief 8 words / 15 CJK characters, standard 22 / 40, detailed
+ * 50 / 90), so a description that runs long is cut at a sentence end rather than
+ * read in full over the video. CJK text counts characters, other text characters
+ * of about 6.5 per word.
+ */
+const VISUAL_LEN = {
+  cjk: { brief: 25, standard: 60, detailed: 135 },
+  other: { brief: 80, standard: 215, detailed: 490 },
+};
+const CJK_CHAR = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
+
+/** The length limit for one version of a description. */
+function maxLength(text, version, kind) {
+  if (kind === 'text') return MAX_LEN[version];
+  const s = String(text || '');
+  const cjk = (s.match(CJK_CHAR) || []).length;
+  return cjk > s.length / 3 ? VISUAL_LEN.cjk[version] : VISUAL_LEN.other[version];
+}
 /** A transcription of on-screen text: a slide or a code block, but not a page of it. */
 const MAX_SCREEN_TEXT = 600;
 
@@ -65,8 +86,9 @@ export function cleanText(text, maxLen = 700, { keepSymbols = false } = {}) {
   }
   if (t.length > maxLen) {
     const cut = t.slice(0, maxLen);
-    const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('。'), cut.lastIndexOf('！'), cut.lastIndexOf('? '));
-    t = stop > maxLen * 0.5 ? cut.slice(0, stop + 1) : cut.trimEnd() + '…';
+    const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('。'), cut.lastIndexOf('！'), cut.lastIndexOf('？'), cut.lastIndexOf('? '));
+    // A whole first sentence or two beats a sentence broken off: keep them if they say a fair part of it.
+    t = stop > maxLen * 0.35 ? cut.slice(0, stop + 1) : `${cut.slice(0, maxLen - 1).trimEnd()}…`;
   }
   return t;
 }
@@ -155,9 +177,10 @@ export function normalizeChunk(raw, ctx = {}) {
     const opts = { keepSymbols: kind === 'text' };
     // Only text cues carry a transcription; a visual cue's would be a stray.
     const onScreenText = kind === 'text' ? cleanScreenText(item.onScreenText) : '';
-    let brief = cleanText(item.brief, MAX_LEN.brief, opts);
-    let standard = cleanText(item.standard ?? item.text, MAX_LEN.standard, opts);
-    let detailed = cleanText(item.detailed, MAX_LEN.detailed, opts);
+    const sized = (text, version) => cleanText(text, maxLength(text, version, kind), opts);
+    let brief = sized(item.brief, 'brief');
+    let standard = sized(item.standard ?? item.text, 'standard');
+    let detailed = sized(item.detailed, 'detailed');
     if (!standard) standard = detailed || brief || cleanText(onScreenText, MAX_LEN.standard, opts);
     if (!brief) brief = standard;
     if (!detailed) detailed = standard;
