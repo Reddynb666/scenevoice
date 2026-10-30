@@ -98,7 +98,9 @@ function render(state) {
     gen.textContent = state.cueCount ? t('popup_regenerate') : t('popup_generate');
     switch (state.status) {
       case 'live':
-        text = t('popup_live', String(state.cueCount || 0));
+        text = state.describedUpTo > 0
+          ? t('popup_live_up_to', String(state.cueCount || 0), formatTime(state.describedUpTo))
+          : t('popup_live', String(state.cueCount || 0));
         gen.hidden = true;
         break;
       case 'generating':

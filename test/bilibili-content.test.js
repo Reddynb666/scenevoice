@@ -189,6 +189,14 @@ describe('a Bilibili video page', () => {
     // Its moment (0:06) has passed: it is said now, in the pause before the speech at 0:30.
     await vi.waitFor(() => expect(said()).toContain(CHOP.standard));
     expect(await tabState()).toMatchObject({ status: 'live', cueCount: 1 });
+
+    // The box on the player, and the popup's state, say how far the part being watched is described.
+    const state2 = await tabState();
+    expect(state2.describedUpTo).toBeGreaterThanOrEqual(12);
+    const box = document.querySelector('[data-scenevoice=ui]').shadowRoot.querySelector('.progress');
+    await vi.waitFor(() => expect(box.hidden).toBe(false));
+    expect(box.querySelector('.label').textContent).toBe('Describing as you watch');
+    await vi.waitFor(() => expect(box.querySelector('.eta').textContent).toMatch(/^Described up to 0:1\d$/));
   });
 
   it('answers "describe now" from a picture of the moment', async () => {
@@ -208,6 +216,7 @@ describe('a Bilibili video page', () => {
     await vi.waitFor(() => expect(said()).toContain('Descriptions off. No more pictures are sent. Descriptions made so far are saved.'));
     expect(fake.areas.sync.settings.enabled).toBe(false);
     expect((await tabState()).status).toBe('partial');
+    expect(document.querySelector('[data-scenevoice=ui]').shadowRoot.querySelector('.progress').hidden).toBe(true);
     const before = sent(MSG.GEN_FRAMES).length;
     // Past the end of a stretch: nothing is sent while descriptions are off.
     await playTo(74);

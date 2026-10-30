@@ -166,9 +166,16 @@ export const STRINGS = {
     zh_CN: '已停止发送画面，已生成的口述都已保存。',
   },
   status_live_progress: {
-    en: 'Describing as you watch: $1 descriptions so far, covering $2 minutes of the video.',
-    zh_CN: '正在边看边生成口述：目前 $1 条，覆盖了 $2 分钟的视频。',
+    en: 'Describing as you watch: described up to $1, $2 descriptions so far.',
+    zh_CN: '正在边看边生成口述：已描述到 $1，目前 $2 条。',
   },
+  status_live_progress_none: {
+    en: 'Describing as you watch: the first descriptions come a few seconds after the picture.',
+    zh_CN: '正在边看边生成口述：第一条口述会比画面晚几秒。',
+  },
+  progress_live: { en: 'Describing as you watch', zh_CN: '正在边看边生成' },
+  progress_live_up_to: { en: 'Described up to $1', zh_CN: '已描述到 $1' },
+  progress_live_waiting: { en: 'First descriptions on the way', zh_CN: '第一条口述即将到来' },
   live_skipped: {
     en: 'The last few seconds could not be described; SceneVoice keeps trying. $1',
     zh_CN: '刚才几秒的画面没能生成口述，会继续尝试。$1',
@@ -324,6 +331,10 @@ export const STRINGS = {
   popup_live: {
     en: 'Describing as you watch: $1 descriptions so far. They come a few seconds after the picture.',
     zh_CN: '正在边看边生成口述，目前 $1 条。口述会比画面晚几秒。',
+  },
+  popup_live_up_to: {
+    en: 'Describing as you watch: described up to $2, $1 descriptions so far. They come a few seconds after the picture.',
+    zh_CN: '正在边看边生成口述：已描述到 $2，目前 $1 条。口述会比画面晚几秒。',
   },
   popup_ready: { en: '$1 descriptions ready.', zh_CN: '已就绪：$1 条口述。' },
   popup_partial: {

@@ -10,7 +10,7 @@
 // the next viewing like any others.
 
 import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
-import { coverageSeconds, coveredRanges, isCovered, pickEvenly } from '../shared/coverage.js';
+import { coverageSeconds, coveredRanges, describedUpTo, isCovered, pickEvenly } from '../shared/coverage.js';
 import { t, errorMessage } from '../shared/i18n.js';
 import { readerSpeedLabel, typeAdjustedText } from '../shared/labels.js';
 import { markChoices, nextValue, stepSpeed } from '../shared/settings.js';
@@ -480,14 +480,21 @@ function main() {
   }
 
   function renderProgress() {
+    if (status === 'live') {
+      const upTo = liveUpTo();
+      ui.showLiveProgress({ percent: livePercent(), upTo: upTo > 0 ? formatTime(upTo) : '' });
+      return;
+    }
     if (status !== 'generating') return;
     ui.showProgress({ done: progress.done, total: progress.total, fraction: progressFraction(), eta: etaSeconds() });
   }
 
   /** At each quarter, say how far generation has got (the percent and time left), unless it was just said. */
   function sayProgress() {
-    if (status !== 'generating' || !settings.announceProgress) return;
-    const milestone = progressMilestone({ fraction: progressFraction(), said: progressSaid.milestone, saidAt: progressSaid.at, now: Date.now() });
+    if ((status !== 'generating' && status !== 'live') || !settings.announceProgress) return;
+    // Describing as it plays: the share of the video described, and how far the part being watched is.
+    const fraction = status === 'live' ? livePercent() / 100 : progressFraction();
+    const milestone = progressMilestone({ fraction, said: progressSaid.milestone, saidAt: progressSaid.at, now: Date.now() });
     if (milestone == null) return;
     progressSaid = { milestone, at: Date.now() };
     announcer.status(progressText());
@@ -695,7 +702,7 @@ function main() {
 
   /** Spoken when the user asks while generation is running: percent, section and time left. */
   function progressText() {
-    if (status === 'live') return t('status_live_progress', String(script?.cues?.length || 0), String(liveMinutes()));
+    if (status === 'live') return liveProgressText();
     if (!progress.total) return t('status_generating');
     const percent = String(Math.round(progressFraction() * 100));
     const eta = etaSeconds();
@@ -712,6 +719,17 @@ function main() {
   function liveMinutes() {
     const seconds = coverageSeconds(coveredRanges(script));
     return seconds ? Math.max(1, Math.round(seconds / 60)) : 0;
+  }
+
+  /** How far the part being watched is described, in seconds of the video. */
+  function liveUpTo() {
+    return describedUpTo(coveredRanges(script), getVideo()?.currentTime ?? 0);
+  }
+
+  function liveProgressText() {
+    const upTo = liveUpTo();
+    const count = String(script?.cues?.length || 0);
+    return upTo > 0 ? t('status_live_progress', formatTime(upTo), count) : t('status_live_progress_none');
   }
 
   function livePercent() {
@@ -750,6 +768,9 @@ function main() {
     const v = getVideo();
     sampler.reset(v ? v.currentTime : null);
     console.info(`[SceneVoice] describing from frames with ${provider()}`);
+    // Quarters already described (a video watched before) are not said again.
+    progressSaid = { milestone: Math.floor(livePercent() / 25) * 0.25, at: Date.now() };
+    renderProgress();
     if (quiet) announcer.status(t('status_live_resuming'));
     else feedback(t('status_live_start', t(`provider_name_${provider()}`)));
     return undefined;
@@ -763,6 +784,7 @@ function main() {
     queuedWindow = null;
     pendingLate = null;
     if (status === 'live') status = script ? (script.complete ? 'ready' : 'partial') : 'none';
+    ui.hideProgress();
   }
 
   function frameOptions() {
@@ -1351,6 +1373,7 @@ function main() {
       total: progress.total,
       percent: status === 'generating' ? Math.round(progressFraction() * 100) : status === 'live' ? livePercent() : null,
       eta: status === 'generating' ? etaSeconds() : null,
+      describedUpTo: status === 'live' ? liveUpTo() : null,
       cueCount: script?.cues?.length || 0,
       firstCue: script?.cues?.length ? script.cues[0].start : null,
       completedUntil: script?.completedUntil || 0,

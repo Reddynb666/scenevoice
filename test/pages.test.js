@@ -676,6 +676,11 @@ describe('popup on a Bilibili video', () => {
     await vi.waitFor(() => expect(asked).toContainEqual({ type: MSG.TAB_ACTION, action: 'stop' }));
   });
 
+  it('says how far the part being watched is described', async () => {
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab({ status: 'live', cueCount: 4, percent: 30, describedUpTo: 95 }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('正在边看边生成口述：已描述到 1:35，目前 4 条。口述会比画面晚几秒。'));
+  });
+
   it('explains an error in Qwen’s words', async () => {
     await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab({ status: 'error', errorCode: 'frames-tainted' }) });
     await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/^SceneVoice 截不到这个视频的画面/));

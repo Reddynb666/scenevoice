@@ -192,6 +192,18 @@ export class PageUI {
     }
   }
 
+  /** Describing as the video plays (pictures): how far the part being watched is described, and how much of the video is. */
+  showLiveProgress({ percent, upTo }) {
+    this.progress.querySelector('.label').textContent = t('progress_live');
+    this.progress.querySelector('.percent').textContent = `${percent}%`;
+    this.progress.querySelector('.eta').textContent = upTo ? t('progress_live_up_to', upTo) : t('progress_live_waiting');
+    this.progress.querySelector('.fill').style.width = `${Math.max(2, percent)}%`;
+    if (this.progress.hidden) {
+      this.mount();
+      this.progress.hidden = false;
+    }
+  }
+
   hideProgress() {
     this.progress.hidden = true;
   }

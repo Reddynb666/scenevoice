@@ -46,6 +46,19 @@ export function contiguousFromStart(ranges) {
   return first && first[0] <= 1 ? first[1] : 0;
 }
 
+/**
+ * How far the part being watched is described: the end of the described stretch
+ * the viewer is in or has most recently passed the start of (descriptions from
+ * pictures trail playback by a stretch). 0 when nothing before t is described.
+ */
+export function describedUpTo(ranges, t) {
+  let upTo = 0;
+  for (const [a, b] of ranges || []) {
+    if (a <= t + 1) upTo = b;
+  }
+  return upTo;
+}
+
 /** Seconds of the video described. */
 export function coverageSeconds(ranges) {
   return round1((ranges || []).reduce((sum, [a, b]) => sum + (b - a), 0));
