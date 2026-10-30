@@ -210,6 +210,7 @@ export const STRINGS = {
   popup_progress_label: { en: 'Generation progress', zh_CN: '生成进度' },
   status_on: { en: 'Descriptions on.', zh_CN: '口述已开启。' },
   status_off: { en: 'Descriptions off.', zh_CN: '口述已关闭。' },
+  status_press_again_to_stop: { en: 'Press $1 again within 3 seconds to stop and turn descriptions off.', zh_CN: '3 秒内再按一次 $1 可停止生成并关闭口述。' },
   status_looking: { en: 'Looking…', zh_CN: '正在查看……' },
   status_nothing_to_repeat: { en: 'Nothing to repeat yet.', zh_CN: '还没有可以重复的描述。' },
   announce_detail_brief: { en: 'Detail: brief.', zh_CN: '详细程度：简洁。' },

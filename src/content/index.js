@@ -39,6 +39,8 @@ if (!window.__sceneVoiceLoaded) {
 const LATE_LIMIT = 25;
 const LATE_WAIT = 10;
 /** Errors after which taking frames carries on (the stretch is skipped); any other stops it. */
+/** Pressing the shortcut again within this time after it reported progress stops generation and turns descriptions off. */
+const PRESS_AGAIN_MS = 3000;
 /** Errors after which pressing the shortcut again may well work: said with how to carry on. */
 const RESUMABLE_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
 const PASSING_FRAME_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable']);
@@ -59,6 +61,8 @@ function main() {
   let following = false;
   /** Video id for which generate() is still waiting on the player. */
   let startingFor = null;
+  /** When the shortcut last reported progress: pressed again within PRESS_AGAIN_MS, it stops and turns off. */
+  let progressPressAt = 0;
   /** The latest questions about the current video and their answers, sent with the next question. */
   let askHistory = { videoId: null, items: [] };
   /** The video for which "AI-generated audio description follows" has been said in this tab. */
@@ -213,7 +217,11 @@ function main() {
     announcer.lang = lang;
     ui.setButtonState(s.enabled, shortcut('toggle-descriptions'));
     if (!s.showText) ui.hideText();
-    if (wasEnabled && !s.enabled) stopSpeaking();
+    if (wasEnabled && !s.enabled) {
+      stopSpeaking();
+      // Off means no more requests: a description job for this video stops too (what is done stays saved).
+      stopGenerationWhenOff();
+    }
     // Turned off, or another model chosen for this site: stop taking pictures.
     if (live && (!s.enabled || !framesMode())) stopLive();
     if (!started) {
@@ -257,6 +265,7 @@ function main() {
     announcedPartial = false;
     progress = { done: 0, total: 0, chunkStartedAt: 0, chunkMs: [] };
     progressSaid = { milestone: 0, at: 0 };
+    progressPressAt = 0;
     ui.hideProgress();
     lastSpoken = null;
     pendingLate = null;
@@ -407,6 +416,15 @@ function main() {
       return key ? t('status_loaded_off', String(n), key) : t('status_loaded_off_button', String(n));
     }
     return t('status_loaded', String(n));
+  }
+
+  /** Descriptions were turned off (shortcut, popup or settings): stop this video's description job, if any. */
+  async function stopGenerationWhenOff() {
+    if (status !== 'generating' && startingFor !== videoId) return;
+    beginSeq += 1;
+    startingFor = null;
+    await stopGeneration(send, { videoId, lang });
+    stopJob();
   }
 
   /** Tell the user, the first time they play a video without descriptions, how to create them. */
@@ -1132,7 +1150,17 @@ function main() {
   async function toggle() {
     if (!videoId) return;
     if (status === 'generating' || startingFor === videoId) {
-      feedback(progressText());
+      // Pressed again at once: stop and turn descriptions off. Otherwise: how far it has got.
+      if (Date.now() - progressPressAt < PRESS_AGAIN_MS) {
+        progressPressAt = 0;
+        const minutes = script?.completedUntil > 0 ? savedMinutes(script) : '';
+        await setSettings({ enabled: false }).catch(() => {});
+        feedback(`${t('status_off')} ${minutes ? t('status_stopped_partial', minutes) : t('status_stopped')}`);
+        return;
+      }
+      progressPressAt = Date.now();
+      const key = shortcut('toggle-descriptions');
+      feedback(key ? `${progressText()} ${t('status_press_again_to_stop', key)}` : progressText());
       return;
     }
     // Describing from frames lasts as long as the video: the shortcut turns it off, like any descriptions.

@@ -57,6 +57,7 @@ beforeAll(async () => {
         return msg.videoId === RUNNING ? { status: 'generating', done: 0, total: 3, chunkStartedAt: startedAt, chunkMs: [] } : { status: 'idle' };
       }
       if (msg.type === MSG.GEN_START) return { status: 'generating', done: 0, total: 3, chunkStartedAt: Date.now(), chunkMs: [] };
+      if (msg.type === MSG.GEN_STOP) return { stopped: true };
       return {};
     },
   });
@@ -93,9 +94,21 @@ describe('the shortcut during generation', () => {
     for (let i = 0; i < 2; i += 1) {
       const mark = said().length;
       command('toggle-descriptions');
-      await vi.waitFor(() => expect(said().slice(mark).join(' ')).toMatch(/\d+% done/), { timeout: 3000 });
+      await vi.waitFor(() => expect(said().slice(mark).join(' ')).toMatch(/\d+% done.* Press Alt\+Shift\+D again within 3 seconds to stop and turn descriptions off\.$/), { timeout: 3000 });
+      await sleep(3100);
     }
     expect(sent(MSG.GEN_START)).toHaveLength(1);
-    expect((await tabState()).enabled ?? true).toBe(true);
+    expect(sent(MSG.GEN_STOP)).toHaveLength(0);
+  }, 15000);
+
+  it('stops and turns descriptions off when pressed again at once, and sends nothing more', async () => {
+    command('toggle-descriptions');
+    await sleep(200);
+    command('toggle-descriptions');
+    await vi.waitFor(() => expect(said().at(-1)).toBe('Descriptions off. Stopped.'));
+    await vi.waitFor(() => expect(sent(MSG.GEN_STOP)).toHaveLength(1));
+    expect(fake.areas.sync.settings.enabled).toBe(false);
+    expect((await tabState()).status).not.toBe('generating');
+    expect(sent(MSG.GEN_START)).toHaveLength(1);
   });
 });

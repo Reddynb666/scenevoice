@@ -36,7 +36,7 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 - [ ] The progress box is visible above the player's controls, in normal view, fullscreen and on Shorts (at the top there), and stays while the controls hide; the popup shows the same section, percentage and time left.
 - [ ] Opening a video described before says "Descriptions already saved … loaded" with the count.
 - [ ] Turn off the network mid-way: the message says what is saved and that it carries on by itself; turning the network back on says "Back online" and carries on.
-- [ ] Pressing the shortcut again during generation reports progress instead of starting over.
+- [ ] Pressing the shortcut again during generation reports progress instead of starting over; pressing it twice in a row stops, says what is saved, and turns descriptions off (the network panel shows no more requests).
 - [ ] Closing the tab mid-way and reopening the video continues where it stopped.
 
 **Playback**
