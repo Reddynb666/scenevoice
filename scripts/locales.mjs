@@ -61,8 +61,8 @@ export const STRINGS = {
   },
   status_resuming: { en: 'Continuing descriptions for this video.', zh_CN: '继续为这个视频生成口述。' },
   status_partial_ready: {
-    en: 'Descriptions are ready for the first $1 minutes ($2 so far). The rest is on the way.',
-    zh_CN: '前 $1 分钟的口述已就绪（目前 $2 条），其余部分正在生成。',
+    en: 'You can start watching: descriptions are ready for the first $1 minutes ($2 so far). The rest is on the way.',
+    zh_CN: '可以开始看了：前 $1 分钟的口述已就绪（目前 $2 条），其余部分正在生成。',
   },
   status_partial_empty: {
     en: 'The first $1 minutes had nothing visual to describe. Working on the rest.',
@@ -91,7 +91,6 @@ export const STRINGS = {
     en: 'Done. This video has nothing visual that needs describing.',
     zh_CN: '完成。这个视频没有需要描述的画面内容。',
   },
-  status_progress: { en: 'Creating descriptions: part $1 of $2 done.', zh_CN: '正在生成口述：已完成第 $1 部分，共 $2 部分。' },
   status_progress_percent: { en: 'Creating descriptions: $1% done, working on section $2 of $3.', zh_CN: '生成进度 $1%，正在生成第 $2 段，共 $3 段。' },
   status_progress_percent_single: { en: 'Creating descriptions: $1% done.', zh_CN: '生成进度 $1%。' },
   status_hint_generate: {
@@ -384,8 +383,13 @@ export const STRINGS = {
     en: 'Start as soon as you open a video. Uses your API quota for every video you open.',
     zh_CN: '打开视频就开始生成，每打开一个视频都会消耗 API 用量。',
   },
-  set_announce_status: { en: 'Announce progress and status', zh_CN: '播报进度和状态' },
+  set_announce_status: { en: 'Announce status', zh_CN: '播报状态' },
   set_announce_status_hint: { en: 'For example “Descriptions ready”.', zh_CN: '例如“口述已就绪”。' },
+  set_announce_progress: { en: 'Announce generation progress', zh_CN: '播报生成进度' },
+  set_announce_progress_hint: {
+    en: 'At 25%, 50% and 75%, with the time left; never twice within 20 seconds. Press the SceneVoice shortcut at any time to hear it.',
+    zh_CN: '在 25%、50%、75% 时播报，并说剩余时间；两次至少间隔 20 秒。随时按 SceneVoice 快捷键也可以听进度。',
+  },
   set_pause_on_ask: { en: 'Pause while I ask a question', zh_CN: '提问时暂停视频' },
   set_reader_speed: { en: 'How fast does your screen reader speak?', zh_CN: '你的读屏软件语速有多快？' },
   set_reader_speed_hint: {

@@ -86,6 +86,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autoGenerate: false,
   /** Speak status messages (generating, ready, errors). */
   announceStatus: true,
+  /** Also say how far generation has got, at every quarter (needs announceStatus). */
+  announceProgress: true,
   /** Pause the video while the "ask a question" dialog is open. */
   pauseOnAsk: true,
   /** The model that describes videos on each site (see providers.js). */
@@ -223,6 +225,9 @@ export const LANGUAGE_NAMES_EN = Object.freeze({
 
 /** Seconds of video per Gemini request. Shorter chunks keep output within limits. */
 export const CHUNK_SECONDS = 300;
+/** Progress is said at these fractions of the work, and never twice within PROGRESS_GAP_MS. */
+export const PROGRESS_MILESTONES = Object.freeze([0.25, 0.5, 0.75]);
+export const PROGRESS_GAP_MS = 20000;
 
 /** Maximum scripts kept in the local cache before the oldest are evicted. */
 export const CACHE_LIMIT = 300;

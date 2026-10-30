@@ -84,6 +84,7 @@ const CLEAN = {
   showText: bool,
   autoGenerate: bool,
   announceStatus: bool,
+  announceProgress: bool,
   pauseOnAsk: bool,
   youtubeProvider: oneOf(PROVIDERS),
   bilibiliProvider: oneOf(PROVIDERS),

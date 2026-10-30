@@ -22,6 +22,7 @@ import { fitCuesToDialogue, parseTimedText, speechIntervals } from '../shared/di
 import { dropTextHeardInCaptions } from '../shared/onscreen.js';
 import { resolveVideoType, typeAdjustments } from '../shared/videotype.js';
 import { inputModeFor, providerFor } from '../shared/providers.js';
+import { progressMilestone } from '../shared/progress.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { FrameSampler, captureFrame } from './frames.js';
@@ -57,6 +58,8 @@ function main() {
   let startingFor = null;
   /** Whether the "first minutes are ready" message has been given for this job. */
   let announcedPartial = false;
+  /** The last quarter of progress said for this job, and when a generation message was last said. */
+  let progressSaid = { milestone: 0, at: 0 };
   /** Bumped to cancel a generate() that is still waiting for the player. */
   let beginSeq = 0;
   /** Stretches of speech in the current video, from its captions; null when unknown. */
@@ -238,6 +241,7 @@ function main() {
     following = false;
     announcedPartial = false;
     progress = { done: 0, total: 0, chunkStartedAt: 0, chunkMs: [] };
+    progressSaid = { milestone: 0, at: 0 };
     ui.hideProgress();
     lastSpoken = null;
     pendingLate = null;
@@ -447,6 +451,15 @@ function main() {
     ui.showProgress({ done: progress.done, total: progress.total, fraction: progressFraction(), eta: etaSeconds() });
   }
 
+  /** At each quarter, say how far generation has got (the percent and time left), unless it was just said. */
+  function sayProgress() {
+    if (status !== 'generating' || !settings.announceProgress) return;
+    const milestone = progressMilestone({ fraction: progressFraction(), said: progressSaid.milestone, saidAt: progressSaid.at, now: Date.now() });
+    if (milestone == null) return;
+    progressSaid = { milestone, at: Date.now() };
+    announcer.status(progressText());
+  }
+
   // ---------- generation ----------
 
   /**
@@ -519,6 +532,7 @@ function main() {
     announcedPartial = false;
     progress = { done: 0, total: Math.max(1, Math.ceil(v.duration / CHUNK_SECONDS)), chunkStartedAt: Date.now(), chunkMs: [] };
     renderProgress();
+    progressSaid = { milestone: 0, at: Date.now() };
     if (!quiet) feedback(t('status_generating'));
     else announcer.status(t('status_resuming'));
 
@@ -553,9 +567,10 @@ function main() {
         announcedPartial = true;
         const minutes = String(Math.max(1, Math.round((sc?.completedUntil || done * CHUNK_SECONDS) / 60)));
         const count = sc?.cues?.length || 0;
+        progressSaid.at = Date.now();
         announcer.status(count ? t('status_partial_ready', minutes, String(count)) : t('status_partial_empty', minutes));
       } else {
-        announcer.status(t('status_progress', String(done), String(total)));
+        sayProgress();
       }
     }
     announceType();
@@ -596,6 +611,7 @@ function main() {
           status = 'generating';
           errorCode = '';
           announcedPartial = false;
+          progressSaid = { milestone: 0, at: Date.now() };
           announcer.status(t('status_generating'));
         }
         following = true;
@@ -963,7 +979,10 @@ function main() {
     if (!videoId || dead) return;
     tickCount += 1;
     if (tickCount % 16 === 0) ui.mount();
-    if (tickCount % 8 === 0) renderProgress();
+    if (tickCount % 8 === 0) {
+      renderProgress();
+      sayProgress();
+    }
     const video = getVideo();
     if (!video) return;
     watchVideo(video);
