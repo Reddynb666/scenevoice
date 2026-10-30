@@ -9,7 +9,7 @@
 // descriptions then come a few seconds after the picture, and are saved for
 // the next viewing like any others.
 
-import { MSG, DEFAULT_SETTINGS, BLANK_FRAMES_LIMIT, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
+import { MSG, DEFAULT_SETTINGS, AI_NOTICE_SEEN_KEY, AI_NOTICE_SEEN_MAX, BLANK_FRAMES_LIMIT, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
 import { coverageSeconds, coveredRanges, describedUpTo, isCovered, pickEvenly } from '../shared/coverage.js';
 import { t, errorMessage } from '../shared/i18n.js';
 import { readerSpeedLabel, typeAdjustedText } from '../shared/labels.js';
@@ -58,6 +58,8 @@ function main() {
   let following = false;
   /** Video id for which generate() is still waiting on the player. */
   let startingFor = null;
+  /** The video for which "AI-generated audio description follows" has been said in this tab. */
+  let aiNoticeFor = null;
   /** Solid black pictures in a row while describing from frames (a protected video draws black). */
   let blankFrames = 0;
   /** Whether the "first minutes are ready" message has been given for this job. */
@@ -338,7 +340,7 @@ function main() {
       console.info(`[SceneVoice] ${cached.cues.length} saved descriptions for ${id} (${l})${cached.complete ? '' : ', incomplete'}`);
       // Say that the saved descriptions are there, so opening the video is not met with silence.
       // An unfinished one is said with "carrying on" when generation resumes (begin()).
-      if (cached.complete) announcer.status(loadedText(cached));
+      if (cached.complete) announcer.status(await withAiNotice(loadedText(cached)));
       announceType();
       // A previous run stopped part-way (tab closed, quota): carry on where it left off.
       // From frames, only while descriptions are on: pictures are taken as the video plays.
@@ -367,6 +369,25 @@ function main() {
     const v = getVideo();
     if (v && !v.paused) maybeHint();
     return undefined;
+  }
+
+  /**
+   * text, led by "AI-generated audio description follows" the first time
+   * descriptions start on this video in this tab (the AI content labelling rules
+   * in China, ACB's TTS guidelines). With aiNoticeEveryTime off, only the first
+   * time ever for each video.
+   */
+  async function withAiNotice(text) {
+    const id = videoId;
+    if (!id || aiNoticeFor === id) return text;
+    aiNoticeFor = id;
+    if (!settings.aiNoticeEveryTime) {
+      const seen = await chrome.storage.sync.get(AI_NOTICE_SEEN_KEY).then((r) => r?.[AI_NOTICE_SEEN_KEY]).catch(() => null);
+      const list = Array.isArray(seen) ? seen.filter((v) => typeof v === 'string') : [];
+      if (list.includes(id)) return text;
+      chrome.storage.sync.set({ [AI_NOTICE_SEEN_KEY]: [...list, id].slice(-AI_NOTICE_SEEN_MAX) }).catch(() => {});
+    }
+    return `${t('ai_notice')} ${text}`;
   }
 
   /** Minutes of video a saved script covers, at least 1. */
@@ -585,8 +606,8 @@ function main() {
     progress = { done: 0, total: Math.max(1, Math.ceil(v.duration / CHUNK_SECONDS)), chunkStartedAt: Date.now(), chunkMs: [] };
     renderProgress();
     progressSaid = { milestone: 0, at: Date.now() };
-    if (!quiet) feedback(t('status_generating'));
-    else announcer.status(script?.cues?.length ? t('status_resuming_loaded', savedMinutes(script), String(script.cues.length)) : t('status_resuming'));
+    if (!quiet) feedback(await withAiNotice(t('status_generating')));
+    else announcer.status(await withAiNotice(script?.cues?.length ? t('status_resuming_loaded', savedMinutes(script), String(script.cues.length)) : t('status_resuming')));
 
     const res = await startGeneration(send, { videoId: id, duration: v.duration, meta: getMeta(), lang: l, force });
     if (id !== videoId || l !== lang || seq !== beginSeq) return undefined;
@@ -801,8 +822,8 @@ function main() {
     // Quarters already described (a video watched before) are not said again.
     progressSaid = { milestone: Math.floor(livePercent() / 25) * 0.25, at: Date.now() };
     renderProgress();
-    if (quiet) announcer.status(t('status_live_resuming'));
-    else feedback(t('status_live_start', t(`provider_name_${provider()}`)));
+    if (quiet) announcer.status(await withAiNotice(t('status_live_resuming')));
+    else feedback(await withAiNotice(t('status_live_start', t(`provider_name_${provider()}`))));
     return undefined;
   }
 

@@ -25,6 +25,13 @@ export const STRINGS = {
   // ----- on the YouTube page -----
   player_button_label: { en: 'SceneVoice audio description', zh_CN: 'SceneVoice 口述影像' },
   overlay_on_screen_text: { en: 'On screen', zh_CN: '屏幕文字' },
+  overlay_ai: { en: 'AI description', zh_CN: 'AI 口述' },
+  ai_notice: { en: 'AI-generated audio description follows.', zh_CN: '以下为 AI 生成的口述影像。' },
+  set_ai_notice: { en: 'Say “AI-generated audio description follows” every time', zh_CN: '每次开始播报都说明“以下为 AI 生成的口述影像”' },
+  set_ai_notice_hint: {
+    en: 'Said when descriptions start on a video. Turn off to hear it only the first time for each video. Descriptions shown on the video are always marked “AI description”.',
+    zh_CN: '在一个视频开始口述时说。关闭后，每个视频只在第一次说。显示在视频上的口述文字始终标有“AI 口述”。',
+  },
   ask_title: { en: 'Ask about this moment', zh_CN: '就当前画面提问' },
   ask_hint: {
     en: 'For example: Who is speaking? What does the sign say? What just happened? Each answer says which moment it is about.',

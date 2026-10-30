@@ -73,19 +73,19 @@ beforeAll(async () => {
 
 describe('a video described before', () => {
   it('says the saved descriptions are loaded, with the count', async () => {
-    await vi.waitFor(() => expect(said()).toContain('Descriptions already saved for this video, loaded: 3 in total.'), { timeout: 3000 });
+    await vi.waitFor(() => expect(said()).toContain('AI-generated audio description follows. Descriptions already saved for this video, loaded: 3 in total.'), { timeout: 3000 });
     expect((await tabState()).status).toBe('ready');
     expect(sent(MSG.GEN_START)).toHaveLength(0);
   });
 
   it('says that nothing needed describing when the saved run found nothing', async () => {
     const mark = await openVideo('emptyCCCCCC');
-    await vi.waitFor(() => expect(said().slice(mark)).toContain('This video was described before: it has nothing visual that needs describing.'), { timeout: 3000 });
+    await vi.waitFor(() => expect(said().slice(mark)).toContain('AI-generated audio description follows. This video was described before: it has nothing visual that needs describing.'), { timeout: 3000 });
   });
 
   it('says how much was loaded, once, when it carries on with the rest', async () => {
     const mark = await openVideo('partialBBBB');
-    await vi.waitFor(() => expect(said().slice(mark)).toContain('Saved descriptions loaded for the first 5 minutes (3). Creating the rest.'), { timeout: 3000 });
+    await vi.waitFor(() => expect(said().slice(mark)).toContain('AI-generated audio description follows. Saved descriptions loaded for the first 5 minutes (3). Creating the rest.'), { timeout: 3000 });
     expect(said().slice(mark).some((s) => s.startsWith('Continuing descriptions'))).toBe(false);
     expect(sent(MSG.GEN_START)).toHaveLength(1);
   });
@@ -95,8 +95,21 @@ describe('a video described before', () => {
     await new Promise((r) => setTimeout(r, 50));
     const mark = await openVideo('completeAAA');
     await vi.waitFor(
-      () => expect(said().slice(mark)).toContain('Descriptions already saved for this video (3). They are off; press Alt+Shift+D to turn them on.'),
+      () => expect(said().slice(mark)).toContain('AI-generated audio description follows. Descriptions already saved for this video (3). They are off; press Alt+Shift+D to turn them on.'),
       { timeout: 3000 },
     );
+  });
+
+  it('with the notice set to once per video, says it only the first time each video opens', async () => {
+    await chrome.storage.sync.set({ settings: { enabled: true, aiNoticeEveryTime: false } });
+    await new Promise((r) => setTimeout(r, 50));
+    let mark = await openVideo('emptyCCCCCC');
+    await vi.waitFor(() => expect(said().slice(mark)).toContain('AI-generated audio description follows. This video was described before: it has nothing visual that needs describing.'), { timeout: 3000 });
+    expect(fake.areas.sync.aiNoticeSeen).toContain('emptyCCCCCC');
+    mark = await openVideo('completeAAA');
+    await vi.waitFor(() => expect(said().slice(mark).some((x) => x.includes('loaded: 3 in total'))).toBe(true), { timeout: 3000 });
+    mark = await openVideo('emptyCCCCCC');
+    await vi.waitFor(() => expect(said().slice(mark)).toContain('This video was described before: it has nothing visual that needs describing.'), { timeout: 3000 });
+    expect(said().slice(mark).some((x) => x.startsWith('AI-generated'))).toBe(false);
   });
 });

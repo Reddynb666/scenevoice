@@ -441,7 +441,9 @@ def main():
         time.sleep(1.2)
         check(len(REQUESTS) == before, "no request is made during the ad")
         page.evaluate("document.getElementById('movie_player').classList.remove('ad-showing')")
-        check(wait_for_log(page, r"creating descriptions", 5) is not None, "announces that generation started once the ad ends")
+        e = wait_for_log(page, r"SceneVoice is creating descriptions", 5)
+        check(e is not None, "announces that generation started once the ad ends")
+        check(e is not None and e["text"].startswith("AI-generated audio description follows."), "and says first that the descriptions are made by AI")
         pill = "document.querySelector('[data-scenevoice=ui]').shadowRoot.querySelector('.progress')"
         check(wait_until(page, f"() => !{pill}.hidden", 3), "a progress bar appears on the player while generating")
         time.sleep(1.0)

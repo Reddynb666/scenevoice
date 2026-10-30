@@ -148,12 +148,11 @@ export class PageUI {
   showText(text, kind, seconds) {
     clearTimeout(this.hideTimer);
     this.overlay.replaceChildren();
-    if (kind === 'text') {
-      const k = document.createElement('span');
-      k.className = 'kind';
-      k.textContent = t('overlay_on_screen_text');
-      this.overlay.append(k);
-    }
+    // Always marked as made by AI (China's labelling rules ask for a visible notice); on-screen text says so too.
+    const k = document.createElement('span');
+    k.className = 'kind';
+    k.textContent = kind === 'text' ? `${t('overlay_ai')} · ${t('overlay_on_screen_text')}` : t('overlay_ai');
+    this.overlay.append(k);
     this.overlay.append(document.createTextNode(text));
     this.overlay.hidden = false;
     this.hideTimer = setTimeout(() => {

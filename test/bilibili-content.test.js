@@ -180,7 +180,7 @@ describe('a Bilibili video page', () => {
   it('describes as the video plays: a stretch of frames is sent, and its description is said at the next pause', { timeout: 15000 }, async () => {
     const state = await popupAction('generate');
     expect(state.status).toBe('live');
-    expect(said().some((s) => s.startsWith('SceneVoice is describing as you watch') && s.includes('to Qwen'))).toBe(true);
+    expect(said().some((s) => s.startsWith('AI-generated audio description follows. SceneVoice is describing as you watch') && s.includes('to Qwen'))).toBe(true);
 
     await playTo(13);
     await vi.waitFor(() => expect(sent(MSG.GEN_FRAMES)).toHaveLength(1));

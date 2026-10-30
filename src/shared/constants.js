@@ -94,6 +94,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   announceStatus: true,
   /** Also say how far generation has got, at every quarter (needs announceStatus). */
   announceProgress: true,
+  /** Say "AI-generated audio description follows" each time descriptions start on a video;
+   *  false = only the first time for each video (ids kept in storage.sync, AI_NOTICE_SEEN_KEY). */
+  aiNoticeEveryTime: true,
   /** The "press the shortcut to create descriptions" hint has been given (it is given once, ever). */
   generateHintGiven: false,
   /** Pause the video while the "ask a question" dialog is open. */
@@ -236,6 +239,9 @@ export const CHUNK_SECONDS = 300;
 /** Progress is said at these fractions of the work, and never twice within PROGRESS_GAP_MS. */
 export const PROGRESS_MILESTONES = Object.freeze([0.25, 0.5, 0.75]);
 export const PROGRESS_GAP_MS = 20000;
+/** storage.sync key: videos whose AI notice has been said, when it is said only once per video (newest last). */
+export const AI_NOTICE_SEEN_KEY = 'aiNoticeSeen';
+export const AI_NOTICE_SEEN_MAX = 300;
 
 /** Maximum scripts kept in the local cache before the oldest are evicted. */
 export const CACHE_LIMIT = 300;

@@ -86,6 +86,7 @@ const CLEAN = {
   announceStatus: bool,
   announceProgress: bool,
   generateHintGiven: bool,
+  aiNoticeEveryTime: bool,
   pauseOnAsk: bool,
   youtubeProvider: oneOf(PROVIDERS),
   bilibiliProvider: oneOf(PROVIDERS),
