@@ -112,6 +112,8 @@ YouTube and Gemini are usually not reachable from mainland China. This prototype
 - On Bilibili, *Same as my browser* as the description language means Chinese. With the built-in voice, Chinese voices are listed and used first. Screen reader output works as on YouTube.
 - `Alt+Shift+D` turns descriptions, and the picture taking, off and on. *Stop* in the popup stops the picture taking and keeps what was described.
 
+Distribution for mainland China (Edge Add-ons, a Gitee mirror): see [docs/distribution-china.md](docs/distribution-china.md).
+
 ### Known limitations
 
 - **Pictures protected by the browser (cross-origin).** When a video is loaded from another site without that site's permission (CORS), the browser "taints" the canvas and refuses to hand its picture to the page. SceneVoice then says that it cannot take pictures from this video and that no descriptions can be made for it, and sends nothing. Some Bilibili videos may play in Bilibili's own `<bwp-video>` element rather than a `<video>`; it cannot be drawn on a canvas and gets a similar message.

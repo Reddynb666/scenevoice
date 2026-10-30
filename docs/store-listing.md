@@ -89,10 +89,12 @@ Accessibility
 - `activeTab`: lets the toolbar popup tell whether the current tab is a YouTube video and show the right status.
 - `offscreen` (reason `WORKERS`): hosts the worker that sends the long video-description requests to the Gemini API. These take 30–90 seconds, longer than a service worker may wait for a fetch, and running them in the YouTube page would expose the user's API key to the page and subject the requests to YouTube's page policies.
 - Host `https://generativelanguage.googleapis.com/*`: the Gemini API that generates descriptions.
+- Host `https://dashscope.aliyuncs.com/*`: the Qwen API (Alibaba Cloud Model Studio), the model used on Bilibili and by users in mainland China, where Gemini is not available. Only called with the user's own Qwen key.
 - Content script on `youtube.com`: follow playback, show the player button, overlay and question dialog.
+- Content script on `www.bilibili.com/video/*` (top frame only): the same on Bilibili video pages. It reads the page's own data and calls no Bilibili API.
 - Optional host permissions: only requested if the user enters a custom API address (relay), and only for that origin.
 
-Single purpose: provide audio description of YouTube videos for blind and low-vision users.
+Single purpose: provide audio description of online videos (YouTube, and experimentally Bilibili) for blind and low-vision users.
 
 No remote code: all code ships in the package; the Gemini API returns data (JSON text), not code.
 
