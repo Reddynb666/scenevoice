@@ -26,7 +26,7 @@ import { progressMilestone } from '../shared/progress.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { FrameSampler, captureFrame } from './frames.js';
-import { askAboutMoment, describeFrames, reviseDescription, startGeneration, stopGeneration } from './generator.js';
+import { askAboutMoment, describeFrames, generationStatus, reviseDescription, startGeneration, stopGeneration } from './generator.js';
 import { platformFor } from './platforms.js';
 
 if (!window.__sceneVoiceLoaded) {
@@ -333,6 +333,20 @@ function main() {
       return undefined;
     }
     status = 'none';
+    // Back on a video whose job is still on its first section (nothing saved yet): follow it,
+    // so the shortcut reports progress instead of the "no descriptions yet" hint.
+    if (!framesMode()) {
+      const job = await generationStatus(send, { videoId: id, lang: l }).catch(() => null);
+      if (dead || id !== videoId || l !== lang) return undefined;
+      if (job?.status === 'generating') {
+        status = 'generating';
+        following = true;
+        errorCode = '';
+        progressSaid = { milestone: 0, at: Date.now() };
+        applyProgress(job);
+        return undefined;
+      }
+    }
     if (settings.autoGenerate && settings.enabled && (await hasKey()) && id === videoId && l === lang) {
       generate();
       return undefined;
