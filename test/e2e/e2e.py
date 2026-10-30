@@ -6,6 +6,7 @@ Run:  npm run build && python3 test/e2e/e2e.py
 """
 import json
 import re
+import shutil
 import ssl
 import subprocess
 import sys
@@ -41,6 +42,22 @@ def check(cond, msg):
                 print("       log:", [(round(e["vt"], 2), e["text"][:60]) for e in CURRENT_PAGE.evaluate("window.__log")][-6:])
             except Exception:
                 pass
+
+
+def has_key(text, letter):
+    """Alt+Shift+<letter> as Chrome shows it: "Alt+Shift+D", or "⌥⇧D" on macOS."""
+    return any(k in (text or "") for k in (f"Alt+Shift+{letter}", f"⌥⇧{letter}"))
+
+
+def english_only_copy(tmp):
+    """The built extension with only its English strings. The checks read English text,
+    and Chrome picks the interface language from the machine (macOS ignores --lang)."""
+    ext = Path(tmp) / "ext"
+    shutil.copytree(DIST, ext)
+    for loc in (ext / "_locales").iterdir():
+        if loc.name != "en":
+            shutil.rmtree(loc)
+    return ext
 
 
 # ---------------------------------------------------------------- mock Gemini
@@ -240,6 +257,7 @@ def main():
     global CURRENT_PAGE
     console_errors = []
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        ext = english_only_copy(tmp)
         port = start_gemini(tmp)
         print(f"mock Gemini at {GEMINI} -> 127.0.0.1:{port}")
         ctx = p.chromium.launch_persistent_context(
@@ -248,8 +266,8 @@ def main():
             channel="chromium",
             ignore_https_errors=True,
             args=[
-                f"--disable-extensions-except={DIST}",
-                f"--load-extension={DIST}",
+                f"--disable-extensions-except={ext}",
+                f"--load-extension={ext}",
                 f"--host-resolver-rules=MAP {GEMINI_HOST} 127.0.0.1:{port}",
                 "--ignore-certificate-errors",
                 # The mock lives on loopback; Chrome 142+ otherwise asks the page for local-network permission.
@@ -257,6 +275,7 @@ def main():
                 "--no-proxy-server",
                 "--autoplay-policy=no-user-gesture-required",
             ],
+            locale="en-US",
             viewport={"width": 1100, "height": 900},
         )
         ctx.add_init_script(AXE)
@@ -330,7 +349,7 @@ def main():
         time.sleep(0.4)
         check(sw.evaluate("async () => ((await chrome.storage.sync.get('settings')).settings || {}).duckLevel") == 0.6, "releasing the slider saves")
         opt.eval_on_selector("#duckLevel", "el => { el.value = '0.35'; el.dispatchEvent(new Event('change', { bubbles: true })); }")
-        opt.locator("summary").click()
+        opt.locator('summary[data-i18n="opt_advanced"]').click()
         opt.fill("#apiBase", "not a url")
         opt.click("#saveEndpoint")
         check("https://" in opt.inner_text("#keyStatus"), "an invalid API address is rejected with guidance")
@@ -352,7 +371,7 @@ def main():
         time.sleep(0.6)
         check(pop.is_hidden("#keyBanner"), "popup hides the setup banner once a key exists")
         check("YouTube" in pop.inner_text("#videoStatus"), "popup explains what to do outside YouTube")
-        check("Alt+Shift+D" in pop.inner_text("#shortcutHint"), "popup shows the real shortcuts")
+        check(has_key(pop.inner_text("#shortcutHint"), "D"), "popup shows the real shortcuts")
         check(pop.is_hidden("#progressBox") and pop.is_hidden("#stop"), "popup hides the progress bar and Stop when nothing is generating")
         axe(pop, "popup")
         pop.screenshot(path=str(OUT / "popup.png"), full_page=True)
@@ -400,13 +419,13 @@ def main():
         print("\n[watch page]")
         check(page.locator(".scenevoice-button").count() == 1, "player gets a SceneVoice button")
         check(page.get_attribute(".scenevoice-button", "aria-pressed") == "true", "button reports its state (aria-pressed)")
-        check("Alt+Shift+D" in (page.get_attribute(".scenevoice-button", "title") or ""), "button tooltip shows the real shortcut")
+        check(has_key(page.get_attribute(".scenevoice-button", "title"), "D"), "button tooltip shows the real shortcut")
         check(round(video(page, "return v.duration;")) == 570, "fake video loaded (9.5 minutes)")
 
         # First play without descriptions: a hint.
         video(page, "v.play();")
         e = wait_for_log(page, r"No audio description yet", 8)
-        check(e is not None and "Alt+Shift+D" in e["text"], "first play announces how to create descriptions")
+        check(e is not None and has_key(e["text"], "D"), "first play announces how to create descriptions")
         video(page, "v.pause(); v.currentTime = 0;")
 
         # ---------------- generation (waits for an ad first)
@@ -425,6 +444,11 @@ def main():
         time.sleep(1.0)
         check("1 of 2" in page.evaluate(f"{pill}.textContent"), f"it names the section being worked on ({page.evaluate(f'{pill}.textContent').strip()})")
         check(page.evaluate(f"{pill}.getAttribute('aria-hidden')") == "true", "the visual progress bar is hidden from screen readers (they hear announcements)")
+        geo = page.evaluate(f"""() => {{ const b = {pill}.getBoundingClientRect(), p = document.querySelector('#movie_player').getBoundingClientRect();
+          return {{ font: parseFloat(getComputedStyle({pill}).fontSize), top: b.top - p.top, bottom: p.bottom - b.bottom, h: p.height }}; }}""")
+        check(geo["font"] >= 15, f"progress text is at least 15px ({geo['font']}px)")
+        check(geo["top"] > geo["h"] / 2 and geo["bottom"] >= 60, f"progress sits low in the player, above the control bar ({geo})")
+        check("%" in page.evaluate(f"{pill}.textContent"), "progress shows a percentage")
         st = tab_state()
         check(st and st["status"] == "generating" and st["total"] == 2 and isinstance(st["percent"], int), f"tab state carries percent and total for the popup ({st and st.get('percent')}%)")
         page.evaluate("window.__log = []")
@@ -436,7 +460,7 @@ def main():
         check(e is not None and "(4 so far)" in e["text"], f"announces partial readiness after the first chunk, with the count ({e and e['text'][:60]})")
         e = wait_for_log(page, r"Descriptions ready: 5 in total", 20)
         check(e is not None, "announces completion with the count")
-        check(e is not None and "Alt+Shift+S" in e["text"], "completion message teaches the describe-now shortcut")
+        check(e is not None and has_key(e["text"], "S"), "completion message teaches the describe-now shortcut")
         gen = REQUESTS[before:]
         check(len(gen) == 2, f"two chunk requests for a 9.5-minute video (got {len(gen)})")
         if len(gen) == 2:

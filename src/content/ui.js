@@ -19,17 +19,22 @@ const CSS = `
 }
 .overlay[hidden] { display: none; }
 .overlay .kind { display: block; font-size: 0.55em; font-weight: 700; letter-spacing: .06em; color: #ffd54a; text-transform: uppercase; margin-bottom: .15em; }
+/* Just above the player's control bar, where people look for playback state, and clear of
+   the title the site draws at the top. Stays up while the controls hide; gone when done. */
 .progress {
-  position: absolute; left: 12px; top: 12px; z-index: 61; pointer-events: none;
-  min-width: 220px; max-width: 60%; padding: 8px 12px 10px; border-radius: 10px;
-  background: rgba(8, 8, 12, 0.86); color: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.35);
-  font: 600 13px/1.3 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  position: absolute; left: 12px; bottom: var(--sv-progress-bottom, 76px); z-index: 62; pointer-events: none;
+  min-width: 260px; max-width: min(70%, 460px); padding: 10px 14px 12px; border-radius: 10px;
+  background: rgba(0, 0, 0, 0.92); color: #fff; border: 2px solid #ffd54a; box-shadow: 0 2px 14px rgba(0,0,0,.5);
+  font: 700 16px/1.35 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
+.progress.at-top { bottom: auto; top: 12px; }
 .progress[hidden] { display: none; }
-.progress .line { display: flex; justify-content: space-between; gap: 12px; }
-.progress .eta { font-weight: 400; color: #d7d7d7; }
-.progress .track { height: 5px; margin-top: 7px; border-radius: 3px; background: rgba(255,255,255,.22); overflow: hidden; }
-.progress .fill { height: 100%; width: 0; background: #ffd54a; border-radius: 3px; transition: width .6s linear; }
+.progress .line { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.progress .percent { color: #ffd54a; font-variant-numeric: tabular-nums; }
+.progress .eta { display: block; margin-top: 2px; font-weight: 500; font-size: 15px; color: #f0f0f0; }
+.progress .eta:empty { display: none; }
+.progress .track { height: 8px; margin-top: 8px; border-radius: 4px; background: rgba(255,255,255,.3); overflow: hidden; }
+.progress .fill { height: 100%; width: 0; background: #ffd54a; border-radius: 4px; transition: width .6s linear; }
 dialog {
   border: none; border-radius: 14px; padding: 0; width: min(560px, 92vw); color: #111; background: #fff;
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -85,7 +90,7 @@ export class PageUI {
     this.progress.className = 'progress';
     this.progress.hidden = true;
     this.progress.setAttribute('aria-hidden', 'true'); // progress is announced through the live region
-    this.progress.innerHTML = '<div class="line"><span class="label"></span><span class="eta"></span></div><div class="track"><div class="fill"></div></div>';
+    this.progress.innerHTML = '<div class="line"><span class="label"></span><span class="percent"></span></div><span class="eta"></span><div class="track"><div class="fill"></div></div>';
     this.root.append(style, this.overlay, this.progress);
     this.hideTimer = null;
     this.button = null;
@@ -101,6 +106,7 @@ export class PageUI {
       if (getComputedStyle(player).position === 'static') player.style.position = 'relative';
       player.appendChild(this.host);
     }
+    this.placeProgress();
     this.mountButton();
   }
 
@@ -159,14 +165,31 @@ export class PageUI {
     this.overlay.hidden = true;
   }
 
+  /**
+   * Above the control bar, or at the top where the site has none there (Shorts).
+   * Checked on every mount, since one tab moves between watch pages and Shorts.
+   */
+  placeProgress() {
+    const place = this.platform.progressPlacement?.() || {};
+    this.progress.classList.toggle('at-top', Boolean(place.top));
+    if (place.bottom) this.progress.style.setProperty('--sv-progress-bottom', place.bottom);
+    else this.progress.style.removeProperty('--sv-progress-bottom');
+  }
+
   /** Visible progress for sighted and low-vision viewers; screen readers hear the announcements instead. */
   showProgress({ done, total, fraction, eta }) {
     const label = this.progress.querySelector('.label');
     const etaEl = this.progress.querySelector('.eta');
+    const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
     label.textContent = total > 1 ? t('progress_section', String(Math.min(done + 1, total)), String(total)) : t('progress_working');
+    this.progress.querySelector('.percent').textContent = `${percent}%`;
     etaEl.textContent = eta == null ? '' : eta < 60 ? t('progress_eta_soon') : t('progress_eta_minutes', String(Math.ceil(eta / 60)));
-    this.progress.querySelector('.fill').style.width = `${Math.round(Math.max(0.02, fraction) * 100)}%`;
-    this.progress.hidden = false;
+    this.progress.querySelector('.fill').style.width = `${Math.max(2, percent)}%`;
+    if (this.progress.hidden) {
+      // Generation can start before the player exists (or after the site rebuilt it): attach now.
+      this.mount();
+      this.progress.hidden = false;
+    }
   }
 
   hideProgress() {

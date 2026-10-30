@@ -93,6 +93,12 @@ export function rightControls() {
   return getPlayer()?.querySelector('.bpx-player-control-bottom-right') || null;
 }
 
+/** Where the progress box goes: just above the control bar (measured; taller in fullscreen). */
+export function progressPlacement() {
+  const h = getPlayer()?.querySelector('.bpx-player-control-wrap')?.offsetHeight || 0;
+  return h > 0 ? { bottom: `${h + 24}px` } : { bottom: '84px' };
+}
+
 /** Call fn() whenever the page moves to another address (another video or part, without reloading). */
 export function onNavigate(fn) {
   let last = location.href;
@@ -208,6 +214,7 @@ export const bilibiliPlatform = Object.freeze({
   getPageDuration,
   getMeta,
   rightControls,
+  progressPlacement,
   onNavigate,
   loadPageInfo,
   watchCaptionRequests,

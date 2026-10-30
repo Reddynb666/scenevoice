@@ -235,6 +235,17 @@ export async function loadPageInfo(videoId) {
   return { category: page.category, captionUrls: url ? [url] : [] };
 }
 
+/**
+ * Where the progress box goes: just above the control bar, measured because it is
+ * taller in fullscreen. Shorts have no control bar at the bottom, only the title and
+ * channel there, so it goes at the top.
+ */
+export function progressPlacement() {
+  if (isShorts()) return { top: true };
+  const h = getPlayer()?.querySelector('.ytp-chrome-bottom')?.offsetHeight || 0;
+  return h > 0 ? { bottom: `${h + 24}px` } : {};
+}
+
 /** YouTube, as the content script sees it. */
 export const youtubePlatform = Object.freeze({
   id: 'youtube',
@@ -245,6 +256,7 @@ export const youtubePlatform = Object.freeze({
   getPageDuration,
   getMeta,
   rightControls,
+  progressPlacement,
   onNavigate,
   loadPageInfo,
   watchCaptionRequests: watchTimedTextRequests,
