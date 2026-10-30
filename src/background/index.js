@@ -23,6 +23,7 @@ import { platformOfVideoId } from '../shared/platforms.js';
 import { inputModeFor, providerFor } from '../shared/providers.js';
 import { applyCorrections, cueRef, findCueIndex, replaceCue } from '../shared/revision.js';
 import { speechOptions } from '../shared/voices.js';
+import { cleanAskHistory } from '../shared/ask.js';
 
 // Content scripts share the YouTube (or Bilibili) process and must not read the
 // API keys or the description cache. The level does not always survive a browser restart,
@@ -249,10 +250,12 @@ async function workerRequest(data) {
 async function ask(params, sender) {
   const { config, error, mode, provider } = await setupFor(sender);
   if (error) return { error };
-  if (mode !== 'frames') return workerRequest({ cmd: 'ask', config, params });
-  const frames = sanitizeFrames(params?.frames, { max: Math.min(4, frameLimit(config)) });
+  const history = cleanAskHistory(params?.history);
+  if (mode !== 'frames') return workerRequest({ cmd: 'ask', config, params: { ...params, history } });
+  // Pictures of the last 20 seconds, as many as one request takes (Gemini gets a 24-second clip).
+  const frames = sanitizeFrames(params?.frames, { max: frameLimit(config) });
   if (!frames.length) return { error: 'frames-missing' };
-  return workerRequest({ cmd: 'ask', mode, provider, config, params: { ...params, meta: cleanMeta(params?.meta), frames } });
+  return workerRequest({ cmd: 'ask', mode, provider, config, params: { ...params, history, meta: cleanMeta(params?.meta), frames } });
 }
 
 /**

@@ -215,6 +215,16 @@ describe('a Bilibili video page', () => {
     expect(params.frames.length).toBeGreaterThanOrEqual(1);
     expect(params.frames.every((f) => f.data === '/9j/AAAA' && Math.abs(f.time - 60) <= 8)).toBe(true);
     await vi.waitFor(() => expect(said().some((s) => s.startsWith('At 1:00: A plate of diced chicken.'))).toBe(true));
+    // Pictures of the last 20 seconds, as many as a request takes.
+    expect(params.frames.length).toBeLessThanOrEqual(6);
+
+    // A second question carries the first, so a follow-up is understood.
+    command('describe-now');
+    await vi.waitFor(() => expect(sent(MSG.ASK)).toHaveLength(2));
+    const history = sent(MSG.ASK)[1].params.history;
+    expect(history).toHaveLength(1);
+    expect(history[0].answer).toMatch(/^At 1:00: A plate of diced chicken\./);
+    expect(typeof history[0].question).toBe('string');
   });
 
   it('turns off with the shortcut, and stops sending pictures', async () => {

@@ -4,6 +4,7 @@
 import { ANSWER_AT, LANGUAGE_NAMES_EN } from './constants.js';
 import { ApiError } from './errors.js';
 import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
+import { askHistoryText } from './ask.js';
 
 /** @see ApiError; Gemini's own name, kept for the code and tests that use it. */
 export class GeminiError extends ApiError {}
@@ -246,7 +247,7 @@ export function askClip(time, duration) {
   return { start, end: Math.max(end, start + 2) };
 }
 
-export function buildAskRequest({ videoId, meta, time, duration, question, nearbyText, lang, model }) {
+export function buildAskRequest({ videoId, meta, time, duration, question, nearbyText, history, lang, model }) {
   const { start, end } = askClip(time, duration);
   return {
     systemInstruction: {
@@ -278,6 +279,7 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
               `Video title: ${clip(meta?.title, 200) || 'unknown'}`,
               `The viewer paused at ${formatTime(time)} (${Math.round(time)} seconds). The clip covers ${formatTime(start)} to ${formatTime(end)} (${start}s to ${end}s) of the full video.`,
               nearbyText ? `Recent audio descriptions (may be wrong): ${clip(nearbyText, 800)}` : '',
+              askHistoryText(history),
               `Question: ${clip(question, 500)}`,
             ]
               .filter(Boolean)

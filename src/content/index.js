@@ -23,6 +23,7 @@ import { dropTextHeardInCaptions } from '../shared/onscreen.js';
 import { resolveVideoType, typeAdjustments } from '../shared/videotype.js';
 import { inputModeFor, providerFor } from '../shared/providers.js';
 import { progressMilestone } from '../shared/progress.js';
+import { ASK_HISTORY_MAX } from '../shared/ask.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { FrameSampler, canvasLooksBlank, captureFrame } from './frames.js';
@@ -58,6 +59,8 @@ function main() {
   let following = false;
   /** Video id for which generate() is still waiting on the player. */
   let startingFor = null;
+  /** The latest questions about the current video and their answers, sent with the next question. */
+  let askHistory = { videoId: null, items: [] };
   /** The video for which "AI-generated audio description follows" has been said in this tab. */
   let aiNoticeFor = null;
   /** Solid black pictures in a row while describing from frames (a protected video draws black). */
@@ -1176,10 +1179,10 @@ function main() {
     const video = getVideo();
     if (!video) return { text: errorText('no-video'), time: null };
     if (isAdShowing()) return { text: t('status_ad_playing'), time: null };
-    // A model that is sent pictures gets those of the last few seconds.
+    // A model that is sent pictures gets those of the last 20 seconds (Gemini gets a clip of them).
     let frames;
     if (framesMode()) {
-      const shot = momentFrames(video.currentTime, { before: 8, after: 0 });
+      const shot = momentFrames(video.currentTime, { before: 20, after: 0, max: FRAME_SAMPLING.maxFrames });
       if (shot.error) return { text: errorText(shot.error), time: null };
       frames = shot.frames;
     }
@@ -1190,6 +1193,8 @@ function main() {
       duration: video.duration,
       question,
       nearbyText: nearbyText(video.currentTime),
+      // Earlier questions about this video, so that a follow-up question is understood.
+      history: askHistory.videoId === videoId ? askHistory.items : [],
       lang,
       ...(frames ? { frames } : {}),
     });
@@ -1198,6 +1203,8 @@ function main() {
       return { text: errorText('extension-reloaded'), time: null };
     }
     if (!res || res.error || !res.text) return { text: errorText(res?.error || 'unknown'), time: null };
+    if (askHistory.videoId !== videoId) askHistory = { videoId, items: [] };
+    askHistory.items = [...askHistory.items, { question, answer: res.text }].slice(-ASK_HISTORY_MAX);
     return { text: res.text, time: Number.isFinite(res.time) ? res.time : null };
   }
 

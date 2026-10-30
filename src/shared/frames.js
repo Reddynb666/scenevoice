@@ -8,6 +8,7 @@
 import { languageName, scriptInstructions } from './gemini.js';
 import { pickEvenly } from './coverage.js';
 import { formatTime } from './script.js';
+import { askHistoryText } from './ask.js';
 
 /** Longest base64 JPEG accepted from the page (a 640-pixel frame is around 60 000). */
 export const MAX_FRAME_CHARS = 1500000;
@@ -107,7 +108,7 @@ export function framesScriptPrompt({ meta, window, duration, characters = [], re
 }
 
 /** Answer a question about the moment the viewer is at, from the frames up to it. */
-export function framesAskPrompt({ meta, time, duration, question, nearbyText, lang, frames }) {
+export function framesAskPrompt({ meta, time, duration, question, nearbyText, history, lang, frames }) {
   return {
     kind: 'ask',
     system: [
@@ -128,6 +129,7 @@ export function framesAskPrompt({ meta, time, duration, question, nearbyText, la
       Number.isFinite(duration) && duration > 0 ? `Full video length: ${formatTime(duration)} (${Math.round(duration)} seconds).` : '',
       `The viewer asked at ${formatTime(time)} (${Math.round(time)} seconds).`,
       nearbyText ? `Recent audio descriptions (may be wrong): ${shorten(nearbyText, 800)}` : '',
+      askHistoryText(history),
       `Question: ${shorten(question, 500)}`,
     ]
       .filter(Boolean)
