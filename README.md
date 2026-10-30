@@ -205,10 +205,17 @@ Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUT
 
 ## Roadmap
 
-- Character memory you can edit ("call the woman in the red coat Maya"), kept per channel.
-- Per-video-type defaults (tutorials more detailed, music videos brief).
-- Sharing corrected descriptions so a video is described once for everyone.
-- Other platforms where the video can be reached by URL.
+Done since 1.0.0: defaults by video type (tutorials more detailed, music videos brief), and an experimental Bilibili and Qwen edition for mainland China.
+
+Next, in order:
+
+1. Tests with blind and low-vision users (NVDA, JAWS, VoiceOver; English and Chinese), then the Chrome Web Store and Microsoft Edge Add-ons, with a Gitee mirror for mainland China.
+2. No key needed to start: donated model credits through a partner organisation, with a fair monthly allowance per person.
+3. For creators: export the descriptions as text or an audio track to upload as a YouTube *descriptive* track.
+4. More expressive Chinese voices (for example CosyVoice) as an option, and a large-print, high-contrast mode for the text shown on the video.
+5. Character memory you can edit ("call the woman in the red coat Maya"), kept per channel.
+6. Sharing corrected descriptions so a video is described once for everyone (after a copyright check).
+7. Phones: an Android app or work with phone makers' screen readers, where most blind people in China watch video.
 
 ## Acknowledgements
 
