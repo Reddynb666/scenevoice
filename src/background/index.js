@@ -11,7 +11,8 @@
 import { MSG } from '../shared/constants.js';
 import { authorizeBackgroundMessage } from '../shared/sender.js';
 import { getLocal, protectLocalStorage, setLocal } from '../shared/storage.js';
-import { cacheInfo, clearCache, deleteScript, getScript, putScript } from '../shared/cache.js';
+import { addFeedback, cacheInfo, clearCache, deleteScript, getFeedback, getScript, putScript } from '../shared/cache.js';
+import { applyCorrections, cueRef, findCueIndex, replaceCue } from '../shared/revision.js';
 import { speechOptions } from '../shared/voices.js';
 
 // Content scripts share the YouTube process and must not read the API key or
@@ -106,13 +107,14 @@ async function offscreen(data) {
 /** Close the offscreen document once nothing has run in it for a while. */
 const IDLE_CLOSE_MS = 60000;
 let idleTimer = null;
-let busyAsks = 0;
+/** Questions and descriptions being made again: requests in the worker that are not jobs. */
+let busyRequests = 0;
 
 function scheduleIdleClose() {
   clearTimeout(idleTimer);
   idleTimer = setTimeout(async () => {
     try {
-      if (busyAsks || !(await chrome.offscreen.hasDocument())) return;
+      if (busyRequests || !(await chrome.offscreen.hasDocument())) return;
       const reply = await chrome.runtime.sendMessage({ type: MSG.OFFSCREEN, data: { cmd: 'status' } }).catch(() => null);
       if (reply?.jobs?.length === 0) await chrome.offscreen.closeDocument();
     } catch {
@@ -129,6 +131,31 @@ async function geminiConfig() {
 }
 
 const jobKey = (videoId, lang) => `${videoId}:${lang}`;
+
+/**
+ * Run changes to one video's saved script one after the other. A job saves its
+ * own copy after every section while a correction reads, changes and writes
+ * the saved one: interleaved, either could undo the other.
+ */
+const scriptQueues = new Map();
+function inTurn(key, fn) {
+  const run = (scriptQueues.get(key) || Promise.resolve()).then(fn);
+  const tail = run.catch(() => {});
+  scriptQueues.set(key, tail);
+  tail.then(() => {
+    if (scriptQueues.get(key) === tail) scriptQueues.delete(key);
+  });
+  return run;
+}
+
+/** Save a script from a job, with the corrections the user has made to it since the job began. */
+function saveJobScript(videoId, lang, script) {
+  return inTurn(jobKey(videoId, lang), async () => {
+    const saved = applyCorrections(script, await getFeedback(videoId, lang));
+    await putScript(videoId, lang, saved);
+    return saved;
+  });
+}
 
 /**
  * Tell every YouTube tab (and its frames) about a generation event. Without the
@@ -163,24 +190,73 @@ async function stopGeneration({ videoId, lang }) {
   return offscreen({ cmd: 'abort', key: jobKey(videoId, lang) });
 }
 
+/** A request to the worker that is not a job (a question, a description made again). */
+async function workerRequest(data) {
+  busyRequests += 1;
+  try {
+    return (await offscreen(data)) || { error: 'offscreen-unavailable' };
+  } finally {
+    busyRequests -= 1;
+    scheduleIdleClose();
+  }
+}
+
 async function ask(params) {
   const { config, error } = await geminiConfig();
   if (error) return { error };
-  busyAsks += 1;
-  try {
-    const reply = await offscreen({ cmd: 'ask', config, params });
-    return reply || { error: 'offscreen-unavailable' };
-  } finally {
-    busyAsks -= 1;
-    scheduleIdleClose();
+  return workerRequest({ cmd: 'ask', config, params });
+}
+
+/**
+ * The user marked a description as wrong: describe that moment again and put
+ * the new description in its place in the saved script. Which description was
+ * marked, and what replaced it, is kept on this computer only (see cache.js),
+ * and applied again to sections a running job saves later.
+ * Resolves to { status: 'revised', cue } | { status: 'removed' } | { error }.
+ */
+async function revise({ videoId, lang, cue, meta, duration }) {
+  if (typeof videoId !== 'string' || typeof lang !== 'string' || !cue || typeof cue !== 'object') return { error: 'unknown' };
+  const { config, error } = await geminiConfig();
+  if (error) return { error };
+  const script = await getScript(videoId, lang);
+  if (!script) return { error: 'no-script' };
+  const i = findCueIndex(script.cues, cueRef(cue));
+  if (i < 0) return { error: 'cue-not-found' };
+  const old = script.cues[i];
+  const mark = { at: Date.now(), ...cueRef(old) };
+  const reply = await workerRequest({
+    cmd: 'revise',
+    config,
+    params: {
+      videoId,
+      lang,
+      meta: meta || {},
+      duration: Number.isFinite(duration) && duration > 0 ? duration : script.duration,
+      cue: old,
+      characters: script.characters || [],
+    },
+  });
+  if (reply.error) {
+    await inTurn(jobKey(videoId, lang), () => addFeedback(videoId, lang, { ...mark, status: 'failed', error: reply.error })).catch(() => {});
+    return { error: reply.error, detail: reply.detail };
   }
+  const replacement = reply.cue || null;
+  const status = replacement ? 'revised' : 'removed';
+  await inTurn(jobKey(videoId, lang), async () => {
+    await addFeedback(videoId, lang, { ...mark, status, replacement });
+    const current = await getScript(videoId, lang);
+    if (current) await putScript(videoId, lang, replaceCue(current, mark, replacement));
+  });
+  await broadcast({ type: MSG.GEN_EVENT, event: 'revised', videoId, lang });
+  return replacement ? { status, cue: replacement } : { status };
 }
 
 /** Events from the worker: save finished sections, then tell the tabs. */
 async function onJobEvent(ev) {
   const { event, videoId, lang } = ev;
+  let saved = ev.script;
   if (event === 'chunk' || event === 'done') {
-    await putScript(videoId, lang, ev.script);
+    saved = await saveJobScript(videoId, lang, ev.script);
   }
   if (event === 'model') {
     console.info(`[SceneVoice] switched to ${ev.model} (${ev.reason})`);
@@ -188,7 +264,7 @@ async function onJobEvent(ev) {
     if (ev.reason === 'model-not-found') await setLocal({ model: ev.model }).catch(() => {});
   }
   const { type, script, ...rest } = ev;
-  await broadcast({ ...rest, type: MSG.GEN_EVENT, cueCount: script?.cues?.length ?? null, completedUntil: script?.completedUntil ?? null });
+  await broadcast({ ...rest, type: MSG.GEN_EVENT, cueCount: saved?.cues?.length ?? null, completedUntil: saved?.completedUntil ?? null });
   if (['done', 'error', 'stopped'].includes(event)) scheduleIdleClose();
 }
 
@@ -221,6 +297,8 @@ async function handle(msg, sender) {
       return generationStatus(msg);
     case MSG.ASK:
       return ask(msg.params);
+    case MSG.REVISE:
+      return revise(msg);
     case MSG.JOB_EVENT:
       await onJobEvent(msg);
       return { ok: true };

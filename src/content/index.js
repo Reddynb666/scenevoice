@@ -13,7 +13,7 @@ import { dropTextHeardInCaptions } from '../shared/onscreen.js';
 import { pageVideoType, resolveVideoType, typeAdjustments } from '../shared/videotype.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
-import { askAboutMoment, startGeneration, stopGeneration } from './generator.js';
+import { askAboutMoment, reviseDescription, startGeneration, stopGeneration } from './generator.js';
 import {
   fetchWatchPage,
   getMeta,
@@ -66,7 +66,10 @@ function main() {
   let typeAnnouncedFor = '';
   /** How to undo an adjustment is said once per tab, with the first one. */
   let typeUndoHintGiven = false;
+  /** {text, kind, cue}: cue is the saved description it came from, null for an answer to a question. */
   let lastSpoken = null;
+  /** Video id while a description marked as wrong is being made again. */
+  let revisingFor = null;
   /** The cue being spoken during playback ({kind, priority}), or null. */
   let speakingCue = null;
   let speechToken = 0;
@@ -341,7 +344,8 @@ function main() {
    * trimmed to the real dialogue.
    */
   function scheduleCues() {
-    let cues = script?.cues || [];
+    // Playback may move a cue; `source` is the saved one, which "Description is wrong" points at.
+    let cues = (script?.cues || []).map((c) => ({ ...c, source: c }));
     if (dialogue) {
       const { cues: kept, dropped } = dropTextHeardInCaptions(cues, captionLines);
       if (dropped.length) console.info(`[SceneVoice] ${dropped.length} on-screen texts left out: already in the captions`, dropped.map((c) => `${formatTime(c.start)} ${c.onScreenText || c.standard}`));
@@ -578,9 +582,24 @@ function main() {
       case 'model':
         console.info(`[SceneVoice] now using ${ev.model} (${ev.reason})`);
         break;
+      case 'revised':
+        // A description marked as wrong was replaced (here or in another tab).
+        await reloadScript();
+        break;
       default:
         break;
     }
+  }
+
+  /** Load the saved script again, keeping the generation status. */
+  async function reloadScript() {
+    const id = videoId;
+    const l = lang;
+    const sc = await fetchScript(id, l);
+    if (dead || !sc || id !== videoId || l !== lang) return;
+    const generating = status === 'generating';
+    setScript(sc);
+    if (generating) status = 'generating';
   }
 
   /** Spoken when the user asks while generation is running: percent, section and time left. */
@@ -655,7 +674,7 @@ function main() {
       return;
     }
     console.info(`[SceneVoice] ${formatTime(cue.start)} ${cue.kind}${u.needsPause ? ' (pause)' : ''}: ${u.text}`);
-    lastSpoken = { text: u.text, kind: cue.kind };
+    lastSpoken = { text: u.text, kind: cue.kind, cue: cue.source || cue };
     speakText(u.text, { pause: u.needsPause, kind: cue.kind, urgent: manual, cue: manual ? null : cue });
   }
 
@@ -740,10 +759,14 @@ function main() {
       .join(' ');
   }
 
+  /**
+   * Ask Gemini about the current moment. Resolves to { text, time }: the answer,
+   * led by the moment it is about, and that moment in seconds (null for an error message).
+   */
   async function askAI(question) {
     const video = getVideo();
-    if (!video) return errorMessage('no-video');
-    if (isAdShowing()) return t('status_ad_playing');
+    if (!video) return { text: errorMessage('no-video'), time: null };
+    if (isAdShowing()) return { text: t('status_ad_playing'), time: null };
     const res = await askAboutMoment(send, {
       videoId,
       meta: getMeta(),
@@ -755,10 +778,10 @@ function main() {
     });
     if (res?.error === 'extension-reloaded') {
       die();
-      return errorMessage('extension-reloaded');
+      return { text: errorMessage('extension-reloaded'), time: null };
     }
-    if (!res || res.error) return errorMessage(res?.error || 'unknown');
-    return res.text;
+    if (!res || res.error || !res.text) return { text: errorMessage(res?.error || 'unknown'), time: null };
+    return { text: res.text, time: Number.isFinite(res.time) ? res.time : null };
   }
 
   async function describeNow() {
@@ -780,10 +803,10 @@ function main() {
     }
     const id = videoId;
     feedback(t('status_looking'));
-    const answer = await askAI(t('ask_default_question'));
+    const { text } = await askAI(t('ask_default_question'));
     if (id !== videoId) return;
-    lastSpoken = { text: answer, kind: 'visual' };
-    speakText(answer, { urgent: true });
+    lastSpoken = { text, kind: 'visual', cue: null };
+    speakText(text, { urgent: true });
   }
 
   function repeatLast() {
@@ -808,14 +831,88 @@ function main() {
       onSubmit: async (q) => {
         const answer = await askAI(q);
         // Screen reader users hear the answer from the dialog itself (a live region inside it).
-        if (settings.output === 'tts') announcer.say(answer);
+        if (settings.output === 'tts') announcer.say(answer.text);
         return answer;
       },
-      onClose: () => {
+      onClose: ({ jumpTo } = {}) => {
         announcer.stop();
+        // "Go to 2:15" under the answer: play on from the moment it is about.
+        if (Number.isFinite(jumpTo) && getVideo() === video) {
+          video.currentTime = jumpTo;
+          feedback(t('ask_jumped', formatTime(jumpTo)));
+        }
         if (settings.pauseOnAsk && wasPlaying && video.paused) video.play().catch(() => {});
       },
     });
+  }
+
+  // ---------- descriptions marked as wrong ----------
+
+  /**
+   * The description "Description is wrong" is about: the last one spoken, or
+   * else the one for the moment on screen. Answers to questions are not saved,
+   * so there is nothing to correct for them.
+   */
+  function reportTarget() {
+    if (lastSpoken) return lastSpoken.cue;
+    const video = getVideo();
+    if (!script || !video || isAdShowing()) return null;
+    const cue = cueAt(script.cues, video.currentTime);
+    return cue && video.currentTime - cue.start < 20 ? cue : null;
+  }
+
+  /**
+   * Mark a description as wrong and describe that moment again, without
+   * creating the rest again. Every step is said: marked (and which one), then
+   * updated with the new words, removed, or what went wrong. The mark is kept
+   * on this computer only.
+   */
+  async function reportWrong() {
+    if (!videoId) return undefined;
+    if (revisingFor === videoId) {
+      feedback(t('report_busy'));
+      return undefined;
+    }
+    const cue = reportTarget();
+    if (!cue) {
+      feedback(t('report_nothing'));
+      return undefined;
+    }
+    const id = videoId;
+    const l = lang;
+    const at = formatTime(cue.start);
+    stopSpeaking();
+    feedback(t('report_marked', at, cue.brief || cue.standard));
+    revisingFor = id;
+    let res;
+    try {
+      res = await reviseDescription(send, {
+        videoId: id,
+        lang: l,
+        cue: { start: cue.start, kind: cue.kind, standard: cue.standard },
+        meta: getMeta(),
+        duration: getVideo()?.duration,
+      });
+    } finally {
+      if (revisingFor === id) revisingFor = null;
+    }
+    if (res?.error === 'extension-reloaded') return die();
+    if (dead || id !== videoId || l !== lang) return undefined;
+    if (!res || res.error) {
+      feedback(t('report_failed', errorMessage(res?.error || 'unknown')));
+      if (res?.error === 'no-key' || res?.error === 'bad-key') send({ type: MSG.OPEN_OPTIONS });
+      return undefined;
+    }
+    await reloadScript();
+    if (res.status === 'removed' || !res.cue) {
+      lastSpoken = null;
+      feedback(t('report_removed', at));
+      return undefined;
+    }
+    const text = res.cue[setting('detail')] || res.cue.standard;
+    lastSpoken = { text, kind: res.cue.kind, cue: res.cue };
+    feedback(t('report_updated', at, text));
+    return undefined;
   }
 
   /**
@@ -877,6 +974,8 @@ function main() {
         return repeatLast();
       case 'ask-question':
         return openAsk();
+      case 'report-wrong':
+        return reportWrong();
       case 'cycle-detail':
         return cycle('detail', DETAILS, 'announce_detail_');
       case 'cycle-mode':

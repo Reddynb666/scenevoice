@@ -3,6 +3,7 @@
 // Everything visual lives in a shadow root so YouTube's CSS cannot reach it.
 
 import { t } from '../shared/i18n.js';
+import { formatTime } from '../shared/script.js';
 import { containerForOverlays, getPlayer, rightControls } from './youtube.js';
 
 const CSS = `
@@ -168,7 +169,11 @@ export class PageUI {
     this.progress.hidden = true;
   }
 
-  /** Open the ask dialog. onSubmit(question) resolves to the answer text. */
+  /**
+   * Open the ask dialog. onSubmit(question) resolves to { text, time }: the
+   * answer and the moment it is about, offered as "Go to 2:15" (time null: no
+   * button). onClose({ jumpTo }) gets that moment when the user chose to go there.
+   */
   openAsk({ onSubmit, onClose }) {
     if (this.dialog?.open) {
       this.dialog.querySelector('textarea').focus();
@@ -185,6 +190,7 @@ export class PageUI {
         <textarea id="sv-ask-input" aria-describedby="sv-ask-hint" autocomplete="off"></textarea>
         <p class="answer" id="sv-ask-answer" role="status" aria-live="polite" aria-atomic="true"></p>
         <div class="row">
+          <button type="button" class="secondary" data-act="jump" hidden></button>
           <button type="button" class="secondary" data-act="close"></button>
           <button type="submit" data-act="ask"></button>
         </div>
@@ -197,9 +203,18 @@ export class PageUI {
     const input = dialog.querySelector('textarea');
     const answer = dialog.querySelector('.answer');
     const submit = dialog.querySelector('[data-act=ask]');
-    const setAnswer = (text) => {
+    // First in the row: one Tab from the question field reaches it.
+    const jump = dialog.querySelector('[data-act=jump]');
+    /** The moment of the answer shown, and the one the user chose to go to. */
+    let answerTime = null;
+    let jumpTo = null;
+    const setAnswer = (result) => {
+      const { text = '', time = null } = typeof result === 'string' ? { text: result } : result || {};
       answer.classList.toggle('filled', Boolean(text));
       answer.textContent = text;
+      answerTime = Number.isFinite(time) ? time : null;
+      jump.hidden = answerTime == null;
+      jump.textContent = answerTime == null ? '' : t('ask_jump', formatTime(answerTime));
     };
 
     // Keep YouTube's single-key shortcuts (k, j, l, f, m…) from firing while typing.
@@ -213,6 +228,10 @@ export class PageUI {
       });
     }
     dialog.querySelector('[data-act=close]').addEventListener('click', () => dialog.close());
+    jump.addEventListener('click', () => {
+      jumpTo = answerTime;
+      dialog.close();
+    });
     dialog.querySelector('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const q = input.value.trim();
@@ -230,7 +249,7 @@ export class PageUI {
       dialog.remove();
       this.dialog = null;
       if (previousFocus && document.contains(previousFocus)) previousFocus.focus?.();
-      onClose?.();
+      onClose?.({ jumpTo });
     });
 
     // A modal dialog renders in the top layer, so it shows above a fullscreen player wherever it sits.

@@ -8,7 +8,17 @@
 
 import { CHUNK_SECONDS, SCRIPT_VERSION } from './constants.js';
 import { mergeScript, normalizeChunk, planChunks } from './script.js';
-import { GeminiError, buildAskRequest, buildScriptRequest, chooseModel, parseScriptResponse, responseText } from './gemini.js';
+import { correctedCue } from './revision.js';
+import {
+  GeminiError,
+  buildAskRequest,
+  buildRevisionRequest,
+  buildScriptRequest,
+  chooseModel,
+  parseAskResponse,
+  parseScriptResponse,
+  revisionClip,
+} from './gemini.js';
 
 /** Make sure the client has a model; pick one from the key's list when it has none. */
 export async function ensureModel(client) {
@@ -36,7 +46,7 @@ async function generateChunk(client, req, chunk, signal, depth = 0) {
   try {
     const body = await client.generate(buildScriptRequest({ ...req, chunk, model: client.model }), signal);
     const raw = parseScriptResponse(body);
-    return normalizeChunk(raw, { duration: req.duration, chunkStart: chunk.start, chunkEnd: chunk.end });
+    return normalizeChunk(raw, { duration: req.duration, chunkStart: chunk.start, chunkEnd: chunk.end, lang: req.lang });
   } catch (err) {
     // Output cut off or malformed: split the section in two and try again.
     if (err instanceof GeminiError && ['truncated', 'bad-json', 'too-long'].includes(err.code) && depth < 2 && chunk.end - chunk.start > 90) {
@@ -110,9 +120,27 @@ export async function runGeneration({ client, videoId, duration, meta, lang, scr
   return current;
 }
 
-/** Ask the model about one moment. Resolves to the answer text. */
+/**
+ * Ask the model about one moment. Resolves to { text, time, confidence }: the
+ * answer, led by the moment it is about, and that moment in seconds.
+ */
 export async function runAsk(client, params, signal) {
   await ensureModel(client);
   const body = await client.generate(buildAskRequest({ ...params, model: client.model }), signal, { retries: 1 });
-  return responseText(body).text.trim();
+  return parseAskResponse(body, params);
+}
+
+/**
+ * Describe again the moment of a description the user marked as wrong.
+ * Resolves to the corrected cue (at the old cue's time), or null when, looking
+ * again, there is nothing there worth describing.
+ * @param {object} params  { videoId, meta, duration, lang, cue, characters }
+ */
+export async function runRevision(client, params, signal) {
+  await ensureModel(client);
+  const { cue, duration, lang } = params;
+  const body = await client.generate(buildRevisionRequest({ ...params, model: client.model }), signal, { retries: 2 });
+  const span = revisionClip(cue.start, duration);
+  const { cues } = normalizeChunk(parseScriptResponse(body), { duration, chunkStart: span.start, chunkEnd: span.end, lang });
+  return correctedCue(cue, cues, lang);
 }

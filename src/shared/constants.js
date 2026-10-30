@@ -98,6 +98,57 @@ export const VOICE_SAMPLES = Object.freeze({
   hi: 'लाल कोट पहने एक महिला बर्फ़ से ढकी सड़क पार करती है।',
 });
 
+/**
+ * Said before a description or answer Gemini marked as uncertain, when its own
+ * words do not already say so (see HEDGE_WORDS). In the description language.
+ */
+export const UNCERTAIN_LEAD = Object.freeze({
+  en: 'Not certain. ',
+  'zh-CN': '不太确定。',
+  'zh-TW': '不太確定。',
+  es: 'No está claro. ',
+  fr: "Ce n'est pas sûr. ",
+  de: 'Nicht sicher. ',
+  pt: 'Não está claro. ',
+  ja: 'はっきりしません。',
+  ko: '확실하지 않습니다. ',
+  ru: 'Возможно, неточно. ',
+  ar: 'غير مؤكد. ',
+  hi: 'निश्चित नहीं। ',
+});
+
+/** Words that already say a description is not certain, per description language, in lower case. */
+export const HEDGE_WORDS = Object.freeze({
+  en: ['appears to', 'appear to', 'seems', 'seem to', 'looks like', 'possibly', 'perhaps', 'maybe', 'probably', 'likely', 'might', 'may be', 'unclear', 'not clear', 'hard to', 'difficult to', 'cannot see', "can't see", 'cannot tell', "can't tell", 'not certain', 'uncertain', 'blurry', 'indistinct'],
+  'zh-CN': ['可能', '似乎', '好像', '看起来', '看上去', '看不清', '不清楚', '不太清', '难以辨认', '也许', '大概', '或许', '疑似', '像是', '不确定', '不太确定'],
+  'zh-TW': ['可能', '似乎', '好像', '看起來', '看上去', '看不清', '不清楚', '不太清', '難以辨認', '也許', '大概', '或許', '疑似', '像是', '不確定', '不太確定'],
+  es: ['parece', 'posiblemente', 'quizá', 'tal vez', 'probablemente', 'no se ve', 'no está claro', 'no es seguro'],
+  fr: ['semble', 'peut-être', 'probablement', 'on dirait', 'difficile', 'pas sûr', 'pas certain', 'flou'],
+  de: ['scheint', 'möglicherweise', 'vielleicht', 'wahrscheinlich', 'undeutlich', 'unklar', 'nicht sicher'],
+  pt: ['parece', 'possivelmente', 'talvez', 'provavelmente', 'não está claro', 'não é possível ver'],
+  ja: ['おそらく', 'らしい', 'ようだ', 'ようです', 'ような', 'かもしれ', 'はっきりし', '見えにく', 'と思われ'],
+  ko: ['아마', '것 같', '보이는', '불분명', '확실하지', '잘 보이지'],
+  ru: ['возможно', 'похоже', 'кажется', 'вероятно', 'неясно', 'неточно', 'видимо', 'плохо видно'],
+  ar: ['ربما', 'يبدو', 'غير واضح', 'غير مؤكد'],
+  hi: ['शायद', 'लगता', 'संभवतः', 'स्पष्ट नहीं', 'निश्चित नहीं'],
+});
+
+/** How an answer to a question names the moment it is about ($1 is m:ss), in the description language. */
+export const ANSWER_AT = Object.freeze({
+  en: 'At $1: ',
+  'zh-CN': '在 $1 处：',
+  'zh-TW': '在 $1 處：',
+  es: 'En el minuto $1: ',
+  fr: 'À $1 : ',
+  de: 'Bei $1: ',
+  pt: 'No minuto $1: ',
+  ja: '$1 の時点：',
+  ko: '$1 지점: ',
+  ru: 'На $1: ',
+  ar: 'عند $1: ',
+  hi: '$1 पर: ',
+});
+
 /** Secrets and per-device data, stored in chrome.storage.local only. */
 export const DEFAULT_LOCAL = Object.freeze({
   apiKey: '',
@@ -141,6 +192,9 @@ export const CHUNK_SECONDS = 300;
 /** Maximum scripts kept in the local cache before the oldest are evicted. */
 export const CACHE_LIMIT = 300;
 
+/** Descriptions marked as wrong that are remembered per video and language (the newest are kept). */
+export const FEEDBACK_LIMIT = 50;
+
 export const MSG = Object.freeze({
   // content/popup/options -> background
   GET_STATUS: 'sv:get-status',
@@ -158,6 +212,8 @@ export const MSG = Object.freeze({
   GEN_STOP: 'sv:gen-stop',
   GEN_STATUS: 'sv:gen-status',
   ASK: 'sv:ask',
+  /** A description the user marked as wrong: describe that moment again and replace it in the cache. */
+  REVISE: 'sv:revise',
   // background -> content
   COMMAND: 'sv:command',
   TTS_EVENT: 'sv:tts-event',
@@ -175,6 +231,7 @@ export const COMMANDS = Object.freeze([
   'describe-now',
   'repeat-last',
   'ask-question',
+  'report-wrong',
   'cycle-detail',
   'cycle-mode',
   'cycle-density',

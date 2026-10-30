@@ -28,7 +28,17 @@ export function generationStatus(send, { videoId, lang }) {
   return send({ type: MSG.GEN_STATUS, videoId, lang });
 }
 
-/** Ask the model about one moment. Resolves to { text } or { error, detail }. */
+/** Ask the model about one moment. Resolves to { text, time, confidence } or { error, detail }. */
 export function askAboutMoment(send, params) {
   return send({ type: MSG.ASK, params });
+}
+
+/**
+ * A description the user marked as wrong: describe that moment again. The
+ * service worker replaces it in the saved script. Resolves to
+ * { status: 'revised', cue } | { status: 'removed' } | { error, detail }.
+ * @param {object} params  { videoId, lang, cue: { start, kind, standard }, meta, duration }
+ */
+export function reviseDescription(send, params) {
+  return send({ type: MSG.REVISE, ...params });
 }

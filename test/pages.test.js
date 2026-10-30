@@ -220,6 +220,46 @@ describe('popup quick settings', () => {
   });
 });
 
+describe('popup: description is wrong', () => {
+  const tab = (cueCount) => (msg) =>
+    msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'abcdefghijk', title: 'Diner', status: 'ready', cueCount, firstCue: 1, lang: 'en', videoType: '' } : { ok: true };
+
+  it('offers it once there are descriptions, with a hint that says what it does and where the mark stays', async () => {
+    await openPage('popup', { tabReply: tab(4) });
+    await vi.waitFor(() => expect($('#report').hidden).toBe(false));
+    expect($('#report').textContent).toBe('Last description is wrong');
+    expect($('#report').getAttribute('aria-describedby')).toBe('reportHint');
+    expect($('#reportHint').hidden).toBe(false);
+    expect($('#reportHint').textContent).toMatch(/describes only that moment again\. The mark stays on this computer\./);
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('is not offered when there are no descriptions', async () => {
+    await openPage('popup', { tabReply: tab(0) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/nothing visual that needs describing/));
+    expect($('#report').hidden).toBe(true);
+    expect($('#reportHint').hidden).toBe(true);
+  });
+
+  it('asks the tab, then closes so the screen reader hears the page', async () => {
+    const asked = [];
+    await openPage('popup', { tabReply: (msg) => (asked.push(msg), tab(4)(msg)) });
+    await vi.waitFor(() => expect($('#report').hidden).toBe(false));
+    window.close = vi.fn();
+    $('#report').click();
+    await vi.waitFor(() => expect(asked).toContainEqual({ type: MSG.TAB_ACTION, action: 'report-wrong' }));
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it('is in Chinese for a Chinese interface', async () => {
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab(4) });
+    await vi.waitFor(() => expect($('#report').hidden).toBe(false));
+    expect($('#report').textContent).toBe('上一条描述有误');
+    expect($('#reportHint').textContent).toBe('把刚听到的描述（没有的话就是当前这一刻的描述）标记为有误，只重新生成这一段。标记记录只保存在这台电脑上。');
+  });
+});
+
 describe('popup and the video type', () => {
   const tab = (videoType) => (msg) =>
     msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'abcdefghijk', title: 'Tie a bowline', status: 'ready', cueCount: 4, firstCue: 1, lang: 'en', videoType } : null;
@@ -490,6 +530,7 @@ describe('settings page', () => {
       { start: 3, gap: 2, kind: 'text', priority: 1, onScreenText: 'hello@joes.example / 555-0199', brief: 'Contact: email and phone', standard: 'Contact: email hello at joes dot example, phone 555-0199', detailed: 'x' },
       { start: 9, gap: 2, kind: 'text', priority: 1, onScreenText: 'OPEN', brief: 'Sign: OPEN', standard: 'Sign: OPEN', detailed: 'Sign: OPEN' },
       { start: 12, gap: 2, kind: 'visual', priority: 1, brief: 'She smiles.', standard: 'She smiles.', detailed: 'She smiles.' },
+      { start: 15, gap: 2, kind: 'visual', priority: 1, brief: 'A man waves.', standard: 'A man waves.', detailed: 'A man waves.', revised: true },
     ];
     jsdom.reconfigure({ url: 'https://extension.test/transcript.html?v=abcdefghijk&lang=en&title=Diner' });
     URL.createObjectURL = vi.fn(() => 'blob:transcript');
@@ -508,9 +549,21 @@ describe('settings page', () => {
       expect(cells[1].querySelector('.exact')).toBeNull();
       expect(cells[2].querySelector('.exact')).toBeNull();
       expect(cells[0].textContent).toBe('On screenContact: email hello at joes dot example, phone 555-0199Exact text: hello@joes.example / 555-0199');
+      // A description corrected after the user marked it as wrong says so.
+      expect([...cells[3].querySelectorAll('.tag')].map((tag) => tag.textContent)).toEqual(['Corrected']);
+      expect(cells[2].querySelector('.tag')).toBeNull();
     } finally {
       jsdom.reconfigure({ url: 'http://localhost:3000/' });
     }
+  });
+
+  it('says that marks of wrong descriptions stay on this computer, and what a correction sends', async () => {
+    await openPage('options');
+    const items = [...document.querySelectorAll('ul.small li')].map((li) => li.textContent);
+    expect(items).toContain('The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. There is no feedback server: nothing is sent to the developer. The record is deleted with the saved descriptions.');
+    expect(items.find((s) => s.startsWith('To create descriptions'))).toMatch(/To describe a moment again, the description you marked as wrong is sent too\./);
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    expect([...document.querySelectorAll('ul.small li')].map((li) => li.textContent)).toContain('你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。SceneVoice 没有收集反馈的服务器，什么都不会发给开发者；删除已保存的口述时，这些记录会一并删除。');
   });
 
   it('lists the new speed shortcuts, unset by default', async () => {

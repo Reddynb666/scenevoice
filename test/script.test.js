@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyConfidence,
   chooseUtterance,
   cleanText,
+  hedged,
+  isHedged,
   passesDensity,
   cueAt,
   estimateSeconds,
@@ -11,6 +14,7 @@ import {
   parseTime,
   planChunks,
 } from '../src/shared/script.js';
+import { HEDGE_WORDS, LANGUAGES, UNCERTAIN_LEAD, ANSWER_AT } from '../src/shared/constants.js';
 import { CueScheduler, pickOne } from '../src/shared/scheduler.js';
 import { resolveLanguage } from '../src/shared/storage.js';
 import { parseIsoDuration, videoIdFromUrl } from '../src/content/youtube.js';
@@ -111,6 +115,76 @@ describe('normalizeChunk', () => {
     expect(normalizeChunk({ videoType: 'other', cues: [] }).videoType).toBe('');
     expect(normalizeChunk({ videoType: 'constructor', cues: [] }).videoType).toBe('');
     expect(normalizeChunk([{ start: 1, standard: 'x' }]).videoType).toBe('');
+  });
+});
+
+describe('confidence', () => {
+  const raw = (confidence, extra = {}) => ({ cues: [{ start: 3, gap: 4, kind: 'visual', priority: 1, confidence, brief: 'A man holds a phone.', standard: 'A man holds a phone to his ear.', detailed: 'A man in a grey coat holds a phone to his ear.', ...extra }] });
+
+  it('keeps what Gemini said, and drops anything else', () => {
+    expect(normalizeChunk(raw('high')).cues[0].confidence).toBe('high');
+    expect(normalizeChunk(raw('medium')).cues[0].confidence).toBe('medium');
+    expect(normalizeChunk(raw('certain')).cues[0]).not.toHaveProperty('confidence');
+    // Scripts from before: nothing is added or changed.
+    const old = normalizeChunk(raw(undefined)).cues[0];
+    expect(old).not.toHaveProperty('confidence');
+    expect(old).toMatchObject({ priority: 1, brief: 'A man holds a phone.' });
+  });
+
+  it('makes a low-confidence description less important, and says it is not certain in every length', () => {
+    const [cue] = normalizeChunk(raw('low'), { lang: 'en' }).cues;
+    expect(cue).toMatchObject({
+      confidence: 'low',
+      priority: 2,
+      brief: 'Not certain. A man holds a phone.',
+      standard: 'Not certain. A man holds a phone to his ear.',
+      detailed: 'Not certain. A man in a grey coat holds a phone to his ear.',
+    });
+    // With "essentials only" it is no longer heard; it never goes below "atmosphere".
+    expect(passesDensity(cue, 'essential')).toBe(false);
+    expect(normalizeChunk(raw('low', { priority: 3 })).cues[0].priority).toBe(3);
+  });
+
+  it('leaves the words alone where they already say it is not clear', () => {
+    const [cue] = normalizeChunk(raw('low', { brief: 'He seems to hold a phone.', standard: 'He holds what appears to be a phone.' }), { lang: 'en' }).cues;
+    expect(cue.brief).toBe('He seems to hold a phone.');
+    expect(cue.standard).toBe('He holds what appears to be a phone.');
+    expect(cue.detailed).toBe('Not certain. A man in a grey coat holds a phone to his ear.');
+  });
+
+  it('says it in the description language', () => {
+    const zh = { brief: '一个男人拿着手机。', standard: '他手里好像拿着手机。', detailed: '画面很暗，看不清他手里拿的是什么。' };
+    const [cue] = normalizeChunk(raw('low', zh), { lang: 'zh-CN' }).cues;
+    expect(cue.brief).toBe('不太确定。一个男人拿着手机。');
+    expect(cue.standard).toBe(zh.standard);
+    expect(cue.detailed).toBe(zh.detailed);
+    expect(hedged('Un hombre sostiene un teléfono.', 'es')).toBe('No está claro. Un hombre sostiene un teléfono.');
+    expect(hedged('Un hombre parece sostener un teléfono.', 'es')).toBe('Un hombre parece sostener un teléfono.');
+  });
+
+  it('marks on-screen text that could not be read in full', () => {
+    const [cue] = normalizeChunk({ cues: [{ start: 1, kind: 'text', priority: 1, confidence: 'low', onScreenText: 'OPEN …', brief: 'Sign: OPEN …', standard: 'Sign: OPEN …, the rest is hard to read' }] }, { lang: 'en' }).cues;
+    expect(cue).toMatchObject({ kind: 'text', priority: 2, onScreenText: 'OPEN …', brief: 'Not certain. Sign: OPEN …', standard: 'Sign: OPEN …, the rest is hard to read' });
+    // Text gets one step more: still read with "essentials only".
+    expect(passesDensity(cue, 'essential')).toBe(true);
+  });
+
+  it('applies once: a description already said to be uncertain is not changed again', () => {
+    const once = applyConfidence({ priority: 1, confidence: 'low', brief: 'A dog.', standard: 'A dog runs.', detailed: 'A dog runs.' }, 'en');
+    expect(once.brief).toBe('Not certain. A dog.');
+    expect(hedged(once.brief, 'en')).toBe(once.brief);
+    expect(applyConfidence({ priority: 1, confidence: 'high', brief: 'A dog.' }, 'en')).toEqual({ priority: 1, confidence: 'high', brief: 'A dog.' });
+  });
+
+  it('has words for every description language', () => {
+    for (const { code } of LANGUAGES) {
+      expect(UNCERTAIN_LEAD[code], code).toBeTruthy();
+      expect(ANSWER_AT[code], code).toContain('$1');
+      expect(HEDGE_WORDS[code]?.length, code).toBeGreaterThan(2);
+      // The lead counts as saying so, so it is never added twice.
+      expect(isHedged(UNCERTAIN_LEAD[code], code), code).toBe(true);
+      for (const w of HEDGE_WORDS[code]) expect(w, code).toBe(w.toLowerCase());
+    }
   });
 });
 

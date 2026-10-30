@@ -49,7 +49,15 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 **Describe now, repeat, ask**
 - [ ] `Alt+Shift+S` speaks at once, even if the screen reader was mid-sentence.
 - [ ] `Alt+Shift+L` repeats the last description.
-- [ ] `Alt+Shift+Q` opens the dialog with focus in the text field; typing letters does not trigger YouTube shortcuts; Enter sends; the answer is read; Escape returns focus to where it was and playback resumes.
+- [ ] `Alt+Shift+Q` opens the dialog with focus in the text field; typing letters does not trigger YouTube shortcuts; Enter sends; the answer is read, starting with the moment it is about; Escape returns focus to where it was and playback resumes.
+- [ ] After an answer, one Tab from the question field reaches *Go to …*; pressing it closes the dialog, says "Jumped to …" and plays from that moment.
+
+**Description is wrong**
+- [ ] Right after a description, *Last description is wrong* in the popup (or its shortcut, once set) says at once which description was marked, then reads the new one; the rest of the video is not described again.
+- [ ] *Repeat* then repeats the corrected description, and playing past that moment again speaks the new one.
+- [ ] With no description heard yet, and none near the current moment, it says there is nothing to mark. After an answer to a question, it says answers are not saved.
+- [ ] Pressing it again while a correction is being made says it is still working. With no network, it says the description could not be made again.
+- [ ] A description said to be uncertain ("Not certain." / "不太确定。") sounds natural with your screen reader in both languages.
 
 **Shorts and fullscreen**
 - [ ] Shorts are described, and a looping Short describes again from the start.

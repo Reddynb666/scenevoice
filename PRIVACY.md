@@ -1,6 +1,6 @@
 # SceneVoice privacy policy
 
-Last updated: 29 October 2026
+Last updated: 30 October 2026
 
 SceneVoice is a browser extension that creates audio description for YouTube videos. It is designed so that the developer never sees your data.
 
@@ -13,12 +13,13 @@ SceneVoice is a browser extension that creates audio description for YouTube vid
 
 ## What leaves your computer, and where it goes
 
-When you ask SceneVoice to describe a video, or ask a question about a moment in it, the extension sends a request to the Google Gemini API (`https://generativelanguage.googleapis.com`) containing:
+When you ask SceneVoice to describe a video, ask a question about a moment in it, or describe again a moment whose description you marked as wrong, the extension sends a request to the Google Gemini API (`https://generativelanguage.googleapis.com`) containing:
 
 - the address of the YouTube video (which Gemini uses to read the public video itself),
 - the video's title, channel name and description as shown on the page,
 - the section of the video to describe (start and end time) or the time you asked about,
 - your typed question, if you asked one, and the descriptions already made for the moments just before it,
+- when you mark a description as wrong, that description, so that Gemini does not simply repeat it,
 - your Gemini API key, in a request header.
 
 Google processes this under the [Gemini API Terms of Service](https://ai.google.dev/gemini-api/terms) and Google's privacy policy. Depending on your Google account and plan, Google may use requests on the free tier to improve its products; see Google's terms for details.
@@ -33,6 +34,7 @@ No other network requests are made.
 
 - **Your API key**, in the browser's local extension storage (`chrome.storage.local`). It never leaves your computer except as described above, and it is never placed in a URL. Remove it at any time on the settings page.
 - **Descriptions** that have been generated, keyed by video and language, so a video is described only once, with the kind of video Gemini judged it to be (entertainment or tutorial). The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
+- **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server) and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
 - **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, language and the built-in voice you chose for each language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
 
 Nothing is stored anywhere else.

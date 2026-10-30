@@ -36,7 +36,7 @@ worker.onerror = (ev) => {
   console.error('[SceneVoice] worker error', ev.message);
 };
 
-const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask']);
+const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask', 'revise']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== MSG.OFFSCREEN) return false;

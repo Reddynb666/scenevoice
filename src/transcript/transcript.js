@@ -21,11 +21,16 @@ function exactText(c, shown) {
   return c.kind === 'text' && c.onScreenText && !shown.includes(c.onScreenText) ? c.onScreenText : '';
 }
 
+/** Labels shown before a description: on-screen text, and corrected after the user marked it as wrong. */
+function tags(c) {
+  return [c.kind === 'text' && t('transcript_on_screen'), c.revised && t('transcript_corrected')].filter(Boolean);
+}
+
 function lines(detail) {
   return (script?.cues || []).map((c) => {
     const shown = c[detail] || c.standard;
     const exact = exactText(c, shown);
-    return `${formatTime(c.start)}  ${c.kind === 'text' ? `[${t('transcript_on_screen')}] ` : ''}${shown}${exact ? ` (${t('transcript_exact', exact)})` : ''}`;
+    return `${formatTime(c.start)}  ${tags(c).map((tag) => `[${tag}] `).join('')}${shown}${exact ? ` (${t('transcript_exact', exact)})` : ''}`;
   });
 }
 
@@ -39,10 +44,10 @@ function render() {
     time.className = 'time';
     time.textContent = formatTime(c.start);
     const text = document.createElement('td');
-    if (c.kind === 'text') {
+    for (const label of tags(c)) {
       const tag = document.createElement('span');
       tag.className = 'tag';
-      tag.textContent = t('transcript_on_screen');
+      tag.textContent = label;
       text.append(tag);
     }
     const shown = c[detail] || c.standard;

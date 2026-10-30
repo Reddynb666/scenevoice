@@ -7,12 +7,12 @@
 // page's context. The offscreen document is an extension page with the
 // extension's own host permissions, and this worker keeps running inside it.
 //
-// Messages from the page: {id, cmd: 'start'|'abort'|'status'|'ask', ...}.
+// Messages from the page: {id, cmd: 'start'|'abort'|'status'|'ask'|'revise', ...}.
 // Replies: {id, ...}. Events (no id): {event: 'started'|'chunk'|'done'|'error'|'stopped'|'model', key, ...}.
 
 import { CHUNK_SECONDS } from '../shared/constants.js';
 import { GeminiClient, GeminiError } from '../shared/gemini.js';
-import { runAsk, runGeneration } from '../shared/generation.js';
+import { runAsk, runGeneration, runRevision } from '../shared/generation.js';
 
 /** @type {Map<string, {done:number,total:number,chunkStartedAt:number,chunkMs:number[],controller:AbortController,videoId:string,lang:string}>} */
 const jobs = new Map();
@@ -99,12 +99,24 @@ function status({ key }) {
   return { jobs: [...jobs.entries()].map(([k, job]) => ({ key: k, videoId: job.videoId, lang: job.lang, ...jobInfo(job) })) };
 }
 
+const failure = (err) => ({ error: err instanceof GeminiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || '') });
+
 async function ask({ config, params }) {
   const client = new GeminiClient(config);
   try {
-    return { text: await runAsk(client, params) };
+    return await runAsk(client, params);
   } catch (err) {
-    return { error: err instanceof GeminiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || '') };
+    return failure(err);
+  }
+}
+
+/** Describe one moment again. Replies { cue }, where cue is null when there is nothing there to describe. */
+async function revise({ config, params }) {
+  const client = new GeminiClient(config);
+  try {
+    return { cue: await runRevision(client, params) };
+  } catch (err) {
+    return failure(err);
   }
 }
 
@@ -119,6 +131,7 @@ self.onmessage = async ({ data }) => {
     else if (cmd === 'abort') reply = abort(data);
     else if (cmd === 'status') reply = status(data);
     else if (cmd === 'ask') reply = await ask(data);
+    else if (cmd === 'revise') reply = await revise(data);
     else reply = { error: 'unknown-command' };
   } catch (err) {
     reply = { error: 'unknown', detail: String(err?.message || err) };

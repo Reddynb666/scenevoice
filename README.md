@@ -12,7 +12,9 @@ It is built for screen reader users first. Every control works from the keyboard
 - **Fits into the pauses.** Every moment is written in three lengths (brief, standard, detailed). SceneVoice picks the longest one that fits the silence and skips a description when even the brief one does not fit, rather than talk over dialogue. When the video has captions (including YouTube's automatic ones), their timing is used to find the real pauses. If you prefer, it can pause the video and read the full description instead, or stay silent until you ask.
 - **Reads on-screen text first, word for word.** Titles, names in lower thirds, slides, chart figures, prices, phone numbers and addresses, code, menus, signs and chat messages are transcribed exactly as written and read before other descriptions, in the original with a translation if needed. Text you already hear (a presenter reading a slide, subtitles that match the captions) is not read again. You can turn this off separately.
 - **Leaves quiet moments quiet.** Nothing is described just to fill a silence. Music, scenery and long takes get a few words only when the picture really changes.
-- **Describe now and ask anything.** `Alt+Shift+S` describes the current moment at once. `Alt+Shift+Q` opens a dialog where you can type a question — "who is speaking?", "what does the sign say?" — and get an answer about that exact moment.
+- **Describe now and ask anything.** `Alt+Shift+S` describes the current moment at once. `Alt+Shift+Q` opens a dialog where you can type a question — "who is speaking?", "what does the sign say?" — and get an answer about that exact moment. Every answer starts with the moment it is about ("At 2:15: …"), and *Go to 2:15* below it takes you there.
+- **Says what it sees, and says when it is not sure.** Descriptions stick to what is visible: no guessed feelings or motives, no praise or judgement, and no names unless they are on screen or spoken. When something is blurred, small or too quick, the description says so ("appears to", "hard to see"), and descriptions Gemini is not sure of are spoken less often.
+- **Tell it when it is wrong.** *Last description is wrong* (in the popup, or a shortcut you set) marks what you just heard. SceneVoice describes only that moment again, replaces the saved description, and tells you each step. The mark stays on your computer.
 - **Your screen reader, or a built-in voice.** By default descriptions go to a live region that NVDA, JAWS and VoiceOver read with your own settings. People without a screen reader can switch to the browser's built-in voices.
 - **Chinese and English, and more.** Descriptions can be written in Simplified or Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic or Hindi. The interface is in English and Simplified Chinese.
 - **Large-text overlay** for low-vision viewers and for sighted people watching with you.
@@ -48,6 +50,7 @@ Open any YouTube video.
 | Describe what is on screen right now | `Alt+Shift+S` |
 | Repeat the last description | `Alt+Shift+L` |
 | Ask a question about this moment | `Alt+Shift+Q` |
+| Mark the last description as wrong and describe that moment again | *(set your own)* |
 | Change the level of detail | *(set your own)* |
 | Change what happens when a description does not fit | *(set your own)* |
 | Change how much is described | *(set your own)* |
@@ -60,6 +63,14 @@ Shortcuts can be changed at `chrome://extensions/shortcuts` — do this if one c
 The shortcuts that change a setting say the new value, for example "Detail: brief." or "Speaking rate: 1.4 times normal." *Speak faster* and *Speak slower* change the built-in voice's rate; with your screen reader they change the speed SceneVoice plans for (the setting below), not the screen reader itself.
 
 The first time you play a video that has no descriptions, SceneVoice says so once and tells you the shortcut.
+
+### When a description is wrong
+
+Press *Last description is wrong* in the popup, or the shortcut if you set one, right after a description you think is wrong. SceneVoice says which one it marked ("Marked the description at 1:35 as wrong. Describing that moment again. It said: …"), asks Gemini to look again at about 20 seconds around that moment only, and then reads the new description ("Updated. The description at 1:35 is now: …"). If, looking again, there is nothing there worth describing, the description is removed and SceneVoice says so. The rest of the video is not described again.
+
+If you have not heard a description yet, the one for the moment on screen is marked. Answers to questions are not saved, so there is nothing to mark; ask again instead. Corrected descriptions are labelled *Corrected* on the page that lists all descriptions.
+
+Your marks stay on your computer, next to the saved descriptions, and are deleted with them. To describe the moment again, Gemini is sent the description you marked, so that it does not just repeat it.
 
 ### Settings worth knowing
 
@@ -92,14 +103,15 @@ YouTube page ──(video link, title)──▶ Gemini API (your key) ──(tim
 - While you watch, the extension checks the video's position several times a second. When a cue's time arrives it chooses the longest version that fits the pause at your reading speed and playback rate (or skips the cue, or pauses the video in pause mode, if none fits), lowers the video volume a little, and hands the text to a live region (or the built-in voice).
 - People found in one section are passed to the next so names stay consistent.
 
-Descriptions are generated by a language model and can be wrong. SceneVoice asks the model to say "appears to" when unsure and never to invent names, but treat anything safety-critical with care.
+Descriptions are generated by a language model and can be wrong. SceneVoice asks the model to describe only what is visible (no guessed feelings, judgements or identities, with examples of each in English and Chinese), to say "appears to" or "hard to see" when unsure, and to rate how sure it is of every description. A description it is not sure of counts as one step less important, so it is heard less often, and is said to be uncertain ("Not certain.", "不太确定。") if its own words do not already say so. Answers to questions name the moment they are about and say so when the picture does not show the answer. When you find a mistake, mark it (see above). Still, treat anything safety-critical with care.
 
 ## Privacy
 
 - SceneVoice has no server and no account, and sends no analytics.
-- To create descriptions, the YouTube video's address, title and description are sent to the Gemini API together with your API key. Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) apply.
+- To create descriptions, the YouTube video's address, title and description are sent to the Gemini API together with your API key. To describe a moment again, the description you marked as wrong is sent too. Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) apply.
 - Your API key is stored only on your computer (`chrome.storage.local`) and is sent only to the Gemini API address shown in settings. It is never placed in a URL.
 - Descriptions are saved on your computer so a video is described only once. You can delete them all from the settings page.
+- The descriptions you mark as wrong are recorded on your computer only, with the saved descriptions, and are deleted with them. There is no feedback server.
 - Settings (not the key) are synced through your browser profile if sync is on.
 
 Full policy: [PRIVACY.md](./PRIVACY.md).

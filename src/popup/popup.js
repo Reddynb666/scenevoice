@@ -66,6 +66,8 @@ function render(state) {
   let cls = '';
   renderProgress(state);
   $('transcript').hidden = !(state?.cueCount > 0);
+  $('report').hidden = !(state?.cueCount > 0);
+  $('reportHint').hidden = $('report').hidden;
 
   if (!state || state.unreachable) {
     const onYouTube = /youtube(-nocookie)?\.com/.test(state?.url || '');
@@ -146,7 +148,7 @@ async function refresh() {
 async function act(action) {
   // Speech happens on the page. Screen readers only read live regions in the
   // foreground window, so close the popup first for anything that speaks there.
-  if (['ask-question', 'describe-now', 'repeat-last'].includes(action)) {
+  if (['ask-question', 'describe-now', 'repeat-last', 'report-wrong'].includes(action)) {
     tabRequest({ type: MSG.TAB_ACTION, action });
     window.close();
     return;
@@ -218,6 +220,7 @@ async function init() {
   });
   $('describe').addEventListener('click', () => act('describe-now'));
   $('ask').addEventListener('click', () => act('ask-question'));
+  $('report').addEventListener('click', () => act('report-wrong'));
   refresh();
 }
 

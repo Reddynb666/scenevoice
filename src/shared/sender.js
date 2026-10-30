@@ -104,6 +104,8 @@ const BACKGROUND_ALLOW = Object.freeze({
   [MSG.GEN_STOP]: ['youtube-content'],
   [MSG.GEN_STATUS]: ['youtube-content'],
   [MSG.ASK]: ['youtube-content'],
+  // Spends quota and rewrites a cached script: only the tab playing the video.
+  [MSG.REVISE]: ['youtube-content'],
   [MSG.OPEN_OPTIONS]: ['youtube-content'],
   [MSG.STOP_SPEAKING]: ['youtube-content'],
   // Spoken descriptions from the YouTube tab, and the options-page voice test.

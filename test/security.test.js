@@ -127,7 +127,7 @@ describe('background message authorization', () => {
   });
 
   it('accepts tab actions that spend quota or read the cache only from YouTube', () => {
-    for (const type of [MSG.GEN_START, MSG.GEN_STOP, MSG.GEN_STATUS, MSG.ASK, MSG.GET_SCRIPT, MSG.DELETE_SCRIPT, MSG.OPEN_OPTIONS, MSG.STOP_SPEAKING]) {
+    for (const type of [MSG.GEN_START, MSG.GEN_STOP, MSG.GEN_STATUS, MSG.ASK, MSG.REVISE, MSG.GET_SCRIPT, MSG.DELETE_SCRIPT, MSG.OPEN_OPTIONS, MSG.STOP_SPEAKING]) {
       allowed(authorizeBackgroundMessage, type, 'youtube', 'mobile', 'embed');
     }
   });
@@ -221,6 +221,17 @@ describe('listeners are wired to the checks', () => {
     const worker = source('src/offscreen/worker.js');
     expect(worker).toContain('only caller');
     expect(worker).toContain("cmd === 'ask'");
+    expect(worker).toContain("cmd === 'revise'");
+  });
+
+  it('keeps descriptions marked as wrong in local storage only, out of reach of the YouTube page', () => {
+    const cache = source('src/shared/cache.js');
+    expect(cache).toMatch(/feedback:\$\{videoId\}:\$\{lang\}/);
+    expect(cache).not.toMatch(/chrome\.storage\.sync/);
+    // The tab asks the service worker; it never reads or writes the marks itself.
+    expect(source('src/content/index.js')).toContain('reviseDescription(send');
+    expect(source('src/content/generator.js')).toContain('MSG.REVISE');
+    expect(source('src/shared/revision.js')).not.toMatch(/chrome\.|fetch\(/);
   });
 });
 

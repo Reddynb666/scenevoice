@@ -57,6 +57,7 @@
       "suggested_key": { "default": "Alt+Shift+Q" },
       "description": "__MSG_cmd_ask__"
     },
+    "report-wrong": { "description": "__MSG_cmd_report_wrong__" },
     "cycle-detail": { "description": "__MSG_cmd_cycle_detail__" },
     "cycle-mode": { "description": "__MSG_cmd_cycle_mode__" },
     "cycle-density": { "description": "__MSG_cmd_cycle_density__" },

@@ -14,6 +14,7 @@ export const STRINGS = {
   cmd_describe_now: { en: 'Describe what is on screen now', zh_CN: '描述当前画面' },
   cmd_repeat: { en: 'Repeat the last description', zh_CN: '重复上一条描述' },
   cmd_ask: { en: 'Ask a question about this moment', zh_CN: '就当前画面提问' },
+  cmd_report_wrong: { en: 'Mark the last description as wrong and describe that moment again', zh_CN: '标记上一条描述有误，并重新生成这一段' },
   cmd_cycle_detail: { en: 'Change the level of detail', zh_CN: '切换详细程度' },
   cmd_cycle_mode: { en: 'Change what happens when a description does not fit', zh_CN: '切换口述放不下时的处理方式' },
   cmd_stop: { en: 'Stop speaking', zh_CN: '停止朗读' },
@@ -26,13 +27,30 @@ export const STRINGS = {
   overlay_on_screen_text: { en: 'On screen', zh_CN: '屏幕文字' },
   ask_title: { en: 'Ask about this moment', zh_CN: '就当前画面提问' },
   ask_hint: {
-    en: 'For example: Who is speaking? What does the sign say? What just happened?',
-    zh_CN: '例如：谁在说话？牌子上写了什么？刚才发生了什么？',
+    en: 'For example: Who is speaking? What does the sign say? What just happened? Each answer says which moment it is about.',
+    zh_CN: '例如：谁在说话？牌子上写了什么？刚才发生了什么？回答会说明指的是哪个时间点。',
   },
   ask_label: { en: 'Your question', zh_CN: '你的问题' },
   ask_submit: { en: 'Ask', zh_CN: '提问' },
   ask_close: { en: 'Close', zh_CN: '关闭' },
   ask_thinking: { en: 'Looking at the video…', zh_CN: '正在查看视频……' },
+  ask_jump: { en: 'Go to $1', zh_CN: '跳到 $1' },
+  ask_jumped: { en: 'Jumped to $1.', zh_CN: '已跳到 $1。' },
+  report_marked: {
+    en: 'Marked the description at $1 as wrong. Describing that moment again. It said: $2',
+    zh_CN: '已标记 $1 处的描述有误，正在重新生成这一段。原描述：$2',
+  },
+  report_updated: { en: 'Updated. The description at $1 is now: $2', zh_CN: '已更新。$1 处的描述现在是：$2' },
+  report_removed: {
+    en: 'Looked again: nothing at $1 needs describing, so that description was removed.',
+    zh_CN: '已重新查看：$1 处没有需要描述的内容，这条描述已删除。',
+  },
+  report_failed: { en: 'That moment could not be described again. $1', zh_CN: '没能重新生成这一段。$1' },
+  report_nothing: {
+    en: 'There is no saved description here to mark. Answers to questions are not saved; just ask again.',
+    zh_CN: '这里没有可以标记的口述。提问的回答不会保存，重新提问即可。',
+  },
+  report_busy: { en: 'Still describing the marked moment again. One moment, please.', zh_CN: '刚才标记的那一段还在重新生成，请稍候。' },
   ask_default_question: {
     en: 'Describe what is on screen right now, briefly, and read any text on it word for word.',
     zh_CN: '请简要描述此刻画面上的内容，画面上如果有文字，请按原文读出。',
@@ -61,6 +79,7 @@ export const STRINGS = {
   transcript_detail_label: { en: 'Length', zh_CN: '长度' },
   transcript_on_screen: { en: 'On screen', zh_CN: '屏幕文字' },
   transcript_exact: { en: 'Exact text: $1', zh_CN: '原文：$1' },
+  transcript_corrected: { en: 'Corrected', zh_CN: '已更正' },
   transcript_time: { en: 'Time', zh_CN: '时间' },
   transcript_description: { en: 'Description', zh_CN: '描述' },
   transcript_open_video: { en: 'Open the video', zh_CN: '打开视频' },
@@ -171,6 +190,11 @@ export const STRINGS = {
     zh_CN: 'SceneVoice 已更新或重启，请刷新页面后继续。',
   },
   error_no_video: { en: 'No video found on this page.', zh_CN: '这个页面上没有找到视频。' },
+  error_no_script: { en: 'There are no saved descriptions for this video.', zh_CN: '这个视频没有已保存的口述。' },
+  error_cue_not_found: {
+    en: 'That description is no longer saved. It may have been replaced already.',
+    zh_CN: '这条描述已经不在保存的口述里了，可能已被替换。',
+  },
   error_unknown: { en: 'Something went wrong. Try again.', zh_CN: '出现了问题，请重试。' },
 
   // ----- popup -----
@@ -186,6 +210,11 @@ export const STRINGS = {
   popup_continue: { en: 'Continue', zh_CN: '继续生成' },
   popup_describe_now: { en: 'Describe now', zh_CN: '描述当前画面' },
   popup_ask: { en: 'Ask a question', zh_CN: '提问' },
+  popup_report: { en: 'Last description is wrong', zh_CN: '上一条描述有误' },
+  popup_report_hint: {
+    en: 'Marks the description you just heard (or the one for this moment) as wrong, and describes only that moment again. The mark stays on this computer.',
+    zh_CN: '把刚听到的描述（没有的话就是当前这一刻的描述）标记为有误，只重新生成这一段。标记记录只保存在这台电脑上。',
+  },
   popup_settings: { en: 'Settings', zh_CN: '设置' },
   popup_all_settings: { en: 'All settings', zh_CN: '全部设置' },
   popup_reload_tab: {
@@ -457,12 +486,16 @@ export const STRINGS = {
     zh_CN: 'SceneVoice 没有服务器，也不需要账号，不收集任何统计数据。',
   },
   privacy_2: {
-    en: "To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. Google's terms for the Gemini API apply.",
-    zh_CN: '生成口述或回答提问时，视频地址、标题、频道名、简介、你的问题以及最近的口述会连同你的密钥发送给 Gemini API，并受谷歌 Gemini API 条款约束。',
+    en: "To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google's terms for the Gemini API apply.",
+    zh_CN: '生成口述或回答提问时，视频地址、标题、频道名、简介、你的问题以及最近的口述会连同你的密钥发送给 Gemini API；重新生成某一段时，还会发送你标记有误的那条描述。这些都受谷歌 Gemini API 条款约束。',
   },
   privacy_3: {
     en: 'Descriptions are saved on this computer so a video is described only once.',
     zh_CN: '口述保存在这台电脑上，同一个视频只需生成一次。',
+  },
+  privacy_4: {
+    en: 'The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. There is no feedback server: nothing is sent to the developer. The record is deleted with the saved descriptions.',
+    zh_CN: '你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。SceneVoice 没有收集反馈的服务器，什么都不会发给开发者；删除已保存的口述时，这些记录会一并删除。',
   },
   opt_reset_title: { en: '6. Restore defaults', zh_CN: '6. 恢复默认设置' },
   opt_reset_intro: {

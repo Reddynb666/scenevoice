@@ -1,13 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GeminiError } from '../src/shared/gemini.js';
-import { runAsk, runGeneration } from '../src/shared/generation.js';
+import { runAsk, runGeneration, runRevision } from '../src/shared/generation.js';
 
 const cue = (start) => ({ start, gap: 3, kind: 'visual', priority: 1, brief: `b${start}`, standard: `s${start}`, detailed: `d${start}` });
 const ok = (text) => ({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] });
 const m = (name) => ({ name: `models/${name}`, supportedGenerationMethods: ['generateContent'] });
 
-/** A fake Gemini that answers per section; `fail` decides which calls throw. */
-function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.0-flash'], fail = () => null, videoType } = {}) {
+/** Which request this is: a question, a moment described again, or a section of the video. */
+function requestKind(body) {
+  const props = body.generationConfig.responseSchema?.properties || {};
+  if (props.answer) return 'ask';
+  return props.videoType ? 'script' : 'revise';
+}
+
+/**
+ * A fake Gemini that answers per section; `fail` decides which calls throw.
+ * `answer` is the JSON answer to a question; `revision` the cues for a moment described again.
+ */
+function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.0-flash'], fail = () => null, videoType, answer, revision } = {}) {
   const calls = [];
   return {
     model,
@@ -16,11 +26,13 @@ function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 
     generate: vi.fn(async (body) => {
       const video = body.contents[0].parts[0];
       const start = parseInt(video.videoMetadata?.startOffset || '0', 10);
-      const call = { start, ask: !body.generationConfig.responseMimeType };
+      const kind = requestKind(body);
+      const call = { start, ask: kind === 'ask', kind, body };
       calls.push(call);
       const err = fail(call, calls.length);
       if (err) throw err;
-      if (call.ask) return ok('A chef holds up a dumpling.');
+      if (kind === 'ask') return ok(answer === undefined ? 'A chef holds up a dumpling.' : JSON.stringify(answer));
+      if (kind === 'revise') return ok(JSON.stringify({ cues: revision || [] }));
       return ok(JSON.stringify({ videoType, characters: [], cues: [cue(start + 1), cue(start + 100)] }));
     }),
   };
@@ -129,10 +141,66 @@ describe('runGeneration', () => {
   });
 });
 
-describe('runAsk', () => {
-  it('returns the trimmed answer', async () => {
+describe('runGeneration and confidence', () => {
+  it('says a description is uncertain, and makes it less important, when Gemini is not sure', async () => {
     const client = fakeClient();
-    expect(await runAsk(client, { ...params, time: 30, question: 'Who?' })).toBe('A chef holds up a dumpling.');
+    client.generate.mockResolvedValueOnce(
+      ok(JSON.stringify({ videoType: 'other', characters: [], cues: [{ ...cue(5), confidence: 'low', brief: '一个男人拿着手机。', standard: '一个男人把手机贴在耳边。', detailed: '看不清，一个男人把手机贴在耳边。' }] })),
+    );
+    const script = await runGeneration({ client, ...params, duration: 200, lang: 'zh-CN', script: null });
+    // Words that already say so are left as they are.
+    expect(script.cues[0]).toMatchObject({ confidence: 'low', priority: 2, brief: '不太确定。一个男人拿着手机。', detailed: '看不清，一个男人把手机贴在耳边。' });
+  });
+});
+
+describe('runAsk', () => {
+  it('reads the structured answer: led by the moment it is about, which is kept for jumping there', async () => {
+    const client = fakeClient({ answer: { time: 27, confidence: 'high', answer: 'A chef holds up a dumpling.' } });
+    expect(await runAsk(client, { ...params, time: 30, question: 'Who?' })).toEqual({ text: 'At 0:27: A chef holds up a dumpling.', time: 27, confidence: 'high' });
     expect(client.calls[0].ask).toBe(true);
+  });
+
+  it('answers in Chinese with "在 m:ss 处", and says when it is not sure', async () => {
+    const client = fakeClient({ answer: { time: 95, confidence: 'low', answer: '一位厨师举着一个饺子。' } });
+    const res = await runAsk(client, { ...params, lang: 'zh-CN', time: 100, question: '她拿着什么？' });
+    expect(res).toEqual({ text: '在 1:35 处：不太确定。一位厨师举着一个饺子。', time: 95, confidence: 'low' });
+  });
+
+  it('still answers, about the moment asked, when the answer comes as plain text', async () => {
+    const client = fakeClient();
+    expect(await runAsk(client, { ...params, time: 30.6, question: 'Who?' })).toEqual({ text: 'At 0:30: A chef holds up a dumpling.', time: 30, confidence: '' });
+  });
+});
+
+describe('runRevision', () => {
+  const old = { start: 61.5, gap: 2.5, kind: 'visual', priority: 1, brief: 'A woman smiles.', standard: 'A woman in red smiles at the camera.', detailed: 'x' };
+  const revised = (extra = {}) => ({ start: 60, gap: 9, kind: 'visual', priority: 1, onScreenText: '', confidence: 'high', brief: 'A man waves.', standard: 'A man in a grey coat waves.', detailed: 'A man in a grey coat waves from the doorway.', ...extra });
+
+  it('looks again at a short clip around the moment, telling Gemini what was reported', async () => {
+    const client = fakeClient({ revision: [revised()] });
+    const cueOut = await runRevision(client, { ...params, cue: old, characters: [{ label: 'the man in grey' }] });
+    const { body } = client.calls[0];
+    expect(client.calls[0].kind).toBe('revise');
+    expect(body.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '53s', endOffset: '74s' });
+    expect(body.contents[0].parts[1].text).toContain('"A woman in red smiles at the camera."');
+    expect(body.contents[0].parts[1].text).toContain('the man in grey');
+    // Same time and pause as before: only the words were wrong.
+    const { onScreenText, ...words } = revised();
+    expect(cueOut).toEqual({ ...words, start: 61.5, gap: 2.5, revised: true });
+  });
+
+  it('returns null when, looking again, there is nothing to describe', async () => {
+    expect(await runRevision(fakeClient({ revision: [] }), { ...params, cue: old })).toBeNull();
+  });
+
+  it('keeps a description Gemini repeats, but says it is not certain', async () => {
+    const client = fakeClient({ revision: [revised({ brief: old.brief, standard: old.standard, detailed: old.detailed })] });
+    const cueOut = await runRevision(client, { ...params, cue: old });
+    expect(cueOut).toMatchObject({ confidence: 'low', priority: 2, standard: 'Not certain. A woman in red smiles at the camera.' });
+  });
+
+  it('reports a failure', async () => {
+    const client = fakeClient({ fail: () => new GeminiError('quota', 'later', 429) });
+    await expect(runRevision(client, { ...params, cue: old })).rejects.toMatchObject({ code: 'quota' });
   });
 });

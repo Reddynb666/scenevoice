@@ -2,7 +2,7 @@
 // estimating speech time and choosing which text to speak.
 // No browser APIs here, so everything is unit-testable.
 
-import { SCRIPT_VERSION, VIDEO_TYPES } from './constants.js';
+import { HEDGE_WORDS, SCRIPT_VERSION, UNCERTAIN_LEAD, VIDEO_TYPES } from './constants.js';
 
 /** Highest priority number spoken for each density setting. */
 export const DENSITY_MAX_PRIORITY = Object.freeze({ essential: 1, standard: 2, full: 3 });
@@ -85,6 +85,37 @@ export function cleanScreenText(text, maxLen = MAX_SCREEN_TEXT) {
   return t.length > maxLen ? `${t.slice(0, maxLen).trimEnd()}…` : t;
 }
 
+/** How sure Gemini is of a description. Scripts saved before it said have none. */
+export const CONFIDENCES = Object.freeze(['high', 'medium', 'low']);
+
+/** Whether a text already says it is not certain ("appears to", "可能", "看不清"…), in the description language. */
+export function isHedged(text, lang) {
+  const s = String(text || '').toLowerCase();
+  return (HEDGE_WORDS[lang] || HEDGE_WORDS.en).some((w) => s.includes(w));
+}
+
+/** The text, led by "Not certain." in the description language unless it already says so. */
+export function hedged(text, lang) {
+  if (!text || isHedged(text, lang)) return text;
+  return `${UNCERTAIN_LEAD[lang] || UNCERTAIN_LEAD.en}${text}`;
+}
+
+/**
+ * A description Gemini is not sure of is said to be uncertain in every length,
+ * and counts one step less important: it is heard less often and never wins
+ * over a description that is sure.
+ */
+export function applyConfidence(cue, lang) {
+  if (cue.confidence !== 'low') return cue;
+  return {
+    ...cue,
+    priority: Math.min(3, cue.priority + 1),
+    brief: hedged(cue.brief, lang),
+    standard: hedged(cue.standard, lang),
+    detailed: hedged(cue.detailed, lang),
+  };
+}
+
 /** Extract a JSON object from model text that may be wrapped in a code fence. */
 export function extractJson(text) {
   if (text && typeof text === 'object') return text;
@@ -104,7 +135,8 @@ export function extractJson(text) {
 /**
  * Validate and normalise one chunk of model output.
  * @param {object} raw  parsed JSON from the model
- * @param {{duration?: number, chunkStart?: number, chunkEnd?: number}} ctx
+ * @param {{duration?: number, chunkStart?: number, chunkEnd?: number, lang?: string}} ctx
+ *   lang: the description language, for saying a low-confidence description is uncertain
  * @returns {{cues: Array, characters: Array, videoType: string}}
  *   videoType: 'entertainment' | 'tutorial', or '' when the model gave neither
  */
@@ -137,7 +169,8 @@ export function normalizeChunk(raw, ctx = {}) {
     if (![1, 2, 3].includes(priority)) priority = 2;
     const cue = { start, gap, kind, priority, brief, standard, detailed };
     if (onScreenText) cue.onScreenText = onScreenText;
-    cues.push(cue);
+    if (CONFIDENCES.includes(item.confidence)) cue.confidence = item.confidence;
+    cues.push(applyConfidence(cue, ctx.lang));
   }
 
   // Timestamps are occasionally returned in milliseconds.

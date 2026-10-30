@@ -126,10 +126,17 @@ class Gemini(BaseHTTPRequestHandler):
         video = body["contents"][0]["parts"][0]
         meta = video.get("videoMetadata") or {}
         start = int(float(meta.get("startOffset", "0s").rstrip("s")))
-        if body.get("generationConfig", {}).get("responseMimeType") == "application/json":
-            text = json.dumps(script_for(start))
+        props = (body.get("generationConfig", {}).get("responseSchema") or {}).get("properties") or {}
+        if "answer" in props:
+            # A question: the answer, and the moment it is about (seconds of the full video).
+            text = json.dumps({"time": start + 18, "confidence": "high", "answer": "A chef holds a finished dumpling up to the camera."})
+        elif "cues" in props and "videoType" not in props:
+            # A description marked as wrong, described again.
+            text = json.dumps({"cues": [{"start": start, "gap": 4, "kind": "visual", "priority": 1, "onScreenText": "", "confidence": "high",
+                                         "brief": "Chef Lin waves.", "standard": "Chef Lin waves at the camera.",
+                                         "detailed": "Chef Lin, in her white apron, waves at the camera from the kitchen doorway."}]})
         else:
-            text = "A chef holds a finished dumpling up to the camera."
+            text = json.dumps(script_for(start))
         try:
             self.reply(200, {"candidates": [{"content": {"parts": [{"text": text}], "role": "model"}, "finishReason": "STOP"}]})
         except Exception:
@@ -529,10 +536,12 @@ def main():
         tab_action("describe-now")
         e = wait_for_log(page, r"holds a finished dumpling", 10)
         check(e is not None, "describe-now asks Gemini when no cue is near")
+        check(e is not None and e["text"].startswith("At 3:18: "), f"the answer says which moment it is about ({e and e['text'][:30]})")
         if len(REQUESTS) > before:
             meta = REQUESTS[-1]["body"]["contents"][0]["parts"][0]["videoMetadata"]
             check(meta == {"startOffset": "180s", "endOffset": "204s"}, f"question uses a short clip around the moment ({meta})")
-            check(REQUESTS[-1]["body"]["generationConfig"].get("responseMimeType") is None, "questions use plain-text answers")
+            schema = REQUESTS[-1]["body"]["generationConfig"].get("responseSchema") or {}
+            check(schema.get("propertyOrdering") == ["time", "confidence", "answer"], "questions ask for the moment and how sure Gemini is")
         page.evaluate("window.__log = []")
         tab_action("repeat-last")
         check(wait_for_log(page, r"holds a finished dumpling", 4) is not None, "repeat-last repeats")
@@ -562,11 +571,38 @@ def main():
         check(wait_until(page, "() => document.querySelector('[data-scenevoice=ui]').shadowRoot.querySelector('.answer').textContent.includes('dumpling')", 10), "answer appears in the dialog's live region")
         q = REQUESTS[-1]["body"]["contents"][0]["parts"][1]["text"]
         check("What is she holding?" in q, "the typed question is sent")
+        jump = "document.querySelector('[data-scenevoice=ui]').shadowRoot.querySelector('[data-act=jump]')"
+        check(page.evaluate(f"!{jump}.hidden && {jump}.textContent.startsWith('Go to ')"), "the answer offers to go to its moment")
         page.screenshot(path=str(OUT / "ask-dialog.png"))
         page.keyboard.press("Escape")
         time.sleep(0.5)
         check(dlg.count() == 0, "Escape closes the dialog")
         check(not video(page, "return v.paused;"), "video resumes after closing the dialog")
+
+        # ---------------- a description marked as wrong
+        print("\n[description is wrong]")
+        video(page, "v.pause(); v.currentTime = 2.5;")
+        time.sleep(0.4)
+        tab_action("describe-now")
+        check(wait_for_log(page, r"Chef Lin enters", 4) is not None, "the description at 0:01 is heard")
+        page.evaluate("window.__log = []")
+        before = len(REQUESTS)
+        tab_action("report-wrong")
+        check(wait_for_log(page, r"Marked the description at 0:01 as wrong", 4) is not None, "marking it says at once which one is marked")
+        check(wait_for_log(page, r"Updated\. The description at 0:01 is now: Chef Lin(, in her white apron,)? waves", 10) is not None, "then reads the corrected description")
+        fixes = REQUESTS[before:]
+        check(len(fixes) == 1, f"only that moment is described again ({len(fixes)} request)")
+        if fixes:
+            fix = fixes[0]["body"]
+            check(fix["contents"][0]["parts"][0]["videoMetadata"] == {"startOffset": "0s", "endOffset": "13s"}, "a short clip around it")
+            check("Chef Lin enters the kitchen in a white apron." in fix["contents"][0]["parts"][1]["text"], "Gemini is told which description was reported")
+        cues = sw.evaluate(f"async () => (await chrome.storage.local.get('script:{VIDEO_ID}:en'))['script:{VIDEO_ID}:en'].cues.map(c => c.standard)")
+        check(cues[0] == "Chef Lin waves at the camera." and len(cues) == 5, "the saved description is replaced, and only that one")
+        marks = sw.evaluate(f"async () => (await chrome.storage.local.get('feedback:{VIDEO_ID}:en'))['feedback:{VIDEO_ID}:en']")
+        check(bool(marks) and marks[-1]["status"] == "revised", "the mark is kept in the extension's local storage")
+        page.evaluate("window.__log = []")
+        tab_action("repeat-last")
+        check(wait_for_log(page, r"^Chef Lin(, in her white apron,)? waves", 4) is not None, "repeat-last now repeats the corrected description")
 
         # ---------------- ads / toggle / overlay
         print("\n[ads / toggle / overlay]")
