@@ -98,7 +98,7 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 
 ### 设置
 
-1. 在阿里云百炼控制台创建 API Key：[bailian.console.aliyun.com](https://bailian.console.aliyun.com/)。模型需要能看懂图片，默认是 `qwen-vl-max`。
+1. 在阿里云百炼控制台创建 API Key：[bailian.console.aliyun.com](https://bailian.console.aliyun.com/)。模型需要能看懂图片，默认是 `qwen3-vl-plus`。设置页里链接的分步申请指南有详细步骤。
 2. 在 SceneVoice 设置页“1. 连接 AI 模型”→“通义千问（阿里云百炼）”里粘贴密钥，按**保存并测试**。这个密钥和 Gemini 密钥一样受保护：只存在本机，网页和内容脚本读不到，只发送到通义千问 API 地址。
 3. “各网站用哪个模型”：默认 B 站用通义千问，YouTube 用 Gemini。两个网站都可以任选其一。
 4. 打开一个 B 站视频，按 `Alt+Shift+D`（或在弹出面板点“生成口述”）。
@@ -109,7 +109,7 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 - 边看边描述时，播放器控制条上方会显示“正在边看边生成”和“已描述到 1:35”（你正在看的这部分描述到了哪里），以及整个视频已描述的比例。弹出面板里也会显示；视频描述到 25%、50%、75% 时会播报（开启“播报生成进度”时）。
 - “描述当前画面”、提问和“上一条描述有误”会发送那一刻的画面。
 - 口述会标明由 AI 生成：一个视频开始口述时会先说“以下为 AI 生成的口述影像”（可在设置里改为每个视频只说第一次），视频上显示的口述文字标有“AI 口述”。这是《人工智能生成合成内容标识办法》（2025 年 9 月 1 日起施行）的要求。
-- 能读到 B 站 CC 字幕时（先用人工字幕，再用 AI 字幕），会像 YouTube 字幕一样用来校正对白空隙；没有字幕或读不到时，退回模型自己的估计（无字幕模式）。
+- 你在 B 站播放器里打开 CC 字幕后，SceneVoice 会用播放器自己加载的那个字幕文件，像 YouTube 字幕一样校正对白空隙；没打开字幕或没有字幕时，退回模型自己的估计。SceneVoice 不调用 B 站的任何接口，标题、UP 主、简介和分区都读自页面本身。
 - 视频类型（娱乐类或教程讲解类）根据 B 站分区和标题判断。
 - 在 B 站上，口述语言选“与浏览器语言相同”时一律用中文；用内置语音时，优先列出并使用中文语音。读屏输出和 YouTube 上一样。
 - `Alt+Shift+D` 可以开关口述（同时开关截图）。弹出面板里的“停止”会停止截图，已生成的口述保留。
@@ -119,22 +119,27 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 - **浏览器保护的画面（跨域）。** 如果视频是从其他网站加载、且对方没有允许跨域（CORS），浏览器会把 canvas 标记为“被污染”，不让网页读取画面。这时 SceneVoice 会明确告诉你截不到这个视频的画面、无法为它生成口述，并且不发送任何内容。有些 B 站视频可能用 B 站自己的 `<bwp-video>` 元素播放而不是 `<video>`，它无法画到 canvas 上，也会给出类似提示。
 - **受版权保护（DRM）的视频。** 付费或会员视频常常是加密的，浏览器会把它画成纯黑画面，而且不报错。连续约 12 秒都是黑屏时，SceneVoice 会停止截图，并告诉你这个视频受保护。（影片里的黑场一般短得多。）
 - 第一次观看时口述会晚几秒，跳过的部分没有口述。模型只看到静止画面，画面之间的动作和所有声音它都不知道。
-- 费用：每分钟视频约 5 次请求，每次最多 6 张小图，费用记在你的阿里云账号上。
+- 费用：每分钟视频约 5 次请求，每次最多 6 张小图，费用记在你的阿里云账号上。按 qwen3-vl-plus 2026 年 10 月的价格，每小时视频大约 2 元（估算，设置页也写明了）。
 - B 站的页面结构和网页接口没有公开文档，随时可能变化。未登录时可能拿不到字幕。暂不支持番剧、直播、嵌在其他网站里的播放器和移动版网页。
 - B 站内容脚本还没有在真实网站上用读屏软件试过（见下方的人工检查）。
 
 ### 待确认事项
 
-以下是这个原型无法对照最新文档核实的内容。每一项都集中在一个设置或常量里，并在代码中标注了“待确认”。
+2026-10-31 已对照阿里云百炼官方文档核实（还没有用真实 Key 跑过）：
+
+| 内容 | 位置 | 当前值 | 核实结果 |
+| --- | --- | --- | --- |
+| 兼容 OpenAI 接口的地址（中国内地） | 设置页 → 通义千问 → 高级；`DEFAULT_QWEN_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 仍可用，但官方列为旧地址，2026-09-30 起不再支持新特性；推荐改用工作空间地址 `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（可在“高级”里填写） |
+| 默认视觉模型 | 设置页 → 通义千问 → 模型名称；`DEFAULT_QWEN_MODEL` | `qwen3-vl-plus` | 官方在售；输入 ¥1、输出 ¥10 每百万 token（2026-10） |
+| 图片格式与每次张数 | `src/shared/qwen.js`；本机设置 `qwenMaxFrames` | 每次 6 张 base64 JPEG，640 像素宽 | 支持 base64 data URL；每次最多 250 张；旧地址请求体上限 16 MiB |
+| `response_format: {"type": "json_object"}` | 本机设置 `qwenJsonMode` | 关闭 | qwen3-vl-plus、qwen-vl-max 系列支持，但仅限非思考模式，且提示词里必须出现 JSON |
+
+仍待确认，每一项都集中在一个设置或常量里，并在代码中标注了“待确认”：
 
 | 内容 | 位置 | 当前值 |
 | --- | --- | --- |
-| 阿里云百炼兼容 OpenAI 接口的地址（中国内地；其他地域不同） | 设置页 → 通义千问 → 高级；`src/shared/constants.js` 的 `DEFAULT_QWEN_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| 默认视觉模型 | 设置页 → 通义千问 → 模型名称；`DEFAULT_QWEN_MODEL` | `qwen-vl-max` |
-| 图片以 base64 `data:` URL 放在 `image_url` 里，以及每次请求最多几张 | `src/shared/qwen.js`；本机设置 `qwenMaxFrames` | 每次 6 张，640 像素宽 |
-| 视觉模型是否支持 `response_format: {"type": "json_object"}` | 本机设置 `qwenJsonMode` | 关闭：在提示词里要求 JSON，并宽松解析回复 |
 | 错误码（`invalid_api_key`、`Arrearage`、`data_inspection_failed` 等） | `src/shared/qwen.js` 的 `classifyQwenHttp` | 尽力识别 |
-| B 站接口 `x/web-interface/view` 和 `x/player/v2`（字幕可能需要登录或签名） | `src/content/bilibili.js` 的 `BILIBILI_API` | 不签名，带页面自己的 Cookie |
+| 页面自带的视频数据 `window.__INITIAL_STATE__.videoData` 的结构 | `src/content/bilibili.js` 的 `initialVideoData` | 读 title、owner、desc、tname、pages；SceneVoice 不调用任何 B 站接口 |
 | B 站播放器选择器、`<bwp-video>` 的行为、播放器内没有广告 | `src/content/bilibili.js` | `.bpx-player-container`、`.bpx-player-control-bottom-right` |
 | B 站分区 → 视频类型 | `src/shared/videotype.js` | 关键词匹配 |
 

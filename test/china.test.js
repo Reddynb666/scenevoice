@@ -20,7 +20,7 @@ import { authorizeBackgroundMessage, classifySender, platformOfSender } from '..
 import { normalizeSettings } from '../src/shared/settings.js';
 import { resolveLanguage } from '../src/shared/storage.js';
 import { bilibiliCategoryType, pageVideoType } from '../src/shared/videotype.js';
-import { subtitleUrl, subtitleUrls } from '../src/content/bilibili.js';
+import { initialVideoData, subtitleUrl } from '../src/content/bilibili.js';
 import { FrameSampler, captureFrame } from '../src/content/frames.js';
 import { fakeChrome } from './fake-chrome.js';
 
@@ -80,7 +80,7 @@ describe('which model describes each site', () => {
   });
 
   it('keeps the Qwen key and its settings with the Gemini key, in local storage', () => {
-    expect(DEFAULT_LOCAL).toMatchObject({ qwenApiKey: '', qwenModel: 'qwen-vl-max', qwenApiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1', qwenJsonMode: false, qwenMaxFrames: 6 });
+    expect(DEFAULT_LOCAL).toMatchObject({ qwenApiKey: '', qwenModel: 'qwen3-vl-plus', qwenApiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1', qwenJsonMode: false, qwenMaxFrames: 6 });
     expect(Object.keys(DEFAULT_SETTINGS).some((k) => /key/i.test(k))).toBe(false);
   });
 });
@@ -123,14 +123,20 @@ describe('Chinese on Bilibili', () => {
     expect(subtitleUrl('http://i0.hdslb.com/bfs/subtitle/2.json')).toBe('https://i0.hdslb.com/bfs/subtitle/2.json');
     expect(subtitleUrl('https://evil.example/bfs/subtitle/2.json')).toBeNull();
     expect(subtitleUrl('javascript:alert(1)')).toBeNull();
-    expect(
-      subtitleUrls([
-        { lan: 'en-US', subtitle_url: '//i0.hdslb.com/bfs/subtitle/en.json' },
-        { lan: 'ai-zh', subtitle_url: '//aisubtitle.hdslb.com/bfs/ai_subtitle/prod/ai.json', ai_type: 1 },
-        { lan: 'zh-CN', subtitle_url: '//i0.hdslb.com/bfs/subtitle/zh.json' },
-        { lan: 'zh-CN' },
-      ]),
-    ).toEqual(['https://i0.hdslb.com/bfs/subtitle/zh.json', 'https://aisubtitle.hdslb.com/bfs/ai_subtitle/prod/ai.json', 'https://i0.hdslb.com/bfs/subtitle/en.json']);
+  });
+
+  it('reads the video data the page was delivered with, only for the video shown', () => {
+    const page = (state) => {
+      const doc = document.implementation.createHTMLDocument('');
+      doc.body.innerHTML = `<script src="x.js"></script><script>window.__INITIAL_STATE__=${JSON.stringify(state)};(function(){var a="}{";}());</script>`;
+      return doc;
+    };
+    const state = { videoData: { bvid: 'BV1GJ411x7h7', aid: 170001, title: '标题 "带引号" {括号}', tname: '美食制作', pages: [{ page: 1, part: '', duration: 120 }] } };
+    expect(initialVideoData(page(state), { bvid: 'BV1GJ411x7h7', aid: '', page: 1 })).toMatchObject({ title: '标题 "带引号" {括号}', tname: '美食制作' });
+    expect(initialVideoData(page(state), { bvid: '', aid: '170001', page: 1 })?.tname).toBe('美食制作');
+    // Moved to another video without reloading: the HTML still has the first one's.
+    expect(initialVideoData(page(state), { bvid: 'BV1xx411c7mD', aid: '', page: 1 })).toBeNull();
+    expect(initialVideoData(document.implementation.createHTMLDocument(''), { bvid: 'BV1GJ411x7h7', aid: '', page: 1 })).toBeNull();
   });
 });
 

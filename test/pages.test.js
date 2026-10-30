@@ -620,11 +620,11 @@ describe('settings page: models for each site, and the Qwen key', () => {
     expect($('#qwenApiKey').type).toBe('password');
     expect($('#qwenApiKey').getAttribute('aria-describedby')).toBe('qwenKeyHint qwenKeyStatus qwenKeyPrivacy');
     expect($('#qwenKeyStatus').getAttribute('role')).toBe('status');
-    expect($('#qwenModel').value).toBe('qwen-vl-max');
+    expect($('#qwenModel').value).toBe('qwen3-vl-plus');
     $('#qwenApiKey').value = '  sk-qwen-test  ';
     $('#saveQwenKey').click();
-    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen-vl-max. You are ready to go.'));
-    expect(fake.areas.local.local).toMatchObject({ qwenApiKey: 'sk-qwen-test', qwenModel: 'qwen-vl-max' });
+    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen3-vl-plus. You are ready to go.'));
+    expect(fake.areas.local.local).toMatchObject({ qwenApiKey: 'sk-qwen-test', qwenModel: 'qwen3-vl-plus' });
     expect(fake.areas.sync.settings?.qwenApiKey).toBeUndefined();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');

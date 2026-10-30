@@ -91,7 +91,7 @@ describe('QwenClient', () => {
     expect(call.url).toBe(`${DEFAULT_QWEN_API_BASE}/chat/completions`);
     expect(call.init.method).toBe('POST');
     expect(call.init.headers).toEqual({ 'content-type': 'application/json', authorization: 'Bearer sk-test' });
-    expect(call.body).toEqual({ model: 'qwen-vl-max', messages: [{ role: 'user', content: 'Reply with: OK' }], max_tokens: 5 });
+    expect(call.body).toEqual({ model: 'qwen3-vl-plus', messages: [{ role: 'user', content: 'Reply with: OK' }], max_tokens: 5 });
     // The key is only ever in the header.
     expect(call.url).not.toContain('sk-test');
     expect(call.init.body).not.toContain('sk-test');

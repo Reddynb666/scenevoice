@@ -1,29 +1,24 @@
 // Everything that knows about Bilibili's video page (www.bilibili.com/video/…)
-// lives here. Experimental: the selectors and the web APIs below are the ones
-// the video page uses at the time of writing; Bilibili does not document them
-// and may change them (待确认 before each release).
+// lives here. Experimental: the selectors below are the ones the video page uses
+// at the time of writing; Bilibili does not document them and may change them
+// (待确认 before each release).
 //
-// What is read, and from where:
+// SceneVoice reads only what the page already has, and calls none of Bilibili's
+// web APIs itself (they are not public, and Bilibili has acted against projects
+// that call them):
 // - the player, its <video> and the control bar, from the page;
-// - title, uploader, description, section (分区) and parts (分P), from the
-//   video info API, with the page itself as a fallback;
-// - the CC subtitles' timing, from the player API and the subtitle file it
-//   names (the same files the player loads when subtitles are turned on). No
-//   subtitles, or none readable: descriptions keep the model's own timing.
-// All requests go to Bilibili, from the Bilibili page, as the page's own do.
+// - title, uploader, description, section (分区) and parts (分P), from the data
+//   the page is delivered with (window.__INITIAL_STATE__ in its HTML), and from
+//   the page's text after moving to another video without reloading;
+// - the CC subtitles' timing, from the subtitle file the player itself loads
+//   when the viewer turns subtitles on (seen in the page's resource timing), a
+//   static file on Bilibili's file servers. Subtitles off, or none: descriptions
+//   keep the model's own timing.
 
 import { bilibiliIdFromUrl, parseBilibiliVideoId } from '../shared/platforms.js';
 import { pageVideoType } from '../shared/videotype.js';
 
-/** Public web APIs of the video page (待确认: undocumented; may change, or start to require signed requests). */
-export const BILIBILI_API = Object.freeze({
-  /** Video info: data.title, owner.name, desc, tname (section), pages[{cid, page, part, duration}]. */
-  view: 'https://api.bilibili.com/x/web-interface/view',
-  /** Player info for one part: data.subtitle.subtitles[{lan, subtitle_url, ai_type}]. Logged-out viewers may get none. */
-  player: 'https://api.bilibili.com/x/player/v2',
-});
-
-/** Hosts subtitle files are served from (待确认). Any other address in an API answer is ignored. */
+/** Hosts subtitle files are served from (待确认). Any other address is ignored. */
 const SUBTITLE_HOST = /(^|\.)hdslb\.com$/;
 /** Requests for subtitle files, as seen in the page's resource timing. */
 const SUBTITLE_PATH = /\/bfs\/(ai_)?subtitle\//;
@@ -127,40 +122,65 @@ export function subtitleUrl(raw) {
 }
 
 /**
- * Subtitle files in the order their timing is most likely to follow the
- * dialogue: subtitles written for Chinese, then AI-generated Chinese, then others.
+ * The video data the page was delivered with: window.__INITIAL_STATE__ in an
+ * inline script of the HTML. Read as text (the content script cannot see the
+ * page's variables). Null when it is not there or is not about this video
+ * (after moving to another video without reloading, the HTML still has the first).
  */
-export function subtitleUrls(subtitles) {
-  const score = (s) => {
-    const lan = String(s.lan || '').toLowerCase();
-    const ai = lan.startsWith('ai-') || Number(s.ai_type) > 0;
-    return (/zh/.test(lan) ? 0 : 2) + (ai ? 1 : 0);
-  };
-  return (Array.isArray(subtitles) ? subtitles : [])
-    .filter((s) => s && typeof s.subtitle_url === 'string')
-    .sort((a, b) => score(a) - score(b))
-    .map((s) => subtitleUrl(s.subtitle_url))
-    .filter(Boolean);
+export function initialVideoData(doc, ref) {
+  for (const script of doc.querySelectorAll('script:not([src])')) {
+    const src = script.textContent || '';
+    const at = src.indexOf('window.__INITIAL_STATE__');
+    if (at < 0) continue;
+    const open = src.indexOf('{', at);
+    if (open < 0) continue;
+    const json = balancedJson(src, open);
+    if (!json) continue;
+    try {
+      const data = JSON.parse(json)?.videoData;
+      if (!data || typeof data !== 'object') return null;
+      if (ref?.bvid && data.bvid !== ref.bvid) return null;
+      if (ref?.aid && String(data.aid) !== String(ref.aid)) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
-async function getJson(url) {
-  const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) return null;
-  const body = await res.json();
-  return body && body.code === 0 ? body.data : null;
+/** The JSON object starting at `open`, by matching braces outside strings. */
+function balancedJson(src, open) {
+  let depth = 0;
+  let inString = false;
+  for (let i = open; i < src.length; i += 1) {
+    const c = src[i];
+    if (inString) {
+      if (c === '\\') i += 1;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return src.slice(open, i + 1);
+    }
+  }
+  return '';
 }
 
 /**
- * What Bilibili says about the video: the section (for the video type) and the
- * subtitle files to take dialogue timing from. Remembers title, uploader,
- * description and part for getMeta().
+ * What the page says about the video: the section (for the video type).
+ * Remembers title, uploader, description and part for getMeta(). Subtitles come
+ * later, if the viewer turns them on (watchCaptionRequests).
  */
 export async function loadPageInfo(videoId) {
   const ref = parseBilibiliVideoId(videoId);
   if (!ref) return { category: '', captionUrls: [] };
-  const query = ref.bvid ? `bvid=${encodeURIComponent(ref.bvid)}` : `aid=${encodeURIComponent(ref.aid)}`;
-  const data = await getJson(`${BILIBILI_API.view}?${query}`);
-  if (!data) return { category: '', captionUrls: [] };
+  const data = initialVideoData(document, ref);
+  if (!data) {
+    info = null;
+    return { category: '', captionUrls: [] };
+  }
   const pages = Array.isArray(data.pages) ? data.pages : [];
   const page = pages.find((p) => p?.page === ref.page) || pages[ref.page - 1] || pages[0] || {};
   info = {
@@ -172,23 +192,12 @@ export async function loadPageInfo(videoId) {
     page: ref.page,
     duration: Number(page.duration ?? data.duration),
   };
-  const category = typeof data.tname === 'string' ? data.tname : '';
-  const cid = page.cid ?? data.cid;
-  let captionUrls = [];
-  if (cid != null) {
-    try {
-      const player = await getJson(`${BILIBILI_API.player}?${query}&cid=${encodeURIComponent(cid)}`);
-      captionUrls = subtitleUrls(player?.subtitle?.subtitles);
-    } catch {
-      captionUrls = [];
-    }
-  }
-  return { category, captionUrls };
+  return { category: typeof data.tname === 'string' ? data.tname : '', captionUrls: [] };
 }
 
 /**
- * Remember the subtitle files the player itself loads (when the viewer turns
- * CC subtitles on): useful when the API gave none. Calls fn(videoId, url).
+ * Use the subtitle file the player itself loads when the viewer turns CC
+ * subtitles on, for dialogue timing. Calls fn(videoId, url).
  */
 export function watchCaptionRequests(fn) {
   const seen = (entry) => {

@@ -3,15 +3,11 @@
 // "Authorization: Bearer <key>". Request builders are pure functions; network
 // calls take an injectable fetch.
 //
-// 待确认 against the current DashScope documentation before a release:
-// - the endpoint for each region and the default model (constants.js; both can
-//   be changed on the settings page);
-// - images as base64 data URLs in "image_url" parts, and how many fit in one
-//   request (local setting qwenMaxFrames);
-// - response_format {"type": "json_object"} for vision models (local setting
-//   qwenJsonMode, off by default: the prompt asks for JSON in words and the
-//   reply is read leniently);
-// - the error codes and messages classified in classifyQwenHttp.
+// Checked against the Model Studio documentation on 2026-10-31 (see constants.js):
+// the address, the default model, images as base64 data URLs in "image_url"
+// parts and how many fit, and JSON mode (local setting qwenJsonMode, off by
+// default). Still 待确认 until run with a real key: the error codes and messages
+// classified in classifyQwenHttp.
 
 import { DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL } from './constants.js';
 import { ApiError } from './errors.js';

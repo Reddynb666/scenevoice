@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // The real content script on a Bilibili video page, with Qwen: it reads the
-// page and its CC subtitles, takes pictures of the playing video and sends a
+// data the page was delivered with and the CC subtitle file the player loads
+// (calling none of Bilibili's APIs), takes pictures of the playing video and sends a
 // few at a time, says a description that comes back late at the next pause,
 // asks with a picture of the moment, and says clearly when the picture cannot
 // be taken. The service worker and Bilibili's APIs are fakes; nothing is called.
@@ -22,6 +23,9 @@ const playback = { paused: true };
 const pixels = { tainted: false, black: false };
 const listeners = [];
 const fetched = [];
+/** Tell the content script the player loaded these files (PerformanceObserver). */
+const playerLoads = [];
+const playerLoaded = (...names) => playerLoads.forEach((fn) => fn(names.map((name) => ({ name, startTime: performance.now() }))));
 /** The saved script, as the service worker would keep it. */
 let saved = null;
 let askReply = () => ({ error: 'unknown' });
@@ -64,21 +68,6 @@ function fakeFetch(url) {
   fetched.push(url);
   const u = new URL(url);
   const json = (data) => ({ ok: true, json: async () => data, text: async () => JSON.stringify(data) });
-  if (u.pathname === '/x/web-interface/view') return json({ code: 0, data: VIEW[u.searchParams.get('bvid')] });
-  if (u.pathname === '/x/player/v2') {
-    return json({
-      code: 0,
-      data: {
-        subtitle: {
-          subtitles: [
-            { lan: 'ai-zh', subtitle_url: '//aisubtitle.hdslb.com/bfs/ai_subtitle/prod/ai.json', ai_type: 1 },
-            { lan: 'zh-CN', subtitle_url: 'https://i0.hdslb.com/bfs/subtitle/human.json' },
-            { lan: 'zh-CN', subtitle_url: 'https://evil.example/bfs/subtitle/x.json' },
-          ],
-        },
-      },
-    });
-  }
   if (u.pathname === '/bfs/subtitle/human.json') return json(SUBTITLE);
   return { ok: false, json: async () => null, text: async () => '' };
 }
@@ -106,6 +95,7 @@ beforeAll(async () => {
   jsdom.reconfigure({ url: `https://www.bilibili.com/video/${BV}/?spm_id_from=333.1007` });
   document.title = '宫保鸡丁的做法_哔哩哔哩_bilibili';
   document.body.innerHTML = `
+    <script>window.__INITIAL_STATE__=${JSON.stringify({ videoData: { bvid: BV, ...VIEW[BV] } })};(function(){var s;}());</script>
     <h1 class="video-title">宫保鸡丁的做法</h1>
     <div class="bpx-player-container"><div class="bpx-player-video-wrap"><video></video></div><div class="bpx-player-control-bottom-right"></div></div>`;
   video = document.querySelector('video');
@@ -135,6 +125,16 @@ beforeAll(async () => {
   };
 
   vi.stubGlobal('fetch', vi.fn(async (url) => fakeFetch(url)));
+  // The page's resource timing: the test says which files the player loaded.
+  vi.stubGlobal(
+    'PerformanceObserver',
+    class {
+      constructor(fn) {
+        playerLoads.push((entries) => fn({ getEntries: () => entries }));
+      }
+      observe() {}
+    },
+  );
   fake = fakeChrome({
     reply: (msg) => {
       // The Gemini key is missing and the Qwen key is set: Bilibili uses Qwen by default.
@@ -168,10 +168,13 @@ describe('a Bilibili video page', () => {
   it('is recognised, uses Qwen with frames, describes in Chinese, and reads the page through Bilibili', async () => {
     await vi.waitFor(async () => expect(await tabState()).toMatchObject({ title: '宫保鸡丁的做法', videoType: 'tutorial' }));
     expect(await tabState()).toMatchObject({ supported: true, platform: 'bilibili', provider: 'qwen', inputMode: 'frames', lang: 'zh-CN' });
-    // Subtitles written for Chinese first; an address on another host is never fetched.
+    // Title, uploader and section come from the page's own data: no Bilibili API is called.
+    expect(fetched.some((u) => u.includes('api.bilibili.com'))).toBe(false);
+    // The viewer turns CC subtitles on: the file the player loads gives the dialogue timing; another host is ignored.
+    playerLoaded('https://evil.example/bfs/subtitle/x.json', 'https://i0.hdslb.com/bfs/subtitle/human.json');
     await vi.waitFor(() => expect(fetched).toContain('https://i0.hdslb.com/bfs/subtitle/human.json'));
     expect(fetched.some((u) => u.includes('evil.example'))).toBe(false);
-    expect(fetched.some((u) => u.includes('ai.json'))).toBe(false);
+    expect(fetched.every((u) => !u.includes('api.bilibili.com'))).toBe(true);
     // The SceneVoice button sits in Bilibili's control bar, with a name.
     const button = document.querySelector('.bpx-player-control-bottom-right .scenevoice-button');
     expect(button.getAttribute('aria-label')).toBe('SceneVoice audio description');
@@ -225,6 +228,15 @@ describe('a Bilibili video page', () => {
     expect(history).toHaveLength(1);
     expect(history[0].answer).toMatch(/^At 1:00: A plate of diced chicken\./);
     expect(typeof history[0].question).toBe('string');
+  });
+
+  it('treats another part (分P) as another video', async () => {
+    const before = await tabState();
+    jsdom.reconfigure({ url: `https://www.bilibili.com/video/${BV}/?p=2` });
+    await vi.waitFor(async () => expect((await tabState()).videoId).toBe(`${ID}:p2`), { timeout: 3000 });
+    expect((await tabState()).status).not.toBe('live');
+    jsdom.reconfigure({ url: `https://www.bilibili.com/video/${BV}/?spm_id_from=333.1007` });
+    await vi.waitFor(async () => expect((await tabState()).videoId).toBe(before.videoId), { timeout: 3000 });
   });
 
   it('turns off with the shortcut, and stops sending pictures', async () => {

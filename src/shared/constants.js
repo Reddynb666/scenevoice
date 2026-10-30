@@ -12,12 +12,17 @@ export const PROVIDERS = Object.freeze(['gemini', 'qwen']);
 
 /**
  * Qwen (通义千问) through Alibaba Cloud Model Studio (阿里云百炼 / DashScope),
- * OpenAI-compatible mode. 待确认: the mainland China endpoint and the model
- * name are taken from the DashScope documentation as last known; both can be
- * changed on the settings page.
+ * OpenAI-compatible mode. Checked against the documentation on 2026-10-31
+ * (help.aliyun.com/zh/model-studio/regions, /vision): the DashScope address
+ * below still works for mainland China (Beijing) but is the legacy one, with no
+ * new features from 2026-09-30; the recommended address is per workspace,
+ * https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1, which
+ * the user can enter under Advanced. qwen3-vl-plus takes base64 JPEG pictures in
+ * image_url parts (up to 250 per request, request body up to 16 MiB on this
+ * address) and JSON mode when not thinking. Not yet run with a real key.
  */
 export const DEFAULT_QWEN_API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-export const DEFAULT_QWEN_MODEL = 'qwen-vl-max';
+export const DEFAULT_QWEN_MODEL = 'qwen3-vl-plus';
 
 /**
  * Pictures taken from the playing video for models that are not sent a link to it.
@@ -198,9 +203,10 @@ export const DEFAULT_LOCAL = Object.freeze({
   qwenApiKey: '',
   qwenModel: DEFAULT_QWEN_MODEL,
   qwenApiBase: DEFAULT_QWEN_API_BASE,
-  /** 待确认: whether vision models accept response_format json_object. Off: the reply is parsed leniently. */
+  /** response_format json_object: documented for qwen3-vl-plus and qwen-vl-max in non-thinking mode only,
+   *  and the request must mention JSON. Off: the prompt asks for JSON and the reply is read leniently. */
   qwenJsonMode: false,
-  /** 待确认: images per request the account's model accepts. */
+  /** Pictures per request: the documented limit is 250 base64 images; 6 keeps requests small and cheap. */
   qwenMaxFrames: FRAME_SAMPLING.maxFrames,
 });
 

@@ -96,7 +96,7 @@ YouTube and Gemini are usually not reachable from mainland China. This prototype
 
 ### Setting it up
 
-1. Create an API key in the Alibaba Cloud Model Studio (阿里云百炼) console: [bailian.console.aliyun.com](https://bailian.console.aliyun.com/). The model has to understand pictures; the default is `qwen-vl-max`.
+1. Create an API key in the Alibaba Cloud Model Studio (阿里云百炼) console: [bailian.console.aliyun.com](https://bailian.console.aliyun.com/). The model has to understand pictures; the default is `qwen3-vl-plus`. The step-by-step guide linked from the settings page walks through it.
 2. On SceneVoice's settings page, under *1. Connect an AI model* → *Qwen (Alibaba Cloud Model Studio)*, paste the key and press **Save and test**. The key is stored like the Gemini key: on this computer only, out of reach of web pages and content scripts, and sent only to the Qwen API address.
 3. *Which model describes each site*: Bilibili uses Qwen and YouTube uses Gemini by default. Either site can use either model.
 4. Open a Bilibili video and press `Alt+Shift+D` (or *Create descriptions* in the popup).
@@ -107,7 +107,7 @@ YouTube and Gemini are usually not reachable from mainland China. This prototype
 - While it describes as you watch, a box above the player's controls says *Describing as you watch* and *Described up to 1:35* (how far the part you are watching is described), with the share of the video described. The popup says the same, and it is said at 25%, 50% and 75% of the video (with *Announce generation progress*).
 - *Describe now*, questions and *Last description is wrong* send pictures of that moment.
 - Descriptions are labelled as AI-generated: SceneVoice says *AI-generated audio description follows* when descriptions start on a video (every time, or only the first time per video, in settings), and the text shown on the video is tagged *AI description*. China's rules on labelling AI-generated content (in force since 1 September 2025) ask for this.
-- Bilibili's CC subtitles (written ones first, then AI-generated ones) give the dialogue timing when they can be read, as YouTube captions do. When there are none, or they cannot be read, the model's own estimate is used.
+- When you turn on CC subtitles in Bilibili's player, the subtitle file the player loads gives the dialogue timing, as YouTube captions do; with subtitles off, or none, the model's own estimate is used. SceneVoice calls none of Bilibili's APIs: title, uploader, description and section are read from the page itself.
 - The video type (entertainment or tutorial) comes from the Bilibili section (分区) and the title.
 - On Bilibili, *Same as my browser* as the description language means Chinese. With the built-in voice, Chinese voices are listed and used first. Screen reader output works as on YouTube.
 - `Alt+Shift+D` turns descriptions, and the picture taking, off and on. *Stop* in the popup stops the picture taking and keeps what was described.
@@ -117,22 +117,27 @@ YouTube and Gemini are usually not reachable from mainland China. This prototype
 - **Pictures protected by the browser (cross-origin).** When a video is loaded from another site without that site's permission (CORS), the browser "taints" the canvas and refuses to hand its picture to the page. SceneVoice then says that it cannot take pictures from this video and that no descriptions can be made for it, and sends nothing. Some Bilibili videos may play in Bilibili's own `<bwp-video>` element rather than a `<video>`; it cannot be drawn on a canvas and gets a similar message.
 - **Protected (DRM) video.** Paid or members-only videos are often encrypted, and the browser then draws them as solid black without any error. After about 12 seconds of black pictures in a row SceneVoice stops taking pictures and says the video is protected. (A fade to black in a film is much shorter.)
 - On first viewing, descriptions come a few seconds late, and parts you skip are not described. The model sees still pictures only: it misses movement between them and all sound.
-- Cost: about 5 requests per minute of video, each with up to 6 small pictures, billed to your Alibaba Cloud account.
+- Cost: about 5 requests per minute of video, each with up to 6 small pictures, billed to your Alibaba Cloud account: roughly ¥2 per hour of video with qwen3-vl-plus at October 2026 prices (an estimate; the settings page says the same).
 - Bilibili does not document its page structure or web APIs, and they may change. Viewers who are not logged in may get no subtitles. Bangumi (番剧) and live streams, players embedded in other sites and the mobile site are not supported.
 - The Bilibili content script has not yet been tried with a screen reader on the live site (see the manual checks below).
 
 ### To be confirmed (待确认)
 
-What this prototype could not check against current documentation. Each is a setting or a constant in one place, marked 待确认 in the code.
+Checked against Alibaba Cloud Model Studio's documentation on 2026-10-31 (not yet run with a real key):
+
+| What | Where | Now | Found |
+| --- | --- | --- | --- |
+| OpenAI-compatible address (mainland China) | Settings → Qwen → Advanced; `DEFAULT_QWEN_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | Still works, but is the legacy address, with no new features from 2026-09-30; the recommended one is per workspace, `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` (enter it under Advanced) |
+| Default vision model | Settings → Qwen → Model name; `DEFAULT_QWEN_MODEL` | `qwen3-vl-plus` | Offered; ¥1 input / ¥10 output per million tokens (October 2026) |
+| Picture format and number per request | `src/shared/qwen.js`; local setting `qwenMaxFrames` | 6 base64 JPEGs, 640 px wide | base64 data URLs supported; up to 250 per request; request body up to 16 MiB on the legacy address |
+| `response_format: {"type": "json_object"}` | local setting `qwenJsonMode` | off | Supported by qwen3-vl-plus and qwen-vl-max only when not thinking, and the prompt must mention JSON |
+
+Still to be confirmed, each a setting or a constant in one place, marked 待确认 in the code:
 
 | What | Where | Now |
 | --- | --- | --- |
-| Model Studio's OpenAI-compatible address (mainland China; other regions differ) | Settings → Qwen → Advanced; `DEFAULT_QWEN_API_BASE` in `src/shared/constants.js` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| Default vision model | Settings → Qwen → Model name; `DEFAULT_QWEN_MODEL` | `qwen-vl-max` |
-| Pictures as base64 `data:` URLs in `image_url` parts, and how many per request | `src/shared/qwen.js`; local setting `qwenMaxFrames` | 6 per request, 640 px wide |
-| `response_format: {"type": "json_object"}` for vision models | local setting `qwenJsonMode` | off: the prompt asks for JSON and the reply is read leniently |
 | Error codes (`invalid_api_key`, `Arrearage`, `data_inspection_failed`…) | `classifyQwenHttp` in `src/shared/qwen.js` | best effort |
-| Bilibili APIs `x/web-interface/view` and `x/player/v2` (subtitles may need a login or signed requests) | `BILIBILI_API` in `src/content/bilibili.js` | unsigned requests with the page's cookies |
+| The shape of the page's own video data, `window.__INITIAL_STATE__.videoData` | `initialVideoData` in `src/content/bilibili.js` | title, owner, desc, tname, pages; SceneVoice calls no Bilibili API |
 | Bilibili player selectors, `<bwp-video>` behaviour, no ads in the player | `src/content/bilibili.js` | `.bpx-player-container`, `.bpx-player-control-bottom-right` |
 | Bilibili sections → video type | `src/shared/videotype.js` | keyword match |
 

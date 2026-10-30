@@ -124,6 +124,10 @@ export const STRINGS = {
     zh_CN: '在这里粘贴通义千问 API Key。可在上面链接的阿里云百炼控制台创建，新账号通常有免费额度。',
   },
   popup_all_keys: { en: 'All keyboard shortcuts', zh_CN: '全部快捷键' },
+  opt_qwen_cost: {
+    en: 'Cost, on your own Alibaba Cloud account: describing as you watch sends about 5 requests per minute of video, each with up to 6 small pictures. With qwen3-vl-plus at October 2026 prices that is roughly ¥2 per hour of video; your Alibaba Cloud bill is what counts.',
+    zh_CN: '费用记在你自己的阿里云账号上：边看边生成时，每分钟视频约 5 次请求，每次最多 6 张小图。按 qwen3-vl-plus 2026 年 10 月的价格，每小时视频大约 2 元，以阿里云账单为准。',
+  },
   opt_guide_link: { en: 'Step-by-step guide, written for screen readers', zh_CN: '分步申请指南（适合读屏用户）' },
   opt_get_gemini_key: { en: 'Get a Gemini key at Google AI Studio (opens in a new tab)', zh_CN: '去 Google AI Studio 获取 Gemini Key（在新标签页打开）' },
   opt_get_qwen_key: { en: 'Get a Qwen key in the Model Studio console (opens in a new tab)', zh_CN: '去阿里云百炼控制台获取通义千问 Key（在新标签页打开）' },
@@ -658,8 +662,8 @@ export const STRINGS = {
   },
   opt_qwen_advanced: { en: 'Advanced: API address', zh_CN: '高级：API 地址' },
   opt_qwen_endpoint_hint: {
-    en: 'The address of Model Studio’s OpenAI-compatible API. The default is the mainland China region; an account in another region uses the address its console gives.',
-    zh_CN: '阿里云百炼兼容 OpenAI 接口的地址。默认是中国内地地域；其他地域的账号请改用控制台里给出的地址。',
+    en: 'The address of Model Studio’s OpenAI-compatible API. The default (dashscope.aliyuncs.com) is the older mainland China address and still works; Alibaba Cloud now recommends your workspace’s own address, shown when you create a key, such as https://llm-xxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1. An account in another region uses the address its console gives.',
+    zh_CN: '阿里云百炼兼容 OpenAI 接口的地址。默认的 dashscope.aliyuncs.com 是中国内地的旧地址，仍可使用；阿里云现在推荐使用你工作空间自己的地址（创建 Key 时会显示），例如 https://llm-xxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1。其他地域的账号请改用控制台里给出的地址。',
   },
   opt_key_intro: {
     en: "SceneVoice uses Google's Gemini model to watch the video and write descriptions. You use your own free API key, so there is no account and no subscription.",
