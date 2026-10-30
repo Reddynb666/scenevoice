@@ -136,8 +136,6 @@ export const STRINGS = {
   progress_eta_minutes: { en: 'About $1 minutes left', zh_CN: '还需约 $1 分钟' },
   popup_stop: { en: 'Stop', zh_CN: '停止' },
   popup_progress_label: { en: 'Generation progress', zh_CN: '生成进度' },
-  popup_eta_soon: { en: 'Under a minute left.', zh_CN: '还需不到 1 分钟。' },
-  popup_eta_minutes: { en: 'About $1 minutes left.', zh_CN: '还需约 $1 分钟。' },
   status_on: { en: 'Descriptions on.', zh_CN: '口述已开启。' },
   status_off: { en: 'Descriptions off.', zh_CN: '口述已关闭。' },
   status_looking: { en: 'Looking…', zh_CN: '正在查看……' },

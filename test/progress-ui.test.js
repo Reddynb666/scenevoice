@@ -64,6 +64,18 @@ describe('progress box', () => {
     expect(box(ui).hidden).toBe(false);
   });
 
+  it('uses the same words as the popup for the same progress', () => {
+    player = document.body.appendChild(document.createElement('div'));
+    const ui = new PageUI({ onToggle() {}, platform });
+    ui.mount();
+    ui.showProgress({ done: 1, total: 3, fraction: 0.45, eta: 130 });
+    const el = box(ui);
+    // pages.test.js: the popup shows "Creating descriptions: section 2 of 3 · 45% · About 3 minutes left".
+    expect([el.querySelector('.label').textContent, el.querySelector('.percent').textContent, el.querySelector('.eta').textContent].join(' · ')).toBe(
+      'Creating descriptions: section 2 of 3 · 45% · About 3 minutes left',
+    );
+  });
+
   it('is gone when generation ends', () => {
     player = document.body.appendChild(document.createElement('div'));
     const ui = new PageUI({ onToggle() {}, platform });

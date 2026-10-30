@@ -4,6 +4,7 @@
 // Where the player and its controls are comes from the site's platform object.
 
 import { t } from '../shared/i18n.js';
+import { generationProgressLabels, liveProgressLabels } from '../shared/labels.js';
 import { formatTime } from '../shared/script.js';
 import { containerForOverlays } from './dom.js';
 import { youtubePlatform } from './youtube.js';
@@ -178,27 +179,22 @@ export class PageUI {
 
   /** Visible progress for sighted and low-vision viewers; screen readers hear the announcements instead. */
   showProgress({ done, total, fraction, eta }) {
-    const label = this.progress.querySelector('.label');
-    const etaEl = this.progress.querySelector('.eta');
     const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
-    label.textContent = total > 1 ? t('progress_section', String(Math.min(done + 1, total)), String(total)) : t('progress_working');
-    this.progress.querySelector('.percent').textContent = `${percent}%`;
-    etaEl.textContent = eta == null ? '' : eta < 60 ? t('progress_eta_soon') : t('progress_eta_minutes', String(Math.ceil(eta / 60)));
-    this.progress.querySelector('.fill').style.width = `${Math.max(2, percent)}%`;
-    if (this.progress.hidden) {
-      // Generation can start before the player exists (or after the site rebuilt it): attach now.
-      this.mount();
-      this.progress.hidden = false;
-    }
+    this.renderProgress(generationProgressLabels({ done, total, percent, eta }), percent);
   }
 
   /** Describing as the video plays (pictures): how far the part being watched is described, and how much of the video is. */
   showLiveProgress({ percent, upTo }) {
-    this.progress.querySelector('.label').textContent = t('progress_live');
-    this.progress.querySelector('.percent').textContent = `${percent}%`;
-    this.progress.querySelector('.eta').textContent = upTo ? t('progress_live_up_to', upTo) : t('progress_live_waiting');
-    this.progress.querySelector('.fill').style.width = `${Math.max(2, percent)}%`;
+    this.renderProgress(liveProgressLabels({ percent, upTo }), percent);
+  }
+
+  renderProgress({ label, percent, detail }, value) {
+    this.progress.querySelector('.label').textContent = label;
+    this.progress.querySelector('.percent').textContent = percent;
+    this.progress.querySelector('.eta').textContent = detail;
+    this.progress.querySelector('.fill').style.width = `${Math.max(2, value)}%`;
     if (this.progress.hidden) {
+      // Generation can start before the player exists (or after the site rebuilt it): attach now.
       this.mount();
       this.progress.hidden = false;
     }

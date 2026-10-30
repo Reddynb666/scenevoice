@@ -2,7 +2,7 @@ import { LANGUAGES, MSG } from '../shared/constants.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
-import { typeAdjustedText } from '../shared/labels.js';
+import { generationProgressLabels, liveProgressLabels, typeAdjustedText } from '../shared/labels.js';
 import { voiceTestMessage } from '../shared/settings.js';
 import { platformOfUrl } from '../shared/platforms.js';
 import { getSettings, resolveLanguage } from '../shared/storage.js';
@@ -45,15 +45,18 @@ let pollTimer = null;
 function renderProgress(state) {
   const box = $('progressBox');
   const generating = state?.status === 'generating';
-  box.hidden = !generating;
-  // Describing as the video plays can be stopped too; it has no end to estimate.
-  $('stop').hidden = !generating && state?.status !== 'live';
-  if (!generating) return;
-  const percent = Math.max(2, Math.min(100, state.percent || 0));
-  $('progress').value = percent;
-  const section = state.total > 1 ? t('progress_section', String(Math.min(state.done + 1, state.total)), String(state.total)) : t('progress_working');
-  const eta = state.eta == null ? '' : state.eta < 60 ? t('popup_eta_soon') : t('popup_eta_minutes', String(Math.ceil(state.eta / 60)));
-  $('progressText').textContent = `${section} · ${percent}%${eta ? ` · ${eta}` : ''}`;
+  const live = state?.status === 'live';
+  box.hidden = !generating && !live;
+  // Describing as the video plays can be stopped too.
+  $('stop').hidden = !generating && !live;
+  if (box.hidden) return;
+  // The same numbers and words as the box on the player.
+  const percent = Math.max(0, Math.min(100, Math.round(state.percent || 0)));
+  const words = live
+    ? liveProgressLabels({ percent, upTo: state.describedUpTo > 0 ? formatTime(state.describedUpTo) : '' })
+    : generationProgressLabels({ done: state.done, total: state.total, percent, eta: state.eta });
+  $('progress').value = Math.max(2, percent);
+  $('progressText').textContent = [words.label, words.percent, words.detail].filter(Boolean).join(' · ');
 }
 
 let current = null;

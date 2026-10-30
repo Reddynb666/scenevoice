@@ -671,9 +671,23 @@ describe('popup on a Bilibili video', () => {
     await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('Describing as you watch: 3 descriptions so far. They come a few seconds after the picture.'));
     expect($('#stop').hidden).toBe(false);
     expect($('#generate').hidden).toBe(true);
-    expect($('#progressBox').hidden).toBe(true);
+    // The same box as on the player: how much of the video is described, and how far the part being watched is.
+    expect($('#progressBox').hidden).toBe(false);
+    expect($('#progress').value).toBe(20);
+    expect($('#progressText').textContent).toBe('Describing as you watch · 20% · First descriptions on the way');
     $('#stop').click();
     await vi.waitFor(() => expect(asked).toContainEqual({ type: MSG.TAB_ACTION, action: 'stop' }));
+  });
+
+  it('shows the same progress as the box on the player while creating descriptions', async () => {
+    await openPage('popup', { tabReply: tab({ status: 'generating', done: 1, total: 3, percent: 45, eta: 130 }) });
+    await vi.waitFor(() => expect($('#progressBox').hidden).toBe(false));
+    expect($('#progress').value).toBe(45);
+    expect($('#progressText').textContent).toBe('Creating descriptions: section 2 of 3 · 45% · About 3 minutes left');
+    // At the very start it says 0%, as the page does; only the bar shows a sliver.
+    await openPage('popup', { tabReply: tab({ status: 'generating', done: 0, total: 1, percent: 0, eta: null }) });
+    await vi.waitFor(() => expect($('#progressText').textContent).toBe('Creating descriptions… · 0%'));
+    expect($('#progress').value).toBe(2);
   });
 
   it('says how far the part being watched is described', async () => {

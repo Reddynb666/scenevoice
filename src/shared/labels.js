@@ -51,3 +51,24 @@ export function readerSpeedLabel(speed) {
   const labels = { 1: t('speed_normal'), 1.6: t('speed_fast'), 2.4: t('speed_very_fast'), 3.2: t('speed_fastest') };
   return labels[speed] || String(speed);
 }
+
+/**
+ * The words of the progress box, the same on the player and in the popup:
+ * { label, percent, detail }. percent is a whole number 0..100.
+ */
+export function generationProgressLabels({ done, total, percent, eta }) {
+  return {
+    label: total > 1 ? t('progress_section', String(Math.min(done + 1, total)), String(total)) : t('progress_working'),
+    percent: `${percent}%`,
+    detail: eta == null ? '' : eta < 60 ? t('progress_eta_soon') : t('progress_eta_minutes', String(Math.ceil(eta / 60))),
+  };
+}
+
+/** Describing as the video plays: upTo is how far the part being watched is described ("1:35"), or ''. */
+export function liveProgressLabels({ percent, upTo }) {
+  return {
+    label: t('progress_live'),
+    percent: `${percent}%`,
+    detail: upTo ? t('progress_live_up_to', upTo) : t('progress_live_waiting'),
+  };
+}

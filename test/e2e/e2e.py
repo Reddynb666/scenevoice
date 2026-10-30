@@ -452,6 +452,8 @@ def main():
         check("%" in page.evaluate(f"{pill}.textContent"), "progress shows a percentage")
         st = tab_state()
         check(st and st["status"] == "generating" and st["total"] == 2 and isinstance(st["percent"], int), f"tab state carries percent and total for the popup ({st and st.get('percent')}%)")
+        shown = int(re.search(r"(\d+)%", page.evaluate(f"{pill}.querySelector('.percent').textContent")).group(1))
+        check(st and abs(shown - st["percent"]) <= 3, f"the popup gets the percentage the page shows (page {shown}%, popup {st and st['percent']}%)")
         page.evaluate("window.__log = []")
         tab_action("toggle-descriptions")
         e = wait_for_log(page, r"\d+% done, working on section 1 of 2", 4)
