@@ -156,6 +156,14 @@ describe('video type on the YouTube page', () => {
     expect(video.pause).not.toHaveBeenCalled();
   });
 
+  it('does not say the type again when going back to a video in the same tab', async () => {
+    const before = typeNotices().length;
+    await openVideo('tutorialAAA', 'Tie a bowline');
+    await openVideo('musicVideoB', 'Live at the Roundhouse');
+    await sleep(300);
+    expect(typeNotices()).toHaveLength(before);
+  });
+
   it("steps a shortcut on from the value in use, and makes the result the user's own", async () => {
     command('cycle-detail');
     // From the brief descriptions in use for this video, not the saved "standard".

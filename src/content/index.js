@@ -80,8 +80,8 @@ function main() {
   let videoType = '';
   /** Mode, detail and density used for this video instead of the settings, because of its type. */
   let adjusted = {};
-  /** `${videoId}:${type}` once the user has heard what the type changed. */
-  let typeAnnouncedFor = '';
+  /** `${videoId}:${type}` for every video whose type change has been said in this tab: once each, even after going back to it. */
+  const typeAnnounced = new Set();
   /** How to undo an adjustment is said once per tab, with the first one. */
   let typeUndoHintGiven = false;
   /** {text, kind, cue}: cue is the saved description it came from, null for an answer to a question. */
@@ -441,8 +441,8 @@ function main() {
   function announceType(enabled = settings.enabled) {
     if (!videoId || !script || !enabled || !Object.keys(adjusted).length) return;
     const key = `${videoId}:${videoType}`;
-    if (typeAnnouncedFor === key) return;
-    typeAnnouncedFor = key;
+    if (typeAnnounced.has(key)) return;
+    typeAnnounced.add(key);
     const text = typeAdjustedText(videoType, adjusted);
     announcer.status(typeUndoHintGiven ? text : `${text} ${t('type_switched_undo')}`);
     typeUndoHintGiven = true;
