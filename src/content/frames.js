@@ -52,6 +52,26 @@ export function captureFrame(video, { maxWidth = FRAME_SAMPLING.maxWidth, qualit
 }
 
 /**
+ * Whether the picture just drawn on the canvas is solid black, as a protected
+ * (DRM) video draws: the browser neither refuses the pixels nor shows them.
+ * Samples about a thousand pixels. False when the pixels cannot be read.
+ */
+export function canvasLooksBlank(canvas) {
+  try {
+    const ctx = canvas?.getContext?.('2d');
+    if (!ctx?.getImageData || !canvas.width || !canvas.height) return false;
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const step = Math.max(1, Math.floor(data.length / 4 / 1000)) * 4;
+    for (let i = 0; i < data.length; i += step) {
+      if (data[i] > 12 || data[i + 1] > 12 || data[i + 2] > 12) return false;
+    }
+    return data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Decides when to take a frame and when enough have been taken for a request,
  * as the video plays. Playback time drives it; a jump in time is a seek, after
  * which the next stretch starts where the viewer now is. Recent frames are

@@ -143,7 +143,7 @@ describe('a description marked as wrong', () => {
     expect(sent(MSG.REVISE)).toHaveLength(2);
 
     finish({ error: 'quota' });
-    await vi.waitFor(() => expect(said().at(-1)).toBe('That moment could not be described again. Your Gemini quota is used up for now. Try again later; descriptions made so far are saved.'));
+    await vi.waitFor(() => expect(said().at(-1)).toBe('That moment could not be described again. Your Gemini quota is used up for now. Try again in a few minutes (a daily limit resets the next day), or pick another model on the settings page: each has its own quota.'));
   });
 
   it('says so when, looking again, there was nothing to describe, and works from the popup', async () => {

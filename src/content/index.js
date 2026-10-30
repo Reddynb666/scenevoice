@@ -9,7 +9,7 @@
 // descriptions then come a few seconds after the picture, and are saved for
 // the next viewing like any others.
 
-import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
+import { MSG, DEFAULT_SETTINGS, BLANK_FRAMES_LIMIT, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
 import { coverageSeconds, coveredRanges, describedUpTo, isCovered, pickEvenly } from '../shared/coverage.js';
 import { t, errorMessage } from '../shared/i18n.js';
 import { readerSpeedLabel, typeAdjustedText } from '../shared/labels.js';
@@ -25,7 +25,7 @@ import { inputModeFor, providerFor } from '../shared/providers.js';
 import { progressMilestone } from '../shared/progress.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
-import { FrameSampler, captureFrame } from './frames.js';
+import { FrameSampler, canvasLooksBlank, captureFrame } from './frames.js';
 import { askAboutMoment, describeFrames, generationStatus, reviseDescription, startGeneration, stopGeneration } from './generator.js';
 import { platformFor } from './platforms.js';
 
@@ -38,6 +38,8 @@ if (!window.__sceneVoiceLoaded) {
 const LATE_LIMIT = 25;
 const LATE_WAIT = 10;
 /** Errors after which taking frames carries on (the stretch is skipped); any other stops it. */
+/** Errors after which pressing the shortcut again may well work: said with how to carry on. */
+const RESUMABLE_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
 const PASSING_FRAME_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable']);
 
 function main() {
@@ -56,6 +58,8 @@ function main() {
   let following = false;
   /** Video id for which generate() is still waiting on the player. */
   let startingFor = null;
+  /** Solid black pictures in a row while describing from frames (a protected video draws black). */
+  let blankFrames = 0;
   /** Whether the "first minutes are ready" message has been given for this job. */
   let announcedPartial = false;
   /** The last quarter of progress said for this job, and when a generation message was last said. */
@@ -213,6 +217,12 @@ function main() {
       refreshShortcuts();
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && !dead) refreshShortcuts();
+      });
+      // Generation stopped because the connection dropped: carry on once it is back.
+      window.addEventListener('online', () => {
+        if (dead || !videoId || errorCode !== 'network' || !settings.enabled || framesMode()) return;
+        announcer.status(t('status_back_online'));
+        generate({ quiet: true });
       });
       platform.onNavigate(onPage);
       platform.watchCaptionRequests((id, url) => {
@@ -636,9 +646,26 @@ function main() {
     errorCode = code;
     if (code === 'extension-reloaded' || !chrome.runtime?.id) return die();
     console.warn('[SceneVoice] generation failed', code, detail || '');
-    feedback(errorText(code));
+    feedback(errorWithNextStep(code));
     if (code === 'no-key' || code === 'bad-key') send({ type: MSG.OPEN_OPTIONS });
     return undefined;
+  }
+
+  /**
+   * The error, and what happens next: what is saved and how to carry on from it
+   * (the shortcut resumes where it stopped), and that a lost connection is
+   * resumed by itself once the computer is back online.
+   */
+  function errorWithNextStep(code) {
+    const parts = [errorText(code)];
+    if (RESUMABLE_ERRORS.has(code)) {
+      if (code === 'network' && !framesMode()) parts.push(t('error_network_auto_resume'));
+      const key = shortcut('toggle-descriptions');
+      if (script?.cues?.length && script.completedUntil > 0 && !script.complete) {
+        parts.push(key ? t('error_saved_resume', savedMinutes(script), key) : t('error_saved_resume_button', savedMinutes(script)));
+      } else if (key) parts.push(t('error_try_again_key', key));
+    }
+    return parts.join(' ');
   }
 
   /** Progress messages from the extension about the video shown here. */
@@ -759,6 +786,7 @@ function main() {
       if (err?.code !== 'frames-not-ready') return onGenerationError(err?.code || 'frames-failed');
     }
     live = true;
+    blankFrames = 0;
     liveSeq += 1;
     framesInFlight = false;
     queuedWindow = null;
@@ -805,6 +833,12 @@ function main() {
         sampler.add(captureFrame(video, frameOptions()));
       } catch (err) {
         if (err?.code !== 'frames-not-ready') onLiveError(err?.code || 'frames-failed', err?.detail);
+        return;
+      }
+      blankFrames = canvasLooksBlank(frameCanvas) ? blankFrames + 1 : 0;
+      if (blankFrames >= BLANK_FRAMES_LIMIT) {
+        blankFrames = 0;
+        onLiveError('frames-protected');
         return;
       }
     }
@@ -1085,6 +1119,11 @@ function main() {
     }
     if (!script) {
       if (!settings.enabled) await setSettings({ enabled: true }).catch(() => {});
+      generate();
+      return;
+    }
+    // Stopped part-way by an error: the shortcut carries on from where it stopped.
+    if (settings.enabled && !script.complete && RESUMABLE_ERRORS.has(errorCode)) {
       generate();
       return;
     }

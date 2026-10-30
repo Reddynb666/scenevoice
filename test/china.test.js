@@ -294,7 +294,7 @@ describe('messages', () => {
     expect(errorMessage('bad-key', 'gemini')).toBe('Gemini API 密钥无效，请在 SceneVoice 设置页检查。');
     expect(errorMessage('bad-key')).toBe('Gemini API 密钥无效，请在 SceneVoice 设置页检查。');
     // No Qwen wording of its own: the shared message.
-    expect(errorMessage('too-long', 'qwen')).toBe('这段视频超出了模型的处理长度，请重试。');
+    expect(errorMessage('too-long', 'qwen')).toBe('这段视频即使拆成小段，模型也处理不了。请在设置页换一个模型再试。');
     expect(errorMessage('frames-tainted', 'qwen')).toMatch(/^SceneVoice 截不到这个视频的画面：.*跨域保护/);
     expect(errorMessage('made-up', 'qwen')).toBe('出现了问题，请重试。');
   });

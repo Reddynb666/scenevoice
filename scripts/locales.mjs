@@ -59,6 +59,7 @@ export const STRINGS = {
     en: 'SceneVoice is creating descriptions. This takes about half a minute for every 5 minutes of video. You can keep watching.',
     zh_CN: 'SceneVoice 正在生成口述，每 5 分钟视频约需半分钟，你可以继续观看。',
   },
+  status_back_online: { en: 'Back online. Carrying on with the descriptions.', zh_CN: '网络已恢复，继续生成口述。' },
   status_resuming: { en: 'Continuing descriptions for this video.', zh_CN: '继续为这个视频生成口述。' },
   status_resuming_loaded: {
     en: 'Saved descriptions loaded for the first $1 minutes ($2). Creating the rest.',
@@ -202,14 +203,17 @@ export const STRINGS = {
     zh_CN: '所选的 Gemini 模型已不可用，请在设置页换一个。',
   },
   error_quota: {
-    en: 'Your Gemini quota is used up for now. Try again later; descriptions made so far are saved.',
-    zh_CN: 'Gemini 用量已达上限，请稍后再试；已生成的口述都已保存。',
+    en: 'Your Gemini quota is used up for now. Try again in a few minutes (a daily limit resets the next day), or pick another model on the settings page: each has its own quota.',
+    zh_CN: 'Gemini 用量已达上限。请过几分钟再试（每日上限要到第二天才恢复），或在设置页换一个模型，每个模型的额度是分开的。',
   },
   error_video_unsupported: {
     en: 'Gemini cannot watch this video. It may be private, age-restricted or unavailable in some regions.',
     zh_CN: 'Gemini 无法读取这个视频，它可能是私享、有年龄限制或在部分地区不可用。',
   },
-  error_too_long: { en: 'This part of the video is too long for the model. Try again.', zh_CN: '这段视频超出了模型的处理长度，请重试。' },
+  error_too_long: {
+    en: 'The model could not take in this part of the video, even split into smaller pieces. Pick another model on the settings page and try again.',
+    zh_CN: '这段视频即使拆成小段，模型也处理不了。请在设置页换一个模型再试。',
+  },
   error_server: { en: 'The Gemini service had a problem. Try again in a moment.', zh_CN: 'Gemini 服务出现问题，请稍后重试。' },
   error_request_failed: { en: 'The request to Gemini failed. Try again.', zh_CN: '向 Gemini 发送请求失败，请重试。' },
   error_network: {
@@ -232,7 +236,10 @@ export const STRINGS = {
     en: 'The video is not ready yet. Start playing it, then try again.',
     zh_CN: '视频还没加载好，请先播放，然后再试。',
   },
-  error_live: { en: 'Live streams cannot be described yet.', zh_CN: '暂不支持描述直播。' },
+  error_live: {
+    en: 'This is a live stream, and live streams cannot be described yet. Once it has ended and a recording is up, open the recording and try again.',
+    zh_CN: '这是直播，暂不支持生成口述。直播结束、有回放后，打开回放再试。',
+  },
   error_extension_reloaded: {
     en: 'SceneVoice was updated or restarted. Reload this page to continue.',
     zh_CN: 'SceneVoice 已更新或重启，请刷新页面后继续。',
@@ -260,6 +267,23 @@ export const STRINGS = {
     en: 'The pictures of that moment are no longer at hand. Play a few seconds around it again, then try again.',
     zh_CN: '那一刻的画面已经不在缓存里了。请回到那附近重新播放几秒，然后再试。',
   },
+  error_frames_protected: {
+    en: 'This video is protected (DRM, common for paid or members-only videos): the browser shows SceneVoice only a black picture, so no descriptions can be made. Free videos on the same site usually work.',
+    zh_CN: '这个视频受版权保护（DRM，付费或会员视频常见），浏览器只给 SceneVoice 黑屏画面，所以无法生成口述。同一网站上的免费视频一般可以。',
+  },
+  error_network_auto_resume: {
+    en: 'SceneVoice carries on by itself when the connection is back.',
+    zh_CN: '网络恢复后会自动继续。',
+  },
+  error_saved_resume: {
+    en: 'Descriptions for the first $1 minutes are saved. Press $2 to carry on from where it stopped.',
+    zh_CN: '前 $1 分钟的口述已保存，按 $2 从中断处继续。',
+  },
+  error_saved_resume_button: {
+    en: 'Descriptions for the first $1 minutes are saved. Use the SceneVoice button in the player to carry on from where it stopped.',
+    zh_CN: '前 $1 分钟的口述已保存，用播放器上的 SceneVoice 按钮可从中断处继续。',
+  },
+  error_try_again_key: { en: 'Press $1 to try again.', zh_CN: '按 $1 重试。' },
   error_frames_failed: { en: 'Taking a picture of the video failed. Try again.', zh_CN: '截取视频画面失败，请重试。' },
   error_frames_missing: { en: 'No pictures of the video reached the model. Try again.', zh_CN: '没有画面发送给模型，请重试。' },
   error_provider_unsupported: {

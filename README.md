@@ -113,6 +113,7 @@ YouTube and Gemini are usually not reachable from mainland China. This prototype
 ### Known limitations
 
 - **Pictures protected by the browser (cross-origin).** When a video is loaded from another site without that site's permission (CORS), the browser "taints" the canvas and refuses to hand its picture to the page. SceneVoice then says that it cannot take pictures from this video and that no descriptions can be made for it, and sends nothing. Some Bilibili videos may play in Bilibili's own `<bwp-video>` element rather than a `<video>`; it cannot be drawn on a canvas and gets a similar message.
+- **Protected (DRM) video.** Paid or members-only videos are often encrypted, and the browser then draws them as solid black without any error. After about 12 seconds of black pictures in a row SceneVoice stops taking pictures and says the video is protected. (A fade to black in a film is much shorter.)
 - On first viewing, descriptions come a few seconds late, and parts you skip are not described. The model sees still pictures only: it misses movement between them and all sound.
 - Cost: about 5 requests per minute of video, each with up to 6 small pictures, billed to your Alibaba Cloud account.
 - Bilibili does not document its page structure or web APIs, and they may change. Viewers who are not logged in may get no subtitles. Bangumi (番剧) and live streams, players embedded in other sites and the mobile site are not supported.

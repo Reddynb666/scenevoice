@@ -27,6 +27,12 @@ export const DEFAULT_QWEN_MODEL = 'qwen-vl-max';
  * can be lowered per computer with the qwenMaxFrames local setting).
  */
 export const FRAME_SAMPLING = Object.freeze({ intervalSeconds: 2, windowSeconds: 12, maxFrames: 6, maxWidth: 640, quality: 0.7 });
+/**
+ * Protected (DRM) video draws as solid black: after this many black pictures in
+ * a row (about 12 seconds of playback) SceneVoice stops and says why. A fade to
+ * black in a film is far shorter.
+ */
+export const BLANK_FRAMES_LIMIT = 6;
 
 /** Settings synced across the user's browsers (no secrets here). */
 export const DEFAULT_SETTINGS = Object.freeze({

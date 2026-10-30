@@ -19,7 +19,7 @@ let fake;
 let said;
 let video;
 const playback = { paused: true };
-const pixels = { tainted: false };
+const pixels = { tainted: false, black: false };
 const listeners = [];
 const fetched = [];
 /** The saved script, as the service worker would keep it. */
@@ -122,7 +122,13 @@ beforeAll(async () => {
     playback.paused = false;
   });
   // jsdom has no canvas: draw nothing and hand back a tiny JPEG, or refuse as a tainted canvas does.
-  HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
+  // A protected (DRM) video draws solid black; anything else, some grey.
+  HTMLCanvasElement.prototype.getContext = function context() {
+    return {
+      drawImage() {},
+      getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(pixels.black ? 0 : 128) }),
+    };
+  };
   HTMLCanvasElement.prototype.toDataURL = () => {
     if (pixels.tainted) throw new DOMException('Tainted canvases may not be exported.', 'SecurityError');
     return 'data:image/jpeg;base64,/9j/AAAA';
@@ -236,4 +242,24 @@ describe('a Bilibili video page', () => {
     await playTo(14);
     expect(sent(MSG.GEN_FRAMES)).toHaveLength(before);
   }, 15000);
+
+  it('stops and says why when a protected (DRM) video gives only black pictures', async () => {
+    pixels.tainted = false;
+    pixels.black = true;
+    // An earlier test switched descriptions off; pictures are taken only while they are on.
+    await chrome.storage.sync.set({ settings: { ...fake.areas.sync.settings, enabled: true } });
+    await sleep(50);
+    playback.paused = true;
+    video.currentTime = 0;
+    const DRM = 'BV1Qy411c7Dr';
+    jsdom.reconfigure({ url: `https://www.bilibili.com/video/${DRM}/` });
+    await vi.waitFor(async () => expect(await tabState()).toMatchObject({ videoId: `bili:${DRM}` }), { timeout: 3000 });
+    await popupAction('generate');
+    await vi.waitFor(async () => expect((await tabState()).status).toBe('live'));
+    await playTo(16);
+    await vi.waitFor(async () => expect(await tabState()).toMatchObject({ errorCode: 'frames-protected' }));
+    expect(said().at(-1)).toMatch(/^This video is protected \(DRM/);
+    expect((await tabState()).status).not.toBe('live');
+    pixels.black = false;
+  }, 20000);
 });
