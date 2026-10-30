@@ -1,4 +1,5 @@
-// Web worker inside the offscreen document: runs the long Gemini requests.
+// Web worker inside the offscreen document: runs the long model requests
+// (Gemini, and Qwen or Gemini with frames for sites Gemini cannot open by link).
 //
 // Why here: a request that describes five minutes of video takes 30–90 seconds.
 // Chrome terminates an extension service worker when a fetch takes longer than
@@ -7,11 +8,16 @@
 // page's context. The offscreen document is an extension page with the
 // extension's own host permissions, and this worker keeps running inside it.
 //
-// Messages from the page: {id, cmd: 'start'|'abort'|'status'|'ask'|'revise', ...}.
+// Messages from the page: {id, cmd: 'start'|'abort'|'status'|'ask'|'revise'|'frames', ...}.
+// 'ask' and 'revise' carry mode 'frames' and a provider when the video is shown
+// to the model as pictures (see shared/providers.js); 'frames' describes one
+// stretch of video from its pictures.
 // Replies: {id, ...}. Events (no id): {event: 'started'|'chunk'|'done'|'error'|'stopped'|'model', key, ...}.
 
 import { CHUNK_SECONDS } from '../shared/constants.js';
-import { GeminiClient, GeminiError } from '../shared/gemini.js';
+import { askFrames, createClient, describeFrames, reviseFrames } from '../shared/describe.js';
+import { ApiError } from '../shared/errors.js';
+import { GeminiClient } from '../shared/gemini.js';
 import { runAsk, runGeneration, runRevision } from '../shared/generation.js';
 
 /** @type {Map<string, {done:number,total:number,chunkStartedAt:number,chunkMs:number[],controller:AbortController,videoId:string,lang:string}>} */
@@ -72,7 +78,7 @@ function start({ key, config, params, script, force }) {
     })
     .catch((err) => {
       if (!mine()) return;
-      const code = err instanceof GeminiError ? err.code : 'unknown';
+      const code = err instanceof ApiError ? err.code : 'unknown';
       if (code === 'aborted') self.postMessage({ event: 'stopped', key, videoId: job.videoId, lang: job.lang });
       else self.postMessage({ event: 'error', key, videoId: job.videoId, lang: job.lang, code, detail: err?.detail || String(err?.message || '') });
     })
@@ -99,22 +105,33 @@ function status({ key }) {
   return { jobs: [...jobs.entries()].map(([k, job]) => ({ key: k, videoId: job.videoId, lang: job.lang, ...jobInfo(job) })) };
 }
 
-const failure = (err) => ({ error: err instanceof GeminiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || '') });
+const failure = (err) => ({ error: err instanceof ApiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || '') });
 
-async function ask({ config, params }) {
-  const client = new GeminiClient(config);
+async function ask({ mode, provider, config, params }) {
   try {
-    return await runAsk(client, params);
+    if (mode === 'frames') return await askFrames(provider, createClient(provider, config), params);
+    return await runAsk(new GeminiClient(config), params);
   } catch (err) {
     return failure(err);
   }
 }
 
 /** Describe one moment again. Replies { cue }, where cue is null when there is nothing there to describe. */
-async function revise({ config, params }) {
-  const client = new GeminiClient(config);
+async function revise({ mode, provider, config, params }) {
   try {
-    return { cue: await runRevision(client, params) };
+    if (mode === 'frames') return { cue: await reviseFrames(provider, createClient(provider, config), params) };
+    return { cue: await runRevision(new GeminiClient(config), params) };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+/** Describe one stretch of video from its frames. Replies { chunk, model }. */
+async function frames({ provider, config, params }) {
+  try {
+    const client = createClient(provider, config);
+    const chunk = await describeFrames(provider, client, params);
+    return { chunk, model: client.model || '' };
   } catch (err) {
     return failure(err);
   }
@@ -132,6 +149,7 @@ self.onmessage = async ({ data }) => {
     else if (cmd === 'status') reply = status(data);
     else if (cmd === 'ask') reply = await ask(data);
     else if (cmd === 'revise') reply = await revise(data);
+    else if (cmd === 'frames') reply = await frames(data);
     else reply = { error: 'unknown-command' };
   } catch (err) {
     reply = { error: 'unknown', detail: String(err?.message || err) };

@@ -10,8 +10,17 @@ export function t(key, ...subs) {
   return key;
 }
 
-export function errorMessage(code) {
-  const msg = t(`error_${String(code || 'unknown').replace(/-/g, '_')}`);
+/**
+ * The message for an error code. A provider other than Gemini may have its own
+ * words for it (error_qwen_bad_key): the Gemini messages name Gemini.
+ */
+export function errorMessage(code, provider = '') {
+  const key = String(code || 'unknown').replace(/-/g, '_');
+  if (provider && provider !== 'gemini') {
+    const own = t(`error_${provider}_${key}`);
+    if (!own.startsWith('error_')) return own;
+  }
+  const msg = t(`error_${key}`);
   return msg.startsWith('error_') ? t('error_unknown') : msg;
 }
 

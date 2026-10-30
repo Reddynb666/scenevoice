@@ -2,7 +2,7 @@
 
 Last updated: 30 October 2026
 
-SceneVoice is a browser extension that creates audio description for YouTube videos. It is designed so that the developer never sees your data.
+SceneVoice is a browser extension that creates audio description for YouTube videos and, experimentally, Bilibili videos. It is designed so that the developer never sees your data.
 
 ## What SceneVoice does not do
 
@@ -28,25 +28,33 @@ If you change the API address in Advanced settings to a relay service, the same 
 
 On a YouTube video page, SceneVoice also asks YouTube itself for that video's caption timing and category (the watch page and its caption file), the same way the YouTube player does when you turn on captions. These requests go only to YouTube, from the YouTube page you are already on, and contain nothing but the video's address. The timing is used to fit descriptions between lines of dialogue, and the category (for example "Education" or "Music") to choose the mode and detail for the kind of video; neither is stored or sent anywhere else.
 
+### Qwen, and Bilibili
+
+Qwen cannot open a video by its address, and Gemini cannot open Bilibili's. With Qwen (on either site), or with any model on Bilibili, SceneVoice instead takes a scaled-down picture (at most 640 pixels wide, JPEG) of the video playing in your tab every 2 seconds while descriptions are being made, and sends up to 6 at a time, with the title, uploader and description, to the model you chose for that site. Asking a question or marking a description as wrong sends a few pictures of that moment. With Qwen, the request goes to Alibaba Cloud Model Studio (`https://dashscope.aliyuncs.com`, or the address you set) with your Qwen API key in a request header, under Alibaba Cloud's terms. The pictures are kept in the tab's memory for a minute or two (to answer a question about the moment) and are never saved.
+
+On a Bilibili video page, SceneVoice asks Bilibili itself, from that page and as the page does, for the video's title, uploader, description, section and parts, and for its CC subtitle files, to fit descriptions between lines of dialogue and to choose the mode and detail for the kind of video. These requests go only to Bilibili (`api.bilibili.com` and its subtitle file hosts); nothing from them is stored or sent elsewhere.
+
 No other network requests are made.
 
 ## What is stored on your computer
 
-- **Your API key**, in the browser's local extension storage (`chrome.storage.local`). It never leaves your computer except as described above, and it is never placed in a URL. Remove it at any time on the settings page.
+- **Your API keys** (Gemini, Qwen), with the model and address for each, in the browser's local extension storage (`chrome.storage.local`). It never leaves your computer except as described above, and it is never placed in a URL. Remove it at any time on the settings page.
 - **Descriptions** that have been generated, keyed by video and language, so a video is described only once, with the kind of video Gemini judged it to be (entertainment or tutorial). The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
 - **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server) and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
-- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, language and the built-in voice you chose for each language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
 
 Nothing is stored anywhere else.
 
 ## Permissions the extension asks for
 
 - **Read and change data on youtube.com** — to follow the video's playback, read its caption timing, and show the player button, overlay and question dialog.
+- **Read and change data on www.bilibili.com/video/** — the same, on Bilibili video pages only (experimental).
 - **generativelanguage.googleapis.com** — to call the Gemini API.
+- **dashscope.aliyuncs.com** — to call the Qwen API (Alibaba Cloud Model Studio).
 - **Storage** — to keep your key, settings and generated descriptions on your computer.
 - **Text-to-speech** — for the optional built-in voice.
-- **Active tab** — so the toolbar popup can tell whether the current tab is a YouTube video.
-- **Offscreen document** — a hidden extension page in which the requests to the Gemini API run. They are made from there rather than from the YouTube page, so your API key never enters the YouTube page and the requests are not subject to YouTube's own page policies.
+- **Active tab** — so the toolbar popup can tell whether the current tab is a video SceneVoice supports.
+- **Offscreen document** — a hidden extension page in which the requests to the Gemini or Qwen API run. They are made from there rather than from the YouTube page, so your API key never enters the YouTube page and the requests are not subject to YouTube's own page policies.
 - **Optional: other websites** — requested only if you enter a custom API address, and only for that address.
 
 ## Children

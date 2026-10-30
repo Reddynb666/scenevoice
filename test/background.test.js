@@ -216,3 +216,109 @@ describe('a description marked as wrong', () => {
     expect(store.local.apiKey).toBe('test-key');
   });
 });
+
+describe('descriptions from frames (Bilibili, Qwen)', () => {
+  const BILI = 'bili:BV1GJ411x7h7';
+  const KEY = `script:${BILI}:zh-CN`;
+  const bilibili = {
+    id: ID,
+    origin: 'https://www.bilibili.com',
+    url: 'https://www.bilibili.com/video/BV1GJ411x7h7/',
+    tab: { id: 12, url: 'https://www.bilibili.com/video/BV1GJ411x7h7/?spm_id_from=333' },
+    frameId: 0,
+  };
+  const frame = (time, data = '/9j/AAAA') => ({ time, data });
+  const chop = { start: 6, gap: 4, kind: 'visual', priority: 1, brief: 'A man dices chicken.', standard: 'A man dices chicken on a board.', detailed: 'A man dices chicken on a board.' };
+  const stretch = (start, end, extra = {}) => ({
+    type: MSG.GEN_FRAMES,
+    videoId: BILI,
+    lang: 'zh-CN',
+    duration: 30,
+    meta: { title: '宫保鸡丁的做法', channel: '厨师小王', description: '家常菜' },
+    window: { start, end },
+    frames: [frame(start + 0.2), frame(start + 2.2), frame(start + 4.2)],
+    ...extra,
+  });
+
+  beforeEach(() => {
+    for (const k of Object.keys(store)) delete store[k];
+    store.local = { apiKey: '', qwenApiKey: 'qwen-secret-key', qwenModel: 'qwen-vl-max' };
+    workerCalls.length = 0;
+    worker = (data) => (data.cmd === 'frames' ? { chunk: { cues: data.params.window.start < 6 ? [chop] : [], characters: [{ label: 'the man in the apron' }], videoType: 'tutorial' }, model: 'qwen-vl-max' } : undefined);
+  });
+
+  it('has Qwen describe a stretch with the key from this computer, and saves it as described', async () => {
+    const reply = await deliver(stretch(0, 12, { frames: [frame(0.2), frame(2.2), { time: 4, data: 'data:image/jpeg;base64,AAAA' }, { time: NaN, data: 'AAAA' }, frame(6.2)] }), bilibili);
+    expect(reply).toEqual({ status: 'ok', cues: [chop], cueCount: 1, completedUntil: 12, complete: false });
+
+    expect(workerCalls).toHaveLength(1);
+    const call = workerCalls[0];
+    expect(call).toMatchObject({ cmd: 'frames', provider: 'qwen', config: { apiKey: 'qwen-secret-key', model: 'qwen-vl-max' } });
+    expect(call.params).toMatchObject({ lang: 'zh-CN', duration: 30, window: { start: 0, end: 12 }, meta: { title: '宫保鸡丁的做法', channel: '厨师小王' } });
+    // Only well-formed pictures go on: no data: prefix, a real time.
+    expect(call.params.frames).toEqual([frame(0.2), frame(2.2), frame(6.2)]);
+
+    expect(store[KEY]).toMatchObject({ videoId: BILI, mode: 'frames', provider: 'qwen', model: 'qwen-vl-max', covered: [[0, 12]], completedUntil: 12, complete: false, videoType: 'tutorial' });
+    expect(store[KEY].cues).toEqual([chop]);
+
+    // The next stretch: the people seen so far and the latest descriptions go with it.
+    const next = await deliver(stretch(12, 24), bilibili);
+    expect(next).toMatchObject({ status: 'ok', cueCount: 1, completedUntil: 24 });
+    expect(workerCalls[1].params.characters).toEqual([{ label: 'the man in the apron' }]);
+    expect(workerCalls[1].params.recent).toEqual([{ start: 6, text: chop.standard }]);
+    expect(store[KEY].covered).toEqual([[0, 24]]);
+
+    // The last stretch completes the video.
+    expect(await deliver(stretch(24, 30), bilibili)).toMatchObject({ status: 'done', complete: true, completedUntil: 30 });
+  });
+
+  it('keeps the key out of every reply to the page', async () => {
+    const status = await deliver({ type: MSG.GET_STATUS }, bilibili);
+    expect(status).toMatchObject({ hasKey: false, keys: { gemini: false, qwen: true } });
+    expect(JSON.stringify(status)).not.toContain('qwen-secret-key');
+    expect(JSON.stringify(await deliver(stretch(0, 12), bilibili))).not.toContain('qwen-secret-key');
+  });
+
+  it('asks for the Qwen key when there is none, and sends nothing', async () => {
+    store.local = { apiKey: 'gemini-key' };
+    expect(await deliver(stretch(0, 12), bilibili)).toEqual({ error: 'no-key' });
+    expect(workerCalls).toEqual([]);
+  });
+
+  it('refuses frames that are not pictures, a page that is not a Bilibili video, and another site’s video id', async () => {
+    expect(await deliver(stretch(0, 12, { frames: [{ time: 1, data: '<script>' }] }), bilibili)).toEqual({ error: 'frames-missing' });
+    expect(await deliver(stretch(0, 12), webPage)).toEqual({ error: 'forbidden' });
+    const home = { ...bilibili, url: 'https://www.bilibili.com/', tab: { id: 12, url: 'https://www.bilibili.com/' } };
+    expect(await deliver(stretch(0, 12), home)).toEqual({ error: 'forbidden' });
+    const embedded = { ...bilibili, frameId: 3, tab: { id: 13, url: 'https://example.com/' } };
+    expect(await deliver(stretch(0, 12), embedded)).toEqual({ error: 'forbidden' });
+    expect(await deliver(stretch(0, 12, { videoId: 'abcdefghijk' }), bilibili)).toEqual({ error: 'unknown' });
+    expect(workerCalls).toEqual([]);
+  });
+
+  it('leaves YouTube with Gemini as it was: no frames there, and no video jobs on Bilibili', async () => {
+    store.local = { apiKey: 'gemini-key', qwenApiKey: 'qwen-secret-key' };
+    expect(await deliver(stretch(0, 12, { videoId: 'abcdefghijk' }), youtube)).toEqual({ error: 'provider-unsupported' });
+    expect(await deliver({ type: MSG.GEN_START, videoId: BILI, duration: 30, meta: {}, lang: 'zh-CN' }, bilibili)).toEqual({ error: 'provider-unsupported' });
+    expect(workerCalls).toEqual([]);
+  });
+
+  it('answers a question on Bilibili from pictures of the moment, through Qwen', async () => {
+    worker = (data) => (data.cmd === 'ask' ? { text: '在 0:12 处：一盘鸡丁。', time: 12 } : undefined);
+    const params = { videoId: BILI, meta: { title: 'T' }, time: 12, duration: 30, question: '盘子里是什么？', nearbyText: '', lang: 'zh-CN' };
+    expect(await deliver({ type: MSG.ASK, params }, bilibili)).toEqual({ error: 'frames-missing' });
+    expect(await deliver({ type: MSG.ASK, params: { ...params, frames: [frame(11.5), frame(12)] } }, bilibili)).toEqual({ text: '在 0:12 处：一盘鸡丁。', time: 12 });
+    expect(workerCalls.at(-1)).toMatchObject({ cmd: 'ask', mode: 'frames', provider: 'qwen', params: { question: '盘子里是什么？', frames: [frame(11.5), frame(12)] } });
+  });
+
+  it('describes a marked moment again from its pictures', async () => {
+    store[KEY] = { version: 2, videoId: BILI, lang: 'zh-CN', duration: 30, cues: [chop], characters: [], covered: [[0, 12]], completedUntil: 12, complete: false, mode: 'frames' };
+    const fixed = { ...chop, standard: 'A man slices chicken breast.', revised: true };
+    worker = (data) => (data.cmd === 'revise' ? { cue: fixed } : undefined);
+    const mark = { type: MSG.REVISE, videoId: BILI, lang: 'zh-CN', cue: { start: 6, kind: 'visual', standard: chop.standard }, meta: { title: 'T' }, duration: 30 };
+    expect(await deliver(mark, bilibili)).toEqual({ error: 'frames-missing' });
+    expect(await deliver({ ...mark, frames: [frame(5), frame(7)] }, bilibili)).toEqual({ status: 'revised', cue: fixed });
+    expect(workerCalls.at(-1)).toMatchObject({ cmd: 'revise', mode: 'frames', provider: 'qwen', params: { frames: [frame(5), frame(7)], cue: chop } });
+    expect(store[KEY].cues).toEqual([fixed]);
+  });
+});

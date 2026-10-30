@@ -36,7 +36,7 @@ async function openPage(page, opts = {}) {
     ...opts,
     reply: (msg) => {
       if (msg.type === MSG.GET_VOICES) return { voices: opts.voices ?? VOICES };
-      if (msg.type === MSG.GET_STATUS) return { hasKey: true, shortcuts: opts.shortcuts ?? { 'toggle-descriptions': 'Alt+Shift+D', 'describe-now': 'Alt+Shift+S' } };
+      if (msg.type === MSG.GET_STATUS) return { hasKey: true, shortcuts: opts.shortcuts ?? { 'toggle-descriptions': 'Alt+Shift+D', 'describe-now': 'Alt+Shift+S' }, ...opts.status };
       if (msg.type === MSG.CACHE_INFO) return { count: 0, bytes: 0 };
       return { ok: true };
     },
@@ -302,7 +302,7 @@ describe('popup and the video type', () => {
     expect($('#typeNote').hidden).toBe(true);
 
     await openPage('popup');
-    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/Open a YouTube video/));
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/Open a YouTube or Bilibili video/));
     expect($('#typeNote').hidden).toBe(true);
   });
 
@@ -571,5 +571,113 @@ describe('settings page', () => {
     await vi.waitFor(() => expect(document.querySelectorAll('#shortcuts tr')).toHaveLength(3));
     const rows = [...document.querySelectorAll('#shortcuts tr')].map((tr) => tr.textContent);
     expect(rows).toContain('Speak fasterNot set');
+  });
+});
+
+describe('settings page: models for each site, and the Qwen key', () => {
+  const okChat = { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] }) };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('offers Gemini and Qwen for each site, Gemini on YouTube and Qwen on Bilibili by default, with a hint', async () => {
+    await openPage('options');
+    const youtube = $('#youtubeProvider');
+    const bilibili = $('#bilibiliProvider');
+    await vi.waitFor(() => expect(youtube.value).toBe('gemini'));
+    expect(bilibili.value).toBe('qwen');
+    expect(youtube.labels[0].querySelector('span').textContent).toBe('YouTube videos');
+    expect(bilibili.labels[0].querySelector('span').textContent).toBe('Bilibili videos (experimental)');
+    expect([...bilibili.options].map((o) => o.textContent)).toEqual(['Gemini (Google)', 'Qwen (Alibaba Cloud Model Studio)']);
+    expect(bilibili.getAttribute('aria-describedby')).toBe('providerHint');
+    expect($('#providerHint').textContent).toMatch(/descriptions come a few seconds after the picture/);
+    expect([...document.querySelectorAll('#main h2, #main h3')].slice(0, 4).map((h) => `${h.tagName} ${h.textContent}`)).toEqual([
+      'H2 1. Connect an AI model',
+      'H3 Which model describes each site',
+      'H3 Gemini (Google)',
+      'H3 Qwen (Alibaba Cloud Model Studio)',
+    ]);
+    selectValue(youtube, 'qwen');
+    await vi.waitFor(() => expect(stored().youtubeProvider).toBe('qwen'));
+    // A preference, synced; never a key.
+    expect(JSON.stringify(fake.areas.sync)).not.toMatch(/key/i);
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('saves the Qwen key on this computer only, tests it, and says how it went', async () => {
+    const fetchMock = vi.fn(async () => okChat);
+    vi.stubGlobal('fetch', fetchMock);
+    await openPage('options');
+    expect($('#qwenApiKey').type).toBe('password');
+    expect($('#qwenApiKey').getAttribute('aria-describedby')).toBe('qwenKeyStatus qwenKeyPrivacy');
+    expect($('#qwenKeyStatus').getAttribute('role')).toBe('status');
+    expect($('#qwenModel').value).toBe('qwen-vl-max');
+    $('#qwenApiKey').value = '  sk-qwen-test  ';
+    $('#saveQwenKey').click();
+    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen-vl-max. You are ready to go.'));
+    expect(fake.areas.local.local).toMatchObject({ qwenApiKey: 'sk-qwen-test', qwenModel: 'qwen-vl-max' });
+    expect(fake.areas.sync.settings?.qwenApiKey).toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
+    expect(init.headers.authorization).toBe('Bearer sk-qwen-test');
+  });
+
+  it('says in Chinese when Qwen refuses the key', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'Incorrect API key provided.', code: 'invalid_api_key' } }) })));
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    expect($('#h-qwen').textContent).toBe('通义千问（阿里云百炼）');
+    expect($('#qwenApiKey').labels[0].textContent).toBe('通义千问 API Key');
+    $('#qwenApiKey').value = 'wrong';
+    $('#saveQwenKey').click();
+    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('通义千问 API Key 无效，请在 SceneVoice 设置页检查。'));
+    expect($('#qwenKeyStatus').className).toBe('status-bad');
+  });
+
+  it('removes the Qwen key, and saves another model name', async () => {
+    await openPage('options', { local: { local: { qwenApiKey: 'sk-old' } } });
+    expect($('#qwenKeyStatus').textContent).toMatch(/A key is saved/);
+    $('#qwenModel').value = ' qwen-vl-plus ';
+    $('#qwenModel').dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(fake.areas.local.local.qwenModel).toBe('qwen-vl-plus'));
+    $('#removeQwenKey').click();
+    await vi.waitFor(() => expect(fake.areas.local.local.qwenApiKey).toBe(''));
+    expect($('#qwenKeyStatus').textContent).toBe('Key removed.');
+  });
+});
+
+describe('popup on a Bilibili video', () => {
+  const tab = (state) => (msg) => (msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'bili:BV1GJ411x7h7', title: '宫保鸡丁的做法', lang: 'zh-CN', videoType: '', platform: 'bilibili', provider: 'qwen', inputMode: 'frames', cueCount: 0, ...state } : null);
+
+  it('asks for the Qwen key when it is missing, and not for Gemini’s', async () => {
+    const onlyGemini = { status: { keys: { gemini: true, qwen: false } } };
+    await openPage('popup', { ...onlyGemini, tabReply: tab({ status: 'none' }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('No descriptions yet.'));
+    expect($('#keyBanner').hidden).toBe(false);
+    expect($('#setupBody').textContent).toBe('Add your Qwen API key (Alibaba Cloud Model Studio) to create descriptions on this site.');
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+
+    // The same keys on a YouTube video, which uses Gemini: nothing to ask.
+    await openPage('popup', { ...onlyGemini, tabReply: tab({ status: 'none', platform: 'youtube', provider: 'gemini', videoId: 'abcdefghijk' }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('No descriptions yet.'));
+    expect($('#keyBanner').hidden).toBe(true);
+  });
+
+  it('says it is describing as you watch, offers Stop, and stops on request', async () => {
+    const asked = [];
+    await openPage('popup', { tabReply: (msg) => (asked.push(msg), tab({ status: 'live', cueCount: 3, percent: 20 })(msg)) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('Describing as you watch: 3 descriptions so far. They come a few seconds after the picture.'));
+    expect($('#stop').hidden).toBe(false);
+    expect($('#generate').hidden).toBe(true);
+    expect($('#progressBox').hidden).toBe(true);
+    $('#stop').click();
+    await vi.waitFor(() => expect(asked).toContainEqual({ type: MSG.TAB_ACTION, action: 'stop' }));
+  });
+
+  it('explains an error in Qwen’s words', async () => {
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab({ status: 'error', errorCode: 'frames-tainted' }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/^SceneVoice 截不到这个视频的画面/));
   });
 });

@@ -1,4 +1,4 @@
-// Offscreen document: hosts the worker that talks to Gemini (see worker.js) and
+// Offscreen document: hosts the worker that talks to the models (see worker.js) and
 // bridges it to the service worker over chrome.runtime messages.
 //
 // Only chrome.runtime is available here, so the service worker supplies the
@@ -36,7 +36,7 @@ worker.onerror = (ev) => {
   console.error('[SceneVoice] worker error', ev.message);
 };
 
-const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask', 'revise']);
+const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask', 'revise', 'frames']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== MSG.OFFSCREEN) return false;

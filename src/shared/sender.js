@@ -1,6 +1,6 @@
 // Who is allowed to send which chrome.runtime message.
 //
-// Content scripts run in the YouTube renderer, so a compromised page process can
+// Content scripts run in the YouTube (or Bilibili) renderer, so a compromised page process can
 // call chrome.runtime.sendMessage. The service worker and the offscreen document
 // must not trust the message body alone: Chrome fills in `sender`, and each
 // message type is accepted only from the contexts that actually send it.
@@ -12,7 +12,7 @@ import { MSG } from './constants.js';
 
 const SERVICE_WORKER_PATHS = new Set(['/background.js', '/']);
 
-/** Hosts and paths the manifest injects the content script into. */
+/** Hosts and paths the manifest injects the content script into on YouTube. */
 export function isYouTubeContentUrl(url) {
   let parsed;
   try {
@@ -23,6 +23,17 @@ export function isYouTubeContentUrl(url) {
   if (parsed.protocol !== 'https:') return false;
   if (parsed.hostname === 'www.youtube.com' || parsed.hostname === 'm.youtube.com') return true;
   return parsed.hostname === 'www.youtube-nocookie.com' && parsed.pathname.startsWith('/embed/');
+}
+
+/** Bilibili video pages (www.bilibili.com/video/…), the only Bilibili pages the manifest injects into. */
+export function isBilibiliContentUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'https:' && parsed.hostname === 'www.bilibili.com' && parsed.pathname.startsWith('/video/');
 }
 
 function extensionPath(url, extensionId) {
@@ -38,7 +49,7 @@ function extensionPath(url, extensionId) {
 }
 
 /**
- * @returns {'external'|'rejected'|'service-worker'|'offscreen'|'extension-page'|'youtube-content'}
+ * @returns {'external'|'rejected'|'service-worker'|'offscreen'|'extension-page'|'youtube-content'|'bilibili-content'}
  */
 export function classifySender(sender, extensionId) {
   if (!sender || typeof sender !== 'object') return 'external';
@@ -61,15 +72,25 @@ export function classifySender(sender, extensionId) {
     return 'rejected';
   }
 
-  if (isYouTubeContentSender(sender)) return 'youtube-content';
+  if (isContentSender(sender, isYouTubeContentUrl)) return 'youtube-content';
+  // Bilibili's content script runs in the top frame only.
+  if (isContentSender(sender, isBilibiliContentUrl) && (sender.frameId == null || sender.frameId === 0)) return 'bilibili-content';
   return 'rejected';
 }
 
-/** Content script on a YouTube tab, with sender.tab describing that same tab. */
-function isYouTubeContentSender(sender) {
+/** The site of a content script that sent a message, or null for any other sender. */
+export function platformOfSender(sender, extensionId) {
+  const kind = classifySender(sender, extensionId);
+  if (kind === 'youtube-content') return 'youtube';
+  if (kind === 'bilibili-content') return 'bilibili';
+  return null;
+}
+
+/** Content script on a page `isPageUrl` accepts, with sender.tab describing that same tab. */
+function isContentSender(sender, isPageUrl) {
   const tab = sender.tab;
   if (!tab || !Number.isInteger(tab.id) || tab.id < 0) return false;
-  if (!isYouTubeContentUrl(sender.url)) return false;
+  if (!isPageUrl(sender.url)) return false;
   if (sender.origin) {
     try {
       if (sender.origin !== new URL(sender.url).origin) return false;
@@ -80,10 +101,10 @@ function isYouTubeContentSender(sender) {
   const frameId = sender.frameId == null ? 0 : sender.frameId;
   if (!Number.isInteger(frameId) || frameId < 0) return false;
   if (frameId !== 0) return true;
-  // Top frame: the tab URL is the same YouTube document (hash and SPA path
-  // can differ briefly; the origin cannot).
+  // Top frame: the tab URL is the same document (hash and SPA path can
+  // differ briefly; the origin cannot).
   if (tab.url) {
-    if (!isYouTubeContentUrl(tab.url)) return false;
+    if (!isPageUrl(tab.url)) return false;
     try {
       if (new URL(tab.url).origin !== new URL(sender.url).origin) return false;
     } catch {
@@ -93,23 +114,27 @@ function isYouTubeContentSender(sender) {
   return true;
 }
 
+/** Content scripts on a video page, of either site. */
+const VIDEO_PAGE = ['youtube-content', 'bilibili-content'];
+
 /** Message types the service worker acts on, and the sender kinds allowed to use them. */
 const BACKGROUND_ALLOW = Object.freeze({
-  // YouTube tab, or the popup (it only needs to know whether a key exists).
-  [MSG.GET_STATUS]: ['youtube-content', 'extension-page'],
-  // Asked by the YouTube tab after the popup tells it to delete.
-  [MSG.DELETE_SCRIPT]: ['youtube-content'],
-  [MSG.GET_SCRIPT]: ['youtube-content'],
-  [MSG.GEN_START]: ['youtube-content'],
-  [MSG.GEN_STOP]: ['youtube-content'],
-  [MSG.GEN_STATUS]: ['youtube-content'],
-  [MSG.ASK]: ['youtube-content'],
+  // Video tab, or the popup (it only needs to know whether a key exists).
+  [MSG.GET_STATUS]: [...VIDEO_PAGE, 'extension-page'],
+  // Asked by the video tab after the popup tells it to delete.
+  [MSG.DELETE_SCRIPT]: VIDEO_PAGE,
+  [MSG.GET_SCRIPT]: VIDEO_PAGE,
+  [MSG.GEN_START]: VIDEO_PAGE,
+  [MSG.GEN_STOP]: VIDEO_PAGE,
+  [MSG.GEN_STATUS]: VIDEO_PAGE,
+  [MSG.ASK]: VIDEO_PAGE,
   // Spends quota and rewrites a cached script: only the tab playing the video.
-  [MSG.REVISE]: ['youtube-content'],
-  [MSG.OPEN_OPTIONS]: ['youtube-content'],
-  [MSG.STOP_SPEAKING]: ['youtube-content'],
-  // Spoken descriptions from the YouTube tab, and the options-page voice test.
-  [MSG.SPEAK]: ['youtube-content', 'extension-page'],
+  [MSG.REVISE]: VIDEO_PAGE,
+  [MSG.GEN_FRAMES]: VIDEO_PAGE,
+  [MSG.OPEN_OPTIONS]: VIDEO_PAGE,
+  [MSG.STOP_SPEAKING]: VIDEO_PAGE,
+  // Spoken descriptions from the video tab, and the options-page voice test.
+  [MSG.SPEAK]: [...VIDEO_PAGE, 'extension-page'],
   [MSG.GET_VOICES]: ['extension-page'],
   [MSG.CACHE_INFO]: ['extension-page'],
   [MSG.CACHE_CLEAR]: ['extension-page'],
@@ -125,7 +150,7 @@ export function authorizeBackgroundMessage(type, sender, extensionId) {
   return allow.includes(classifySender(sender, extensionId));
 }
 
-/** Messages the YouTube content script may act on. */
+/** Messages the content script (YouTube or Bilibili) may act on. */
 export function authorizeContentMessage(type, sender, extensionId) {
   if (typeof type !== 'string') return false;
   const kind = classifySender(sender, extensionId);

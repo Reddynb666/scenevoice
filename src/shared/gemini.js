@@ -2,17 +2,11 @@
 // network calls take an injectable fetch.
 
 import { ANSWER_AT, LANGUAGE_NAMES_EN } from './constants.js';
+import { ApiError } from './errors.js';
 import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
 
-export class GeminiError extends Error {
-  /** @param {string} code  stable code mapped to a localized message */
-  constructor(code, detail = '', status = 0) {
-    super(`${code}${detail ? `: ${detail}` : ''}`);
-    this.code = code;
-    this.detail = detail;
-    this.status = status;
-  }
-}
+/** @see ApiError; Gemini's own name, kept for the code and tests that use it. */
+export class GeminiError extends ApiError {}
 
 const CUE_SCHEMA = {
   type: 'OBJECT',
@@ -325,8 +319,12 @@ const LEADING_TIME = /^[^\d\n]{0,15}?(\d{1,2}:\d{2}(?::\d{2})?)\s*[^\s\d,:，：
  * moment in seconds, for jumping there. A relay that ignores the schema and
  * answers in plain text still gives an answer, about the moment asked.
  */
-export function parseAskResponse(body, { time, duration, lang }) {
-  const { text: raw } = responseText(body);
+export function parseAskResponse(body, ctx) {
+  return parseAnswer(responseText(body).text, ctx);
+}
+
+/** The answer to a question from the model's text, whichever model wrote it (see parseAskResponse). */
+export function parseAnswer(raw, { time, duration, lang }) {
   let json = null;
   try {
     json = extractJson(raw);
@@ -395,6 +393,30 @@ export function buildRevisionRequest({ videoId, meta, duration, cue, characters,
       maxOutputTokens: Math.min(outputLimit(model), 8192),
       responseMimeType: 'application/json',
       responseSchema: REVISION_SCHEMA,
+    },
+  };
+}
+
+const FRAME_SCHEMAS = { script: RESPONSE_SCHEMA, ask: ASK_SCHEMA, revise: REVISION_SCHEMA };
+
+/**
+ * A request built from still frames instead of a video link: for videos Gemini
+ * cannot open by URL (Bilibili). `prompt` comes from frames.js; each frame is a
+ * label and a JPEG image, in time order.
+ * @param {{kind: 'script'|'ask'|'revise', system: string, frames: Array<{label: string, data: string}>, text: string, maxTokens: number, temperature: number, model: string}} prompt
+ */
+export function buildFramesRequest({ kind, system, frames, text, maxTokens, temperature, model }) {
+  const parts = [];
+  for (const f of frames) parts.push({ text: f.label }, { inlineData: { mimeType: 'image/jpeg', data: f.data } });
+  parts.push({ text });
+  return {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      ...tuningFor(model, temperature),
+      maxOutputTokens: Math.min(outputLimit(model), maxTokens),
+      responseMimeType: 'application/json',
+      responseSchema: FRAME_SCHEMAS[kind],
     },
   };
 }

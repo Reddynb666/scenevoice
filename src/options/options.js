@@ -1,4 +1,5 @@
-import { DEFAULT_API_BASE, LANGUAGES, MSG } from '../shared/constants.js';
+import { DEFAULT_API_BASE, DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL, LANGUAGES, MSG } from '../shared/constants.js';
+import { ApiError } from '../shared/errors.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
 import { typeChosenText } from '../shared/labels.js';
@@ -6,6 +7,7 @@ import { CHOICES, voiceFor, voicePatch, voiceTestMessage } from '../shared/setti
 import { getLocal, getSettings, resetSettings, resolveLanguage, setLocal, setSettings } from '../shared/storage.js';
 import { groupVoices, languageMatch, pickVoice } from '../shared/voices.js';
 import { GeminiClient, GeminiError, chooseModel, usableModels } from '../shared/gemini.js';
+import { QwenClient } from '../shared/qwen.js';
 
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
@@ -143,6 +145,109 @@ async function loadModels({ announce }) {
   select.value = current;
   select.disabled = !models.length;
   if (announce) setStatus(statusEl, models.length ? t('opt_key_ok', current) : errorMessage('no-model'), models.length ? 'good' : 'bad');
+}
+
+/** An address the user typed for an API: https, or http on this computer. */
+function validEndpoint(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
+/** The manifest grants only the default addresses: another one needs the user's permission. */
+async function allowEndpoint(value, defaultBase) {
+  if (new URL(value).origin === new URL(defaultBase).origin) return true;
+  try {
+    return await chrome.permissions.request({ origins: [`${new URL(value).origin}/*`] });
+  } catch {
+    return false;
+  }
+}
+
+// ---------- Qwen ----------
+
+/**
+ * Check the saved Qwen key, address and model with the smallest request (it
+ * uses a few tokens, so only when the user asks). Says how it went.
+ */
+async function testQwen() {
+  const statusEl = $('qwenKeyStatus');
+  const local = await getLocal();
+  if (!local.qwenApiKey) {
+    setStatus(statusEl, t('opt_key_missing'), 'warn');
+    return;
+  }
+  setStatus(statusEl, t('opt_key_testing'));
+  try {
+    await new QwenClient({ apiKey: local.qwenApiKey, apiBase: local.qwenApiBase, model: local.qwenModel }).test();
+    setStatus(statusEl, t('opt_key_ok', local.qwenModel), 'good');
+  } catch (err) {
+    setStatus(statusEl, errorMessage(err instanceof ApiError ? err.code : 'unknown', 'qwen'), 'bad');
+  }
+}
+
+function initQwen(local) {
+  $('qwenApiKey').value = local.qwenApiKey;
+  $('qwenModel').value = local.qwenModel || DEFAULT_QWEN_MODEL;
+  $('qwenApiBase').value = local.qwenApiBase || DEFAULT_QWEN_API_BASE;
+  if (local.qwenApiKey) setStatus($('qwenKeyStatus'), t('opt_qwen_key_saved'));
+
+  $('toggleQwenKey').addEventListener('click', (e) => {
+    const input = $('qwenApiKey');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    e.currentTarget.setAttribute('aria-pressed', String(show));
+    e.currentTarget.textContent = show ? t('opt_key_hide') : t('opt_key_show');
+  });
+
+  $('saveQwenKey').addEventListener('click', async () => {
+    const key = $('qwenApiKey').value.trim();
+    if (!key) {
+      setStatus($('qwenKeyStatus'), t('opt_key_missing'), 'warn');
+      $('qwenApiKey').focus();
+      return;
+    }
+    await setLocal({ qwenApiKey: key, qwenModel: $('qwenModel').value.trim() || DEFAULT_QWEN_MODEL });
+    await testQwen();
+  });
+  $('qwenApiKey').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('saveQwenKey').click();
+  });
+
+  $('removeQwenKey').addEventListener('click', async () => {
+    await setLocal({ qwenApiKey: '' });
+    $('qwenApiKey').value = '';
+    setStatus($('qwenKeyStatus'), t('opt_key_removed'));
+  });
+
+  $('qwenModel').addEventListener('change', async (e) => {
+    const model = e.target.value.trim() || DEFAULT_QWEN_MODEL;
+    e.target.value = model;
+    await setLocal({ qwenModel: model });
+    setStatus($('qwenKeyStatus'), t('opt_model_saved', model), 'good');
+  });
+
+  $('saveQwenEndpoint').addEventListener('click', async () => {
+    const value = $('qwenApiBase').value.trim().replace(/\/+$/, '');
+    if (!validEndpoint(value)) {
+      setStatus($('qwenKeyStatus'), t('opt_endpoint_invalid'), 'bad');
+      return;
+    }
+    if (!(await allowEndpoint(value, DEFAULT_QWEN_API_BASE))) {
+      setStatus($('qwenKeyStatus'), t('opt_endpoint_denied'), 'bad');
+      return;
+    }
+    await setLocal({ qwenApiBase: value });
+    await testQwen();
+  });
+  $('resetQwenEndpoint').addEventListener('click', async () => {
+    $('qwenApiBase').value = DEFAULT_QWEN_API_BASE;
+    await setLocal({ qwenApiBase: DEFAULT_QWEN_API_BASE });
+    await testQwen();
+  });
 }
 
 /**
@@ -287,29 +392,14 @@ async function init() {
 
   $('saveEndpoint').addEventListener('click', async () => {
     const value = $('apiBase').value.trim().replace(/\/+$/, '');
-    let ok = false;
-    try {
-      const u = new URL(value);
-      ok = u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname));
-    } catch {
-      ok = false;
-    }
-    if (!ok) {
+    if (!validEndpoint(value)) {
       setStatus($('keyStatus'), t('opt_endpoint_invalid'), 'bad');
       return;
     }
-    if (value !== DEFAULT_API_BASE) {
-      // The manifest only grants the official endpoint; a relay needs the user's permission.
-      let granted = false;
-      try {
-        granted = await chrome.permissions.request({ origins: [`${new URL(value).origin}/*`] });
-      } catch {
-        granted = false;
-      }
-      if (!granted) {
-        setStatus($('keyStatus'), t('opt_endpoint_denied'), 'bad');
-        return;
-      }
+    // The manifest only grants the official endpoint; a relay needs the user's permission.
+    if (!(await allowEndpoint(value, DEFAULT_API_BASE))) {
+      setStatus($('keyStatus'), t('opt_endpoint_denied'), 'bad');
+      return;
     }
     await setLocal({ apiBase: value, model: '' });
     await loadModels({ announce: true });
@@ -319,6 +409,8 @@ async function init() {
     await setLocal({ apiBase: DEFAULT_API_BASE, model: '' });
     await loadModels({ announce: true });
   });
+
+  initQwen(local);
 
   $('testVoice').addEventListener('click', async () => {
     const s = await getSettings();
@@ -341,7 +433,8 @@ async function init() {
     await renderCache();
   });
 
-  if (!local.apiKey) $('apiKey').focus();
+  // No key yet: start where one goes.
+  if (!local.apiKey && !local.qwenApiKey) $('apiKey').focus();
 }
 
 init();

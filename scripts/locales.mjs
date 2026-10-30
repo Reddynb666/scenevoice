@@ -136,6 +136,31 @@ export const STRINGS = {
   announce_fastest: { en: 'That is the fastest.', zh_CN: '已经是最快了。' },
   announce_slowest: { en: 'That is the slowest.', zh_CN: '已经是最慢了。' },
 
+  // ----- describing from frames (Qwen, and any model on Bilibili) -----
+  status_live_start: {
+    en: 'SceneVoice is describing as you watch: every few seconds it sends a picture from the video to $1. Descriptions come a few seconds after the picture, and are saved for the next time you watch.',
+    zh_CN: 'SceneVoice 开始边看边生成口述：每隔几秒把视频画面发给$1。口述会比画面晚几秒，生成的口述会保存，下次观看时按时播报。',
+  },
+  status_live_resuming: {
+    en: 'Describing as you watch again, for the parts without descriptions.',
+    zh_CN: '继续边看边生成口述，只补还没有口述的部分。',
+  },
+  status_live_stopped: {
+    en: 'No more pictures are sent. Descriptions made so far are saved.',
+    zh_CN: '已停止发送画面，已生成的口述都已保存。',
+  },
+  status_live_progress: {
+    en: 'Describing as you watch: $1 descriptions so far, covering $2 minutes of the video.',
+    zh_CN: '正在边看边生成口述：目前 $1 条，覆盖了 $2 分钟的视频。',
+  },
+  live_skipped: {
+    en: 'The last few seconds could not be described; SceneVoice keeps trying. $1',
+    zh_CN: '刚才几秒的画面没能生成口述，会继续尝试。$1',
+  },
+  // Leading space: Chinese puts one between its characters and a Latin name (“发给 Gemini”).
+  provider_name_gemini: { en: 'Gemini', zh_CN: ' Gemini' },
+  provider_name_qwen: { en: 'Qwen', zh_CN: '通义千问' },
+
   // ----- errors -----
   error_no_key: {
     en: 'SceneVoice needs a Gemini API key. The settings page is opening so you can add one.',
@@ -196,6 +221,60 @@ export const STRINGS = {
     zh_CN: '这条描述已经不在保存的口述里了，可能已被替换。',
   },
   error_unknown: { en: 'Something went wrong. Try again.', zh_CN: '出现了问题，请重试。' },
+  error_frames_tainted: {
+    en: 'SceneVoice cannot take pictures from this video: it comes from another site, and the browser keeps its picture from the page (cross-origin protection). No descriptions can be made for it. Try another video.',
+    zh_CN: 'SceneVoice 截不到这个视频的画面：视频来自其他网站，浏览器出于跨域保护不让网页读取画面，所以无法为它生成口述。请换一个视频试试。',
+  },
+  error_frames_unsupported: {
+    en: 'This video plays in a player SceneVoice cannot take pictures from. No descriptions can be made for it yet.',
+    zh_CN: '这个视频用的播放器 SceneVoice 截不到画面，暂时无法为它生成口述。',
+  },
+  error_frames_not_ready: {
+    en: 'The picture is not ready yet. Start playing the video, then try again.',
+    zh_CN: '画面还没加载好，请先播放视频，然后再试。',
+  },
+  error_frames_unavailable: {
+    en: 'The pictures of that moment are no longer at hand. Play a few seconds around it again, then try again.',
+    zh_CN: '那一刻的画面已经不在缓存里了。请回到那附近重新播放几秒，然后再试。',
+  },
+  error_frames_failed: { en: 'Taking a picture of the video failed. Try again.', zh_CN: '截取视频画面失败，请重试。' },
+  error_frames_missing: { en: 'No pictures of the video reached the model. Try again.', zh_CN: '没有画面发送给模型，请重试。' },
+  error_provider_unsupported: {
+    en: 'The model chosen in settings cannot describe videos on this site. Choose another one under “Which model describes each site”.',
+    zh_CN: '设置里选的模型不能为这个网站的视频生成口述，请在“各网站用哪个模型”里换一个。',
+  },
+  // Qwen's own words for errors whose Gemini message names Gemini (see i18n.js errorMessage).
+  error_qwen_no_key: {
+    en: 'SceneVoice needs a Qwen API key for this site. The settings page is opening so you can add one.',
+    zh_CN: 'SceneVoice 在这个网站上需要通义千问 API Key，正在打开设置页面，请添加。',
+  },
+  error_qwen_bad_key: {
+    en: 'The Qwen API key was not accepted. Check it on the SceneVoice settings page.',
+    zh_CN: '通义千问 API Key 无效，请在 SceneVoice 设置页检查。',
+  },
+  error_qwen_forbidden: {
+    en: 'Qwen refused the request. Your account may not have access to this model yet; check it in the Model Studio console.',
+    zh_CN: '通义千问拒绝了请求，可能是账号还没有开通这个模型，请到阿里云百炼控制台检查。',
+  },
+  error_qwen_model_not_found: {
+    en: 'Qwen does not know the model name in settings. Check the name in the Model Studio console.',
+    zh_CN: '通义千问找不到设置里填写的模型名称，请对照阿里云百炼控制台检查。',
+  },
+  error_qwen_no_model: { en: 'Enter a Qwen model name in settings.', zh_CN: '请在设置里填写通义千问的模型名称。' },
+  error_qwen_quota: {
+    en: 'Qwen is refusing requests for now: too many in a short time, or no credit left on the account. Try again later; descriptions made so far are saved.',
+    zh_CN: '通义千问暂时拒绝请求：请求太频繁，或账号余额不足。请稍后再试，已生成的口述都已保存。',
+  },
+  error_qwen_server: { en: 'The Qwen service had a problem. Try again in a moment.', zh_CN: '通义千问服务出现问题，请稍后重试。' },
+  error_qwen_request_failed: { en: 'The request to Qwen failed. Try again.', zh_CN: '向通义千问发送请求失败，请重试。' },
+  error_qwen_network: {
+    en: 'Could not reach the Qwen API. Check your internet connection or the API address in settings.',
+    zh_CN: '无法连接通义千问 API，请检查网络或设置中的 API 地址。',
+  },
+  error_qwen_blocked: { en: 'Qwen declined to describe this picture.', zh_CN: '通义千问拒绝描述这段画面。' },
+  error_qwen_empty_response: { en: 'Qwen returned no answer. Try again.', zh_CN: '通义千问没有返回结果，请重试。' },
+  error_qwen_truncated: { en: 'The answer from Qwen was cut off. Try again.', zh_CN: '通义千问的回答被截断，请重试。' },
+  error_qwen_bad_json: { en: 'Qwen returned an answer SceneVoice could not read. Try again.', zh_CN: '通义千问返回的内容无法解析，请重试。' },
 
   // ----- popup -----
   popup_setup_title: { en: 'Set up SceneVoice', zh_CN: '设置 SceneVoice' },
@@ -218,10 +297,18 @@ export const STRINGS = {
   popup_settings: { en: 'Settings', zh_CN: '设置' },
   popup_all_settings: { en: 'All settings', zh_CN: '全部设置' },
   popup_reload_tab: {
-    en: 'Reload this YouTube tab to start SceneVoice.',
-    zh_CN: '请刷新这个 YouTube 页面以启动 SceneVoice。',
+    en: 'Reload this video page to start SceneVoice.',
+    zh_CN: '请刷新这个视频页面以启动 SceneVoice。',
   },
-  popup_open_video: { en: 'Open a YouTube video to use SceneVoice.', zh_CN: '打开一个 YouTube 视频即可使用 SceneVoice。' },
+  popup_open_video: { en: 'Open a YouTube or Bilibili video to use SceneVoice.', zh_CN: '打开一个 YouTube 或 B 站视频即可使用 SceneVoice。' },
+  popup_setup_body_qwen: {
+    en: 'Add your Qwen API key (Alibaba Cloud Model Studio) to create descriptions on this site.',
+    zh_CN: '添加通义千问（阿里云百炼）API Key 后，就能在这个网站上生成口述。',
+  },
+  popup_live: {
+    en: 'Describing as you watch: $1 descriptions so far. They come a few seconds after the picture.',
+    zh_CN: '正在边看边生成口述，目前 $1 条。口述会比画面晚几秒。',
+  },
   popup_ready: { en: '$1 descriptions ready.', zh_CN: '已就绪：$1 条口述。' },
   popup_partial: {
     en: 'Descriptions ready for the first $1 minutes.',
@@ -291,7 +378,7 @@ export const STRINGS = {
   output_tts: { en: 'Built-in voice', zh_CN: '内置语音' },
   output_tts_hint: { en: 'For listeners without a screen reader.', zh_CN: '适合不使用读屏软件的用户。' },
   set_language: { en: 'Description language', zh_CN: '口述语言' },
-  lang_auto: { en: 'Same as my browser', zh_CN: '与浏览器语言相同' },
+  lang_auto: { en: 'Same as my browser (Chinese on Bilibili)', zh_CN: '与浏览器语言相同（B 站视频用中文）' },
   set_auto_generate: { en: 'Create descriptions automatically', zh_CN: '自动生成口述' },
   set_auto_generate_hint: {
     en: 'Start as soon as you open a video. Uses your API quota for every video you open.',
@@ -413,7 +500,41 @@ export const STRINGS = {
     en: 'AI audio description for YouTube, made for screen reader users.',
     zh_CN: '为读屏用户打造的 YouTube AI 口述影像。',
   },
-  opt_key_title: { en: '1. Connect to Gemini', zh_CN: '1. 连接 Gemini' },
+  opt_key_title: { en: '1. Connect an AI model', zh_CN: '1. 连接 AI 模型' },
+  opt_provider_title: { en: 'Which model describes each site', zh_CN: '各网站用哪个模型' },
+  opt_provider_hint: {
+    en: 'On YouTube, Gemini watches the whole video by its link, so descriptions are ready before each moment. Qwen, and any model on Bilibili, is sent pictures taken from the video as it plays instead: descriptions come a few seconds after the picture, and only for the parts you have watched. Gemini is usually not reachable from mainland China.',
+    zh_CN: '在 YouTube 上，Gemini 通过链接看完整个视频，播放到每一刻之前口述就已准备好。通义千问、以及 B 站上的任何模型，都改为在播放时截取画面发给模型：口述会比画面晚几秒，而且只覆盖你看过的部分。在中国内地通常无法直接使用 Gemini。',
+  },
+  set_provider_youtube: { en: 'YouTube videos', zh_CN: 'YouTube 视频' },
+  set_provider_bilibili: { en: 'Bilibili videos (experimental)', zh_CN: 'B 站视频（实验性）' },
+  provider_gemini: { en: 'Gemini (Google)', zh_CN: 'Gemini（谷歌）' },
+  provider_qwen: { en: 'Qwen (Alibaba Cloud Model Studio)', zh_CN: '通义千问（阿里云百炼）' },
+  opt_qwen_intro: {
+    en: 'Qwen is Alibaba Cloud’s model and works from mainland China. You use your own API key from Alibaba Cloud Model Studio (Bailian); what you use is billed to your Alibaba Cloud account.',
+    zh_CN: '通义千问是阿里云的模型，在中国内地可以直接使用。你使用自己在阿里云百炼申请的 API Key，费用记在你自己的阿里云账号上。',
+  },
+  opt_qwen_step1: { en: 'Open the Alibaba Cloud Model Studio console and sign in:', zh_CN: '打开阿里云百炼控制台并登录：' },
+  opt_qwen_step2: { en: 'Create an API key there and copy it.', zh_CN: '在控制台创建 API Key 并复制。' },
+  opt_qwen_key_label: { en: 'Qwen API key', zh_CN: '通义千问 API Key' },
+  opt_qwen_key_saved: {
+    en: 'A key is saved. Press Save and test to check that it works.',
+    zh_CN: '已保存密钥。按“保存并测试”可以检查它是否可用。',
+  },
+  opt_qwen_privacy: {
+    en: 'Your key is stored only on this computer and is sent only to the Qwen API address below.',
+    zh_CN: '密钥只保存在这台电脑上，只会发送到下方的通义千问 API 地址。',
+  },
+  opt_qwen_model_label: { en: 'Model name', zh_CN: '模型名称' },
+  opt_qwen_model_hint: {
+    en: 'A Qwen model that understands pictures, named as in the Model Studio console. The default is qwen-vl-max; if the console lists another name, enter that.',
+    zh_CN: '需要能看懂图片的通义千问模型，名称以阿里云百炼控制台为准。默认是 qwen-vl-max；如果控制台里的名称不同，请改成控制台里的名称。',
+  },
+  opt_qwen_advanced: { en: 'Advanced: API address', zh_CN: '高级：API 地址' },
+  opt_qwen_endpoint_hint: {
+    en: 'The address of Model Studio’s OpenAI-compatible API. The default is the mainland China region; an account in another region uses the address its console gives.',
+    zh_CN: '阿里云百炼兼容 OpenAI 接口的地址。默认是中国内地地域；其他地域的账号请改用控制台里给出的地址。',
+  },
   opt_key_intro: {
     en: "SceneVoice uses Google's Gemini model to watch the video and write descriptions. You use your own free API key, so there is no account and no subscription.",
     zh_CN: 'SceneVoice 使用谷歌的 Gemini 模型观看视频并撰写口述。你使用自己的免费 API 密钥，无需注册账号，也没有订阅费。',
@@ -488,6 +609,10 @@ export const STRINGS = {
   privacy_2: {
     en: "To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google's terms for the Gemini API apply.",
     zh_CN: '生成口述或回答提问时，视频地址、标题、频道名、简介、你的问题以及最近的口述会连同你的密钥发送给 Gemini API；重新生成某一段时，还会发送你标记有误的那条描述。这些都受谷歌 Gemini API 条款约束。',
+  },
+  privacy_5: {
+    en: 'With Qwen, and on Bilibili, the model cannot open the video by its address: every few seconds a scaled-down picture of the playing video is sent instead, with the title, uploader and description. Alibaba Cloud Model Studio’s terms apply to Qwen. The pictures are kept in memory for a minute or two and never saved.',
+    zh_CN: '使用通义千问、以及在 B 站上时，模型无法通过地址打开视频：改为每隔几秒发送一张缩小的播放画面，连同标题、UP 主和简介。通义千问适用阿里云百炼的条款。画面只在内存里保留一两分钟，不会保存。',
   },
   privacy_3: {
     en: 'Descriptions are saved on this computer so a video is described only once.',

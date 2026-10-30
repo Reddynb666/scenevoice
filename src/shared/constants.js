@@ -4,6 +4,30 @@ export const SCRIPT_VERSION = 2;
 
 export const DEFAULT_API_BASE = 'https://generativelanguage.googleapis.com';
 
+/** Sites SceneVoice runs on. Bilibili is experimental. */
+export const PLATFORMS = Object.freeze(['youtube', 'bilibili']);
+
+/** Models that can write the descriptions (see providers.js). */
+export const PROVIDERS = Object.freeze(['gemini', 'qwen']);
+
+/**
+ * Qwen (通义千问) through Alibaba Cloud Model Studio (阿里云百炼 / DashScope),
+ * OpenAI-compatible mode. 待确认: the mainland China endpoint and the model
+ * name are taken from the DashScope documentation as last known; both can be
+ * changed on the settings page.
+ */
+export const DEFAULT_QWEN_API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+export const DEFAULT_QWEN_MODEL = 'qwen-vl-max';
+
+/**
+ * Pictures taken from the playing video for models that are not sent a link to it.
+ * One frame every intervalSeconds; one request per windowSeconds of video with at
+ * most maxFrames of them, scaled down to maxWidth pixels, as JPEG at `quality`.
+ * 待确认: how many images and how many pixels a request may carry (Qwen's limit
+ * can be lowered per computer with the qwenMaxFrames local setting).
+ */
+export const FRAME_SAMPLING = Object.freeze({ intervalSeconds: 2, windowSeconds: 12, maxFrames: 6, maxWidth: 640, quality: 0.7 });
+
 /** Settings synced across the user's browsers (no secrets here). */
 export const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
@@ -64,6 +88,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   announceStatus: true,
   /** Pause the video while the "ask a question" dialog is open. */
   pauseOnAsk: true,
+  /** The model that describes videos on each site (see providers.js). */
+  youtubeProvider: 'gemini',
+  bilibiliProvider: 'qwen',
 });
 
 /** Allowed values for the choice settings, in the order the cycle shortcuts step through them. */
@@ -154,6 +181,14 @@ export const DEFAULT_LOCAL = Object.freeze({
   apiKey: '',
   model: '',
   apiBase: DEFAULT_API_BASE,
+  /** Qwen: kept here like the Gemini key, so content scripts cannot read it. */
+  qwenApiKey: '',
+  qwenModel: DEFAULT_QWEN_MODEL,
+  qwenApiBase: DEFAULT_QWEN_API_BASE,
+  /** 待确认: whether vision models accept response_format json_object. Off: the reply is parsed leniently. */
+  qwenJsonMode: false,
+  /** 待确认: images per request the account's model accepts. */
+  qwenMaxFrames: FRAME_SAMPLING.maxFrames,
 });
 
 export const LANGUAGES = Object.freeze([
@@ -214,6 +249,8 @@ export const MSG = Object.freeze({
   ASK: 'sv:ask',
   /** A description the user marked as wrong: describe that moment again and replace it in the cache. */
   REVISE: 'sv:revise',
+  /** Frames taken from the playing video, to be described and added to the cache. */
+  GEN_FRAMES: 'sv:gen-frames',
   // background -> content
   COMMAND: 'sv:command',
   TTS_EVENT: 'sv:tts-event',

@@ -1,6 +1,16 @@
-// Content script: follows YouTube playback and delivers descriptions at the right moments.
+// Content script: follows playback on YouTube or Bilibili (see platforms.js)
+// and delivers descriptions at the right moments.
+//
+// How the model sees the video depends on the provider chosen for the site
+// (shared/providers.js). Gemini on YouTube opens the video by its link and
+// describes it ahead of playback: generation runs as a job in the extension.
+// Otherwise this page takes pictures from the playing video every few seconds
+// and sends a few at a time to be described ("frames" mode, `live` below):
+// descriptions then come a few seconds after the picture, and are saved for
+// the next viewing like any others.
 
-import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS, DENSITIES, DETAILS, MODES } from '../shared/constants.js';
+import { MSG, DEFAULT_SETTINGS, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
+import { coverageSeconds, coveredRanges, isCovered, pickEvenly } from '../shared/coverage.js';
 import { t, errorMessage } from '../shared/i18n.js';
 import { readerSpeedLabel, typeAdjustedText } from '../shared/labels.js';
 import { markChoices, nextValue, stepSpeed } from '../shared/settings.js';
@@ -10,29 +20,28 @@ import { chooseUtterance, cueAt, estimateSeconds, formatTime, passesDensity } fr
 import { CueScheduler, mayInterrupt, pickOne } from '../shared/scheduler.js';
 import { fitCuesToDialogue, parseTimedText, speechIntervals } from '../shared/dialogue.js';
 import { dropTextHeardInCaptions } from '../shared/onscreen.js';
-import { pageVideoType, resolveVideoType, typeAdjustments } from '../shared/videotype.js';
+import { resolveVideoType, typeAdjustments } from '../shared/videotype.js';
+import { inputModeFor, providerFor } from '../shared/providers.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
-import { askAboutMoment, reviseDescription, startGeneration, stopGeneration } from './generator.js';
-import {
-  fetchWatchPage,
-  getMeta,
-  getPageDuration,
-  getVideo,
-  isAdShowing,
-  onNavigate,
-  pickCaptionTrack,
-  timedTextUrl,
-  videoIdFromUrl,
-  watchTimedTextRequests,
-} from './youtube.js';
+import { FrameSampler, captureFrame } from './frames.js';
+import { askAboutMoment, describeFrames, reviseDescription, startGeneration, stopGeneration } from './generator.js';
+import { platformFor } from './platforms.js';
 
 if (!window.__sceneVoiceLoaded) {
   window.__sceneVoiceLoaded = true;
   main();
 }
 
+/** How long after its moment a description that came back late may still be said, and how long it may wait for a pause. */
+const LATE_LIMIT = 25;
+const LATE_WAIT = 10;
+/** Errors after which taking frames carries on (the stretch is skipped); any other stops it. */
+const PASSING_FRAME_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable']);
+
 function main() {
+  const platform = platformFor(location.href);
+  const { getMeta, getPageDuration, getVideo, isAdShowing } = platform;
   let settings = { ...DEFAULT_SETTINGS };
   let lang = 'en';
   let videoId = null;
@@ -85,9 +94,32 @@ function main() {
   const watchedVideos = new WeakSet();
   const isFrame = window.top !== window;
 
+  // Frames mode only (see the top of this file).
+  /** This tab is taking pictures of the current video and having them described. */
+  let live = false;
+  /** Bumped whenever taking pictures stops, so a reply for an earlier run is ignored. */
+  let liveSeq = 0;
+  let framesInFlight = false;
+  /** A stretch that came due while another was being described. */
+  let queuedWindow = null;
+  /** Date.now() before which no frames are sent, after a passing error. */
+  let framesPausedUntil = 0;
+  /** Passing errors already announced for this video. */
+  let framesErrorsSaid = new Set();
+  /** { cue, at }: a description that came back after its moment, waiting for a pause. */
+  let pendingLate = null;
+  let frameCanvas = null;
+  const sampler = new FrameSampler(FRAME_SAMPLING);
+
   const scheduler = new CueScheduler([]);
   const announcer = new Announcer(() => settings);
-  const ui = new PageUI({ onToggle: () => toggle() });
+  const ui = new PageUI({ onToggle: () => toggle(), platform });
+
+  /** The model that describes videos on this site, and whether it is sent frames. */
+  const provider = () => providerFor(settings, platform.id);
+  const framesMode = () => inputModeFor(provider(), platform.id) === 'frames';
+  /** An error in words, in the terms of the provider in use. */
+  const errorText = (code) => errorMessage(code, provider());
 
   /** Message the service worker; never throws, even after the extension was reloaded. */
   const send = (msg) => {
@@ -117,7 +149,7 @@ function main() {
     if (dead) return;
     dead = true;
     timers.forEach(clearInterval);
-    announcer.announceToScreenReader(errorMessage('extension-reloaded'), false);
+    announcer.announceToScreenReader(errorText('extension-reloaded'), false);
   }
 
   async function refreshShortcuts() {
@@ -129,8 +161,9 @@ function main() {
   }
 
   /**
-   * Whether an API key is saved. The key stays in the service worker: this page
-   * only hears yes or no. chrome.storage.local is not readable from here.
+   * Whether an API key is saved for the provider this site uses. The keys stay
+   * in the service worker: this page only hears yes or no.
+   * chrome.storage.local is not readable from here.
    */
   async function hasKey() {
     const res = await send({ type: MSG.GET_STATUS });
@@ -138,7 +171,7 @@ function main() {
       die();
       return false;
     }
-    return Boolean(res?.hasKey);
+    return Boolean(res?.keys ? res.keys[provider()] : res?.hasKey);
   }
 
   /**
@@ -164,11 +197,13 @@ function main() {
     const wasEnabled = settings.enabled;
     settings = s;
     updateType();
-    lang = resolveLanguage(s.language, chrome.i18n.getUILanguage());
+    lang = resolveLanguage(s.language, chrome.i18n.getUILanguage(), platform.id);
     announcer.lang = lang;
     ui.setButtonState(s.enabled, shortcut('toggle-descriptions'));
     if (!s.showText) ui.hideText();
     if (wasEnabled && !s.enabled) stopSpeaking();
+    // Turned off, or another model chosen for this site: stop taking pictures.
+    if (live && (!s.enabled || !framesMode())) stopLive();
     if (!started) {
       // Settings are known: now follow the page.
       started = true;
@@ -176,8 +211,8 @@ function main() {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && !dead) refreshShortcuts();
       });
-      onNavigate(onPage);
-      watchTimedTextRequests((id, url) => {
+      platform.onNavigate(onPage);
+      platform.watchCaptionRequests((id, url) => {
         if (id === videoId && !dialogue && !dead) loadDialogue(id, [url]);
       });
       onPage();
@@ -186,6 +221,7 @@ function main() {
     }
     if (videoId && prevLang !== lang) {
       // Descriptions are per language: drop the old ones and look for the new.
+      stopLive();
       stopJob();
       stopSpeaking();
       resetVideoState();
@@ -204,14 +240,16 @@ function main() {
     progress = { done: 0, total: 0, chunkStartedAt: 0, chunkMs: [] };
     ui.hideProgress();
     lastSpoken = null;
+    pendingLate = null;
     scheduler.setCues([]);
     ui.hideText();
     updateType();
   }
 
   function onPage() {
-    const id = videoIdFromUrl(location.href);
+    const id = platform.videoIdFromUrl(location.href);
     if (id === videoId) return;
+    stopLive();
     stopJob();
     stopSpeaking();
     videoId = id;
@@ -219,6 +257,8 @@ function main() {
     captionLines = [];
     captionUrlsTried = new Set();
     pageType = '';
+    sampler.clear();
+    framesErrorsSaid = new Set();
     resetVideoState();
     if (!id) return;
     ui.mount();
@@ -227,23 +267,22 @@ function main() {
   }
 
   /**
-   * Read the video's watch page once: its category gives the video type before
-   * any description exists, and its caption tracks give the dialogue timing.
+   * Read what the site says about the video, once: its category gives the
+   * video type before any description exists, and its captions (YouTube) or CC
+   * subtitles (Bilibili) give the dialogue timing.
    */
   async function loadWatchPage(id) {
-    let page = { tracks: [], category: '' };
+    let page = { category: '', captionUrls: [] };
     try {
-      page = await fetchWatchPage(id);
+      page = await platform.loadPageInfo(id);
     } catch (err) {
       console.info('[SceneVoice] could not read the watch page', String(err));
     }
     if (dead || id !== videoId) return;
-    pageType = pageVideoType({ category: page.category, title: getMeta().title });
+    pageType = platform.videoType({ category: page.category, title: getMeta().title });
     updateType();
     announceType();
-    const track = pickCaptionTrack(page.tracks);
-    const url = track && timedTextUrl(track.baseUrl);
-    if (url) loadDialogue(id, [url]);
+    if (page.captionUrls?.length) loadDialogue(id, page.captionUrls);
   }
 
   /**
@@ -285,7 +324,8 @@ function main() {
       console.info(`[SceneVoice] ${cached.cues.length} saved descriptions for ${id} (${l})${cached.complete ? '' : ', incomplete'}`);
       announceType();
       // A previous run stopped part-way (tab closed, quota): carry on where it left off.
-      if (!cached.complete) generate({ quiet: true });
+      // From frames, only while descriptions are on: pictures are taken as the video plays.
+      if (!cached.complete && (!framesMode() || settings.enabled)) generate({ quiet: true });
       return undefined;
     }
     status = 'none';
@@ -433,7 +473,7 @@ function main() {
 
   async function generate({ force = false, quiet = false } = {}) {
     if (!videoId) return;
-    if (status === 'generating' || startingFor === videoId) {
+    if (status === 'generating' || status === 'live' || startingFor === videoId) {
       feedback(progressText());
       return;
     }
@@ -453,7 +493,7 @@ function main() {
       if (dead) return undefined;
       status = 'error';
       errorCode = 'no-key';
-      feedback(errorMessage('no-key'));
+      feedback(errorText('no-key'));
       send({ type: MSG.OPEN_OPTIONS });
       return undefined;
     }
@@ -463,15 +503,16 @@ function main() {
     if (!v) {
       status = 'error';
       errorCode = 'bad-duration';
-      feedback(errorMessage(errorCode));
+      feedback(errorText(errorCode));
       return undefined;
     }
     if (v.duration === Infinity) {
       status = 'error';
       errorCode = 'live';
-      feedback(errorMessage(errorCode));
+      feedback(errorText(errorCode));
       return undefined;
     }
+    if (framesMode()) return startLive({ force, quiet });
 
     status = 'generating';
     errorCode = '';
@@ -540,7 +581,7 @@ function main() {
     errorCode = code;
     if (code === 'extension-reloaded' || !chrome.runtime?.id) return die();
     console.warn('[SceneVoice] generation failed', code, detail || '');
-    feedback(errorMessage(code));
+    feedback(errorText(code));
     if (code === 'no-key' || code === 'bad-key') send({ type: MSG.OPEN_OPTIONS });
     return undefined;
   }
@@ -600,10 +641,12 @@ function main() {
     const generating = status === 'generating';
     setScript(sc);
     if (generating) status = 'generating';
+    else if (live && !sc.complete) status = 'live';
   }
 
   /** Spoken when the user asks while generation is running: percent, section and time left. */
   function progressText() {
+    if (status === 'live') return t('status_live_progress', String(script?.cues?.length || 0), String(liveMinutes()));
     if (!progress.total) return t('status_generating');
     const percent = String(Math.round(progressFraction() * 100));
     const eta = etaSeconds();
@@ -612,6 +655,221 @@ function main() {
       ? t('status_progress_percent', percent, String(Math.min(progress.done + 1, progress.total)), String(progress.total))
       : t('status_progress_percent_single', percent);
     return left ? `${head} ${left}.` : head;
+  }
+
+  // ---------- describing from frames ----------
+
+  /** Minutes of the video described so far, at least 1 once anything is. */
+  function liveMinutes() {
+    const seconds = coverageSeconds(coveredRanges(script));
+    return seconds ? Math.max(1, Math.round(seconds / 60)) : 0;
+  }
+
+  function livePercent() {
+    const duration = getVideo()?.duration || script?.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return 0;
+    return Math.min(100, Math.round((coverageSeconds(coveredRanges(script)) / duration) * 100));
+  }
+
+  /**
+   * Describe the video as it plays: from now on, pictures are taken every few
+   * seconds in the parts not described yet, and sent a few at a time.
+   */
+  async function startLive({ force = false, quiet = false } = {}) {
+    const id = videoId;
+    const l = lang;
+    if (force) {
+      // "Create again": start from nothing.
+      await send({ type: MSG.DELETE_SCRIPT, videoId: id, lang: l });
+      if (dead || id !== videoId || l !== lang) return;
+      script = null;
+      scheduler.setCues([]);
+    }
+    // Find out now, not minutes later, if pictures cannot be taken from this player.
+    try {
+      sampler.add(captureFrame(getVideo(), frameOptions()));
+    } catch (err) {
+      if (err?.code !== 'frames-not-ready') return onGenerationError(err?.code || 'frames-failed');
+    }
+    live = true;
+    liveSeq += 1;
+    framesInFlight = false;
+    queuedWindow = null;
+    framesPausedUntil = 0;
+    status = 'live';
+    errorCode = '';
+    const v = getVideo();
+    sampler.reset(v ? v.currentTime : null);
+    console.info(`[SceneVoice] describing from frames with ${provider()}`);
+    if (quiet) announcer.status(t('status_live_resuming'));
+    else feedback(t('status_live_start', t(`provider_name_${provider()}`)));
+    return undefined;
+  }
+
+  /** Stop taking pictures. What has been described stays saved. */
+  function stopLive() {
+    if (!live) return;
+    live = false;
+    liveSeq += 1;
+    queuedWindow = null;
+    pendingLate = null;
+    if (status === 'live') status = script ? (script.complete ? 'ready' : 'partial') : 'none';
+  }
+
+  function frameOptions() {
+    if (!frameCanvas) frameCanvas = document.createElement('canvas');
+    return { maxWidth: FRAME_SAMPLING.maxWidth, quality: FRAME_SAMPLING.quality, canvas: frameCanvas };
+  }
+
+  /** One playback tick while describing from frames: take a picture when one is due, send a stretch when it is full. */
+  function liveTick(video) {
+    if (!live || !settings.enabled || video.paused || video.seeking) return;
+    const now = video.currentTime;
+    if (isCovered(coveredRanges(script), now)) {
+      sampler.reset(now);
+      return;
+    }
+    if (sampler.advance(now)) {
+      try {
+        sampler.add(captureFrame(video, frameOptions()));
+      } catch (err) {
+        if (err?.code !== 'frames-not-ready') onLiveError(err?.code || 'frames-failed', err?.detail);
+        return;
+      }
+    }
+    if (framesInFlight || Date.now() < framesPausedUntil) return;
+    const stretch = sampler.takeWindow(now);
+    if (stretch) sendStretch(stretch);
+  }
+
+  /** The video ended: describe the last stretch, however short. */
+  function finishLive(video) {
+    if (!live) return;
+    const stretch = sampler.takeWindow(video.currentTime, { force: true, end: video.duration });
+    if (!stretch) return;
+    if (framesInFlight) queuedWindow = stretch;
+    else sendStretch(stretch);
+  }
+
+  async function sendStretch(stretch) {
+    const id = videoId;
+    const l = lang;
+    const seq = liveSeq;
+    framesInFlight = true;
+    let res;
+    try {
+      res = await describeFrames(send, {
+        videoId: id,
+        lang: l,
+        duration: getVideo()?.duration,
+        meta: getMeta(),
+        window: { start: stretch.start, end: stretch.end },
+        frames: stretch.frames,
+      });
+    } finally {
+      if (seq === liveSeq) framesInFlight = false;
+    }
+    if (res?.error === 'extension-reloaded') return die();
+    if (dead || id !== videoId || l !== lang || seq !== liveSeq) return undefined;
+    if (!res || res.error) return onLiveError(res?.error || 'unknown', res?.detail);
+    console.info(`[SceneVoice] ${stretch.frames.length} frames ${formatTime(stretch.start)}–${formatTime(stretch.end)}: ${res.cues?.length || 0} descriptions`);
+    const sc = await fetchScript(id, l);
+    if (dead || id !== videoId || l !== lang || seq !== liveSeq) return undefined;
+    if (sc) {
+      setScript(sc);
+      status = 'live';
+      announceType();
+    }
+    deliverLate(res.cues || []);
+    if (sc?.complete) {
+      live = false;
+      liveSeq += 1;
+      onGenerationDone(sc);
+      return undefined;
+    }
+    if (queuedWindow) {
+      const next = queuedWindow;
+      queuedWindow = null;
+      sendStretch(next);
+    }
+    return undefined;
+  }
+
+  /**
+   * A stretch could not be described. A passing problem (quota, network, an
+   * unreadable answer) skips it, says so once, and waits a little; anything
+   * else (no key, a player that cannot be captured) stops and says why.
+   */
+  function onLiveError(code, detail) {
+    console.warn('[SceneVoice] describing frames failed', code, detail || '');
+    if (PASSING_FRAME_ERRORS.has(code)) {
+      framesPausedUntil = Date.now() + (code === 'quota' ? 60000 : 15000);
+      if (!framesErrorsSaid.has(code)) {
+        framesErrorsSaid.add(code);
+        announcer.status(t('live_skipped', errorText(code)));
+      }
+      return undefined;
+    }
+    stopLive();
+    return onGenerationError(code, detail);
+  }
+
+  /**
+   * Descriptions made from frames arrive a few seconds after their moment. The
+   * most important one still recent enough is said at the next pause that
+   * fits it (see tryLate); the rest are saved and heard on the next viewing.
+   */
+  function deliverLate(cues) {
+    const video = getVideo();
+    if (!video || video.paused || !settings.enabled || setting('mode') === 'manual') return;
+    const now = video.currentTime;
+    let due = cues
+      .filter((c) => c.start <= now && now - c.start <= LATE_LIMIT)
+      .filter((c) => (settings.onScreenText || c.kind !== 'text') && passesDensity(c, setting('density')));
+    if (dialogue) due = dropTextHeardInCaptions(due, captionLines).cues;
+    const cue = pickOne(due);
+    if (cue && (!pendingLate || pickOne([pendingLate.cue, cue]) === cue)) pendingLate = { cue, at: now };
+  }
+
+  /** Say a late description once no other description is being said and it fits the pause (or the mode allows pausing). */
+  function tryLate(video) {
+    const late = pendingLate;
+    if (!late || speakingCue) return;
+    const now = video.currentTime;
+    if (now < late.at - 1 || now - late.at > LATE_WAIT) {
+      pendingLate = null; // seeked away, or no pause came
+      return;
+    }
+    let cue = { ...late.cue, start: now, source: late.cue };
+    if (dialogue) cue = { ...fitCuesToDialogue([cue], dialogue)[0], source: late.cue };
+    if (cue.start > now + 0.15) return; // speech ends in a moment: wait for it
+    const fits = chooseUtterance(cue, { mode: setting('mode'), detail: setting('detail'), rate: readerRate(), onScreenText: settings.onScreenText, playbackRate: video.playbackRate || 1 });
+    if (!fits) return;
+    pendingLate = null;
+    console.info(`[SceneVoice] ${formatTime(late.cue.start)} said late, at ${formatTime(now)}`);
+    deliver(cue);
+  }
+
+  /**
+   * Pictures of one moment, for a question or a description marked as wrong:
+   * those taken around it, and the picture on screen now if it is that moment.
+   * Resolves to { frames } or { error }.
+   */
+  function momentFrames(at, { before = 8, after = 2, max = 4 } = {}) {
+    const video = getVideo();
+    const frames = sampler.around(at, before, after);
+    if (video && Math.abs(video.currentTime - at) <= Math.max(after, 1) + 1) {
+      try {
+        const frame = captureFrame(video, frameOptions());
+        sampler.add(frame);
+        frames.push(frame);
+      } catch (err) {
+        if (err?.code === 'frames-tainted' || err?.code === 'frames-unsupported' || !frames.length) return { error: err?.code || 'frames-failed' };
+      }
+    }
+    if (!frames.length) return { error: 'frames-unavailable' };
+    const unique = [...new Map(frames.map((f) => [f.time, f])).values()].sort((a, b) => a.time - b.time);
+    return { frames: pickEvenly(unique, max) };
   }
 
   // ---------- speaking ----------
@@ -698,6 +956,7 @@ function main() {
       maybeHint();
     });
     video.addEventListener('seeked', () => scheduler.reset(video.currentTime));
+    video.addEventListener('ended', () => finishLive(video));
   }
 
   function tick() {
@@ -713,6 +972,7 @@ function main() {
       scheduler.reset(null);
       return;
     }
+    liveTick(video);
     if (!settings.enabled || !script || setting('mode') === 'manual') {
       scheduler.reset(video.currentTime);
       return;
@@ -722,7 +982,10 @@ function main() {
       .tick(video.currentTime)
       .filter((c) => (settings.onScreenText || c.kind !== 'text') && passesDensity(c, setting('density')));
     const cue = pickOne(fired);
-    if (!cue) return;
+    if (!cue) {
+      tryLate(video);
+      return;
+    }
     if (!mayInterrupt(speakingCue, cue)) {
       console.info(`[SceneVoice] ${formatTime(cue.start)} skipped: on-screen text is being read`);
       return;
@@ -738,6 +1001,14 @@ function main() {
       feedback(progressText());
       return;
     }
+    // Describing from frames lasts as long as the video: the shortcut turns it off, like any descriptions.
+    if (status === 'live') {
+      stopLive();
+      stopSpeaking();
+      await setSettings({ enabled: false }).catch(() => {});
+      feedback(`${t('status_off')} ${t('status_live_stopped')}`);
+      return;
+    }
     if (!script) {
       if (!settings.enabled) await setSettings({ enabled: true }).catch(() => {});
       generate();
@@ -749,6 +1020,8 @@ function main() {
     feedback(enabled ? t('status_on') : t('status_off'));
     // Descriptions were off when the video opened: say now what its type changed.
     if (enabled) announceType(true);
+    // Back on, with parts not yet described: carry on taking pictures.
+    if (enabled && framesMode() && !script.complete) generate({ quiet: true });
   }
 
   function nearbyText(time) {
@@ -765,8 +1038,15 @@ function main() {
    */
   async function askAI(question) {
     const video = getVideo();
-    if (!video) return { text: errorMessage('no-video'), time: null };
+    if (!video) return { text: errorText('no-video'), time: null };
     if (isAdShowing()) return { text: t('status_ad_playing'), time: null };
+    // A model that is sent pictures gets those of the last few seconds.
+    let frames;
+    if (framesMode()) {
+      const shot = momentFrames(video.currentTime, { before: 8, after: 0 });
+      if (shot.error) return { text: errorText(shot.error), time: null };
+      frames = shot.frames;
+    }
     const res = await askAboutMoment(send, {
       videoId,
       meta: getMeta(),
@@ -775,12 +1055,13 @@ function main() {
       question,
       nearbyText: nearbyText(video.currentTime),
       lang,
+      ...(frames ? { frames } : {}),
     });
     if (res?.error === 'extension-reloaded') {
       die();
-      return { text: errorMessage('extension-reloaded'), time: null };
+      return { text: errorText('extension-reloaded'), time: null };
     }
-    if (!res || res.error || !res.text) return { text: errorMessage(res?.error || 'unknown'), time: null };
+    if (!res || res.error || !res.text) return { text: errorText(res?.error || 'unknown'), time: null };
     return { text: res.text, time: Number.isFinite(res.time) ? res.time : null };
   }
 
@@ -798,7 +1079,7 @@ function main() {
     }
     // No prepared description for this moment: ask the model directly.
     if (!(await hasKey())) {
-      if (!dead) feedback(errorMessage('no-key'));
+      if (!dead) feedback(errorText('no-key'));
       return;
     }
     const id = videoId;
@@ -881,6 +1162,16 @@ function main() {
     const id = videoId;
     const l = lang;
     const at = formatTime(cue.start);
+    // A model that is sent pictures needs those of that moment, still at hand.
+    let frames;
+    if (framesMode()) {
+      const shot = momentFrames(cue.start, { before: 3, after: 6, max: 6 });
+      if (shot.error) {
+        feedback(t('report_failed', errorText(shot.error)));
+        return undefined;
+      }
+      frames = shot.frames;
+    }
     stopSpeaking();
     feedback(t('report_marked', at, cue.brief || cue.standard));
     revisingFor = id;
@@ -892,6 +1183,7 @@ function main() {
         cue: { start: cue.start, kind: cue.kind, standard: cue.standard },
         meta: getMeta(),
         duration: getVideo()?.duration,
+        ...(frames ? { frames } : {}),
       });
     } finally {
       if (revisingFor === id) revisingFor = null;
@@ -899,7 +1191,7 @@ function main() {
     if (res?.error === 'extension-reloaded') return die();
     if (dead || id !== videoId || l !== lang) return undefined;
     if (!res || res.error) {
-      feedback(t('report_failed', errorMessage(res?.error || 'unknown')));
+      feedback(t('report_failed', errorText(res?.error || 'unknown')));
       if (res?.error === 'no-key' || res?.error === 'bad-key') send({ type: MSG.OPEN_OPTIONS });
       return undefined;
     }
@@ -998,11 +1290,14 @@ function main() {
       supported: Boolean(videoId),
       videoId,
       title: videoId ? getMeta().title : '',
+      platform: platform.id,
+      provider: provider(),
+      inputMode: framesMode() ? 'frames' : 'video',
       status,
       errorCode,
       done: progress.done,
       total: progress.total,
-      percent: status === 'generating' ? Math.round(progressFraction() * 100) : null,
+      percent: status === 'generating' ? Math.round(progressFraction() * 100) : status === 'live' ? livePercent() : null,
       eta: status === 'generating' ? etaSeconds() : null,
       cueCount: script?.cues?.length || 0,
       firstCue: script?.cues?.length ? script.cues[0].start : null,
@@ -1047,6 +1342,7 @@ function main() {
         } else if (msg.action === 'regenerate') {
           beginSeq += 1;
           startingFor = null;
+          stopLive();
           await stopGeneration(send, { videoId, lang });
           stopJob();
           stopSpeaking();
@@ -1055,12 +1351,16 @@ function main() {
         } else if (msg.action === 'delete') {
           beginSeq += 1;
           startingFor = null;
+          stopLive();
           stopJob();
           stopSpeaking();
           await send({ type: MSG.DELETE_SCRIPT, videoId, lang });
           resetVideoState();
         } else if (msg.action === 'stop') {
-          if (status === 'generating' || startingFor === videoId) {
+          if (status === 'live') {
+            stopLive();
+            feedback(t('status_live_stopped'));
+          } else if (status === 'generating' || startingFor === videoId) {
             beginSeq += 1;
             startingFor = null;
             await stopGeneration(send, { videoId, lang });

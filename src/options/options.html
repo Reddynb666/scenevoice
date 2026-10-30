@@ -15,9 +15,28 @@
   </header>
 
   <main id="main" tabindex="-1" class="stack">
-    <!-- 1. API key -->
+    <!-- 1. Models and API keys -->
     <section class="card stack" aria-labelledby="h-key">
-      <h2 id="h-key" data-i18n="opt_key_title">1. Connect to Gemini</h2>
+      <h2 id="h-key" data-i18n="opt_key_title">1. Connect an AI model</h2>
+
+      <h3 id="h-provider" data-i18n="opt_provider_title">Which model describes each site</h3>
+      <p id="providerHint" class="small muted" data-i18n="opt_provider_hint">Gemini watches a whole YouTube video by its link.</p>
+      <label class="field">
+        <span data-i18n="set_provider_youtube">YouTube videos</span>
+        <select id="youtubeProvider" data-setting="youtubeProvider" aria-describedby="providerHint">
+          <option value="gemini" data-i18n="provider_gemini">Gemini (Google)</option>
+          <option value="qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</option>
+        </select>
+      </label>
+      <label class="field">
+        <span data-i18n="set_provider_bilibili">Bilibili videos (experimental)</span>
+        <select id="bilibiliProvider" data-setting="bilibiliProvider" aria-describedby="providerHint">
+          <option value="gemini" data-i18n="provider_gemini">Gemini (Google)</option>
+          <option value="qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</option>
+        </select>
+      </label>
+
+      <h3 id="h-gemini" data-i18n="provider_gemini">Gemini (Google)</h3>
       <p data-i18n="opt_key_intro">SceneVoice uses Google's Gemini model to watch the video and write descriptions. You use your own free API key, so there is no account and no subscription.</p>
       <ol class="steps">
         <li><span data-i18n="opt_key_step1">Open Google AI Studio and sign in with a Google account:</span> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></li>
@@ -51,6 +70,41 @@
           </label>
           <p id="endpointHint" class="small muted" data-i18n="opt_endpoint_hint">Change only if you use a compatible relay, for example where Google services are not reachable. The relay will see your key and requests.</p>
           <div class="row"><button type="button" id="saveEndpoint" class="secondary" data-i18n="opt_endpoint_save">Save address</button><button type="button" id="resetEndpoint" class="secondary" data-i18n="opt_endpoint_reset">Reset to default</button></div>
+        </div>
+      </details>
+
+      <h3 id="h-qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</h3>
+      <p data-i18n="opt_qwen_intro">Qwen can be used from mainland China.</p>
+      <ol class="steps">
+        <li><span data-i18n="opt_qwen_step1">Open the Alibaba Cloud Model Studio console and sign in:</span> <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener">bailian.console.aliyun.com</a></li>
+        <li data-i18n="opt_qwen_step2">Create an API key there and copy it.</li>
+        <li data-i18n="opt_key_step3">Paste it below and press Save and test.</li>
+      </ol>
+      <label class="field" for="qwenApiKey"><span data-i18n="opt_qwen_key_label">Qwen API key</span></label>
+      <div class="row nowrap">
+        <input type="password" id="qwenApiKey" autocomplete="off" spellcheck="false" aria-describedby="qwenKeyStatus qwenKeyPrivacy">
+        <button type="button" id="toggleQwenKey" class="secondary" aria-pressed="false" data-i18n="opt_key_show">Show</button>
+      </div>
+      <div class="row">
+        <button type="button" id="saveQwenKey" data-i18n="opt_key_save">Save and test</button>
+        <button type="button" id="removeQwenKey" class="danger" data-i18n="opt_key_remove">Remove key</button>
+      </div>
+      <p id="qwenKeyStatus" role="status" aria-live="polite"></p>
+      <p id="qwenKeyPrivacy" class="small muted" data-i18n="opt_qwen_privacy">Your key is stored only on this computer and is sent only to the Qwen API address below.</p>
+      <label class="field">
+        <span data-i18n="opt_qwen_model_label">Model name</span>
+        <input type="text" id="qwenModel" autocomplete="off" spellcheck="false" aria-describedby="qwenModelHint">
+      </label>
+      <p id="qwenModelHint" class="small muted" data-i18n="opt_qwen_model_hint">It must understand pictures.</p>
+      <details>
+        <summary data-i18n="opt_qwen_advanced">Advanced: API address</summary>
+        <div class="stack pad">
+          <label class="field">
+            <span data-i18n="opt_endpoint_label">API address</span>
+            <input type="url" id="qwenApiBase" spellcheck="false" aria-describedby="qwenEndpointHint">
+          </label>
+          <p id="qwenEndpointHint" class="small muted" data-i18n="opt_qwen_endpoint_hint">The address of the OpenAI-compatible API.</p>
+          <div class="row"><button type="button" id="saveQwenEndpoint" class="secondary" data-i18n="opt_endpoint_save">Save address</button><button type="button" id="resetQwenEndpoint" class="secondary" data-i18n="opt_endpoint_reset">Reset to default</button></div>
         </div>
       </details>
     </section>
@@ -238,6 +292,7 @@
         <li data-i18n="privacy_1">SceneVoice has no server and no account. It does not collect analytics.</li>
         <li data-i18n="privacy_2">To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google's terms for the Gemini API apply.</li>
         <li data-i18n="privacy_3">Descriptions are saved on this computer so a video is described only once.</li>
+        <li data-i18n="privacy_5">With Qwen, or on Bilibili, pictures taken from the playing video are sent instead of its address.</li>
         <li data-i18n="privacy_4">The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. There is no feedback server: nothing is sent to the developer. The record is deleted with the saved descriptions.</li>
       </ul>
     </section>

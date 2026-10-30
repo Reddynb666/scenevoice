@@ -4,6 +4,7 @@
 import { LANGUAGES } from '../shared/constants.js';
 import { getScript } from '../shared/cache.js';
 import { localizeDocument, t } from '../shared/i18n.js';
+import { videoPageUrl } from '../shared/platforms.js';
 import { formatTime } from '../shared/script.js';
 
 const $ = (id) => document.getElementById(id);
@@ -62,12 +63,12 @@ function render() {
     tr.append(time, text);
     rows.append(tr);
   }
-  const text = `${params.get('title') || videoId}\nhttps://www.youtube.com/watch?v=${videoId}\n\n${lines(detail).join('\n')}\n`;
+  const text = `${params.get('title') || videoId}\n${videoPageUrl(videoId)}\n\n${lines(detail).join('\n')}\n`;
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
   const dl = $('download');
   if (dl.href) URL.revokeObjectURL(dl.href);
   dl.href = URL.createObjectURL(blob);
-  dl.download = `scenevoice-${videoId}-${lang}.txt`;
+  dl.download = `scenevoice-${videoId.replace(/[^\w-]/g, '_')}-${lang}.txt`;
 }
 
 async function init() {
@@ -75,7 +76,7 @@ async function init() {
   const title = params.get('title') || '';
   $('videoTitle').textContent = title;
   if (title) document.title = `${title} — ${t('transcript_title')}`;
-  $('openVideo').href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+  $('openVideo').href = videoPageUrl(videoId);
   script = videoId ? await getScript(videoId, lang) : null;
   if (!script || !script.cues.length) {
     $('empty').hidden = false;

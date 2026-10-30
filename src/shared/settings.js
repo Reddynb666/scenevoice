@@ -14,6 +14,7 @@ import {
   MODES,
   MSG,
   OUTPUTS,
+  PROVIDERS,
   READER_SPEEDS,
   TTS_PITCH,
   TTS_RATE,
@@ -84,6 +85,8 @@ const CLEAN = {
   autoGenerate: bool,
   announceStatus: bool,
   pauseOnAsk: bool,
+  youtubeProvider: oneOf(PROVIDERS),
+  bilibiliProvider: oneOf(PROVIDERS),
 };
 
 /** Settings the user can pick for themselves instead of leaving them to the video type. */

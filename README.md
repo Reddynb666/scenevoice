@@ -19,6 +19,7 @@ It is built for screen reader users first. Every control works from the keyboard
 - **Chinese and English, and more.** Descriptions can be written in Simplified or Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic or Hindi. The interface is in English and Simplified Chinese.
 - **Large-text overlay** for low-vision viewers and for sighted people watching with you.
 - **No account, no server, no tracking.** You use your own free Gemini API key. SceneVoice has no backend and collects nothing.
+- **China site (experimental): Bilibili with Qwen.** On Bilibili video pages, SceneVoice can describe as you watch with Alibaba Cloud's Qwen. See [below](#china-site--bilibili-experimental).
 
 ## Install
 
@@ -88,6 +89,60 @@ Your marks stay on your computer, next to the saved descriptions, and are delete
 
 Settings other than the key are saved in your browser profile (`chrome.storage.sync`) and follow you to your other browsers if sync is on.
 
+## China site / Bilibili (experimental)
+
+YouTube and Gemini are usually not reachable from mainland China. This prototype runs SceneVoice on Bilibili video pages (`www.bilibili.com/video/…`) with Qwen (通义千问), Alibaba Cloud's model. It is a minimum viable version for testing, not yet a release.
+
+### Setting it up
+
+1. Create an API key in the Alibaba Cloud Model Studio (阿里云百炼) console: [bailian.console.aliyun.com](https://bailian.console.aliyun.com/). The model has to understand pictures; the default is `qwen-vl-max`.
+2. On SceneVoice's settings page, under *1. Connect an AI model* → *Qwen (Alibaba Cloud Model Studio)*, paste the key and press **Save and test**. The key is stored like the Gemini key: on this computer only, out of reach of web pages and content scripts, and sent only to the Qwen API address.
+3. *Which model describes each site*: Bilibili uses Qwen and YouTube uses Gemini by default. Either site can use either model.
+4. Open a Bilibili video and press `Alt+Shift+D` (or *Create descriptions* in the popup).
+
+### How it differs from YouTube with Gemini
+
+- Gemini opens a YouTube video by its link and describes it before you get there. Qwen cannot open video links, and Gemini cannot open Bilibili's, so on Bilibili (and with Qwen on YouTube) SceneVoice describes **as you watch**: every 2 seconds it takes a picture of the playing `<video>` in the page (with a canvas, scaled to 640 pixels wide, JPEG), and every 12 seconds sends up to 6 of them to the model. The newest important description is said at the next pause that fits it, so it comes **a few seconds after the picture**. Every description is saved: the next time you watch, they are said on time, as on YouTube. Only the parts you have watched are described.
+- *Describe now*, questions and *Last description is wrong* send pictures of that moment.
+- Bilibili's CC subtitles (written ones first, then AI-generated ones) give the dialogue timing when they can be read, as YouTube captions do. When there are none, or they cannot be read, the model's own estimate is used.
+- The video type (entertainment or tutorial) comes from the Bilibili section (分区) and the title.
+- On Bilibili, *Same as my browser* as the description language means Chinese. With the built-in voice, Chinese voices are listed and used first. Screen reader output works as on YouTube.
+- `Alt+Shift+D` turns descriptions, and the picture taking, off and on. *Stop* in the popup stops the picture taking and keeps what was described.
+
+### Known limitations
+
+- **Pictures protected by the browser (cross-origin).** When a video is loaded from another site without that site's permission (CORS), the browser "taints" the canvas and refuses to hand its picture to the page. SceneVoice then says that it cannot take pictures from this video and that no descriptions can be made for it, and sends nothing. Some Bilibili videos may play in Bilibili's own `<bwp-video>` element rather than a `<video>`; it cannot be drawn on a canvas and gets a similar message.
+- On first viewing, descriptions come a few seconds late, and parts you skip are not described. The model sees still pictures only: it misses movement between them and all sound.
+- Cost: about 5 requests per minute of video, each with up to 6 small pictures, billed to your Alibaba Cloud account.
+- Bilibili does not document its page structure or web APIs, and they may change. Viewers who are not logged in may get no subtitles. Bangumi (番剧) and live streams, players embedded in other sites and the mobile site are not supported.
+- The Bilibili content script has not yet been tried with a screen reader on the live site (see the manual checks below).
+
+### To be confirmed (待确认)
+
+What this prototype could not check against current documentation. Each is a setting or a constant in one place, marked 待确认 in the code.
+
+| What | Where | Now |
+| --- | --- | --- |
+| Model Studio's OpenAI-compatible address (mainland China; other regions differ) | Settings → Qwen → Advanced; `DEFAULT_QWEN_API_BASE` in `src/shared/constants.js` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| Default vision model | Settings → Qwen → Model name; `DEFAULT_QWEN_MODEL` | `qwen-vl-max` |
+| Pictures as base64 `data:` URLs in `image_url` parts, and how many per request | `src/shared/qwen.js`; local setting `qwenMaxFrames` | 6 per request, 640 px wide |
+| `response_format: {"type": "json_object"}` for vision models | local setting `qwenJsonMode` | off: the prompt asks for JSON and the reply is read leniently |
+| Error codes (`invalid_api_key`, `Arrearage`, `data_inspection_failed`…) | `classifyQwenHttp` in `src/shared/qwen.js` | best effort |
+| Bilibili APIs `x/web-interface/view` and `x/player/v2` (subtitles may need a login or signed requests) | `BILIBILI_API` in `src/content/bilibili.js` | unsigned requests with the page's cookies |
+| Bilibili player selectors, `<bwp-video>` behaviour, no ads in the player | `src/content/bilibili.js` | `.bpx-player-container`, `.bpx-player-control-bottom-right` |
+| Bilibili sections → video type | `src/shared/videotype.js` | keyword match |
+
+`qwenJsonMode` and `qwenMaxFrames` have no control on the settings page yet. To change one, open the settings page's developer tools and run, for example, `chrome.storage.local.get('local').then(({ local }) => chrome.storage.local.set({ local: { ...local, qwenMaxFrames: 4 } }))`.
+
+### Compliance before a public release (待确认)
+
+This prototype is for testing. Before it is offered to the public in mainland China, someone qualified must check at least the following. None of it has been checked yet, and this list is not legal advice.
+
+- **Generative AI rules**: whether SceneVoice, which calls a model with the user's own key, has to complete algorithm filing (算法备案) or generative AI service filing or registration under the Interim Measures for the Management of Generative AI Services (《生成式人工智能服务管理暂行办法》) and the deep synthesis provisions (《互联网信息服务深度合成管理规定》), and how AI-generated descriptions must be labelled (《人工智能生成合成内容标识办法》).
+- **Personal information** (《个人信息保护法》): a Chinese privacy notice, and consent for sending pictures of what the user watches to Alibaba Cloud.
+- **Distribution**: the Chrome Web Store is not reachable from mainland China; Edge Add-ons or a Chinese browser's store have their own review. A project website may need ICP filing.
+- **Bilibili**: its terms on reading its pages and web APIs automatically, and the uploaders' rights in the pictures sent to a model.
+
 ## How it works
 
 ```
@@ -129,15 +184,15 @@ npm run dev          # rebuild on change
 
 Layout:
 
-- `src/content/` — runs on YouTube pages: playback tracking, live regions, player button, ask dialog, and `generator.js`, the tab's side of generation (start, stop, ask; progress arrives as messages).
+- `src/content/` — runs on YouTube pages and Bilibili video pages: playback tracking, live regions, player button, ask dialog, and `generator.js`, the tab's side of generation (start, stop, ask; progress arrives as messages). What depends on the site is in a platform adapter, `youtube.js` or `bilibili.js` (`platforms.js` picks one); `frames.js` takes pictures of the playing video for models that are sent frames.
 - `src/background/` — service worker: text-to-speech, keyboard commands, status for the popup, cache housekeeping, and the hub that starts generation jobs, saves each finished section and tells the tabs. It makes no Gemini calls itself: Chrome stops a service worker whose fetch takes more than 30 seconds, and video requests often do.
 - `src/offscreen/` — the offscreen document and its web worker, where the Gemini requests actually run (`worker.js` keeps the job list; `offscreen.js` bridges it to the service worker).
-- `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, scheduler, cache, settings.
+- `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, scheduler, cache, settings. Which model a site uses and whether it opens the video link or is sent frames is in `providers.js`; `qwen.js` is the Qwen client, `frames.js` the prompts built from frames, `describe.js` runs them with either model, and `coverage.js` tracks which parts of a video are described.
 - `src/popup/`, `src/options/` — toolbar popup and settings page.
 - `scripts/locales.mjs` — every user-facing string in English and Chinese; the build generates `_locales/`.
 - `test/` — unit tests, and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (127 checks, including axe accessibility scans).
 
-Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md).
+Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md), which also lists the manual checks for Bilibili.
 
 ## Roadmap
 

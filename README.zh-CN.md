@@ -19,6 +19,7 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 - **中英文及更多语言。** 口述可用简体中文、繁体中文、英文、西班牙文、法文、德文、葡萄牙文、日文、韩文、俄文、阿拉伯文、印地文。界面有简体中文和英文。
 - **大字幕叠加层**，方便低视力用户和陪你一起看的人。
 - **无账号、无服务器、不追踪。** 你使用自己的免费 Gemini API 密钥，SceneVoice 没有后端，不收集任何数据。
+- **中国站（实验性）：B 站 + 通义千问。** 在 B 站视频页上，可以用阿里云的通义千问边看边生成口述，见[下文](#中国站--b-站实验性)。
 
 ## 安装
 
@@ -90,6 +91,60 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 
 除密钥外的设置保存在浏览器的个人资料里（`chrome.storage.sync`），开启同步后会跟着你到其他浏览器。
 
+## 中国站 / B 站（实验性）
+
+在中国内地通常无法访问 YouTube 和 Gemini。这个原型让 SceneVoice 在 B 站视频页（`www.bilibili.com/video/…`）上配合阿里云的通义千问使用。它是供测试的最小可用版本，还不是正式发布。
+
+### 设置
+
+1. 在阿里云百炼控制台创建 API Key：[bailian.console.aliyun.com](https://bailian.console.aliyun.com/)。模型需要能看懂图片，默认是 `qwen-vl-max`。
+2. 在 SceneVoice 设置页“1. 连接 AI 模型”→“通义千问（阿里云百炼）”里粘贴密钥，按**保存并测试**。这个密钥和 Gemini 密钥一样受保护：只存在本机，网页和内容脚本读不到，只发送到通义千问 API 地址。
+3. “各网站用哪个模型”：默认 B 站用通义千问，YouTube 用 Gemini。两个网站都可以任选其一。
+4. 打开一个 B 站视频，按 `Alt+Shift+D`（或在弹出面板点“生成口述”）。
+
+### 和 YouTube + Gemini 的区别
+
+- Gemini 通过链接打开 YouTube 视频，在你看到之前就把口述写好。通义千问不能打开视频链接，Gemini 也打不开 B 站的链接，所以在 B 站上（以及在 YouTube 上选用通义千问时），SceneVoice 改为**边看边描述**：每 2 秒在页面里用 canvas 截取一张正在播放的 `<video>` 画面（缩小到 640 像素宽的 JPEG），每 12 秒把其中最多 6 张发给模型。最新的一条重要描述会在下一个放得下的对白空隙里读出，所以会**比画面晚几秒**。所有描述都会保存，下次观看时会像 YouTube 一样按时播报。只有你看过的部分才会有口述。
+- “描述当前画面”、提问和“上一条描述有误”会发送那一刻的画面。
+- 能读到 B 站 CC 字幕时（先用人工字幕，再用 AI 字幕），会像 YouTube 字幕一样用来校正对白空隙；没有字幕或读不到时，退回模型自己的估计（无字幕模式）。
+- 视频类型（娱乐类或教程讲解类）根据 B 站分区和标题判断。
+- 在 B 站上，口述语言选“与浏览器语言相同”时一律用中文；用内置语音时，优先列出并使用中文语音。读屏输出和 YouTube 上一样。
+- `Alt+Shift+D` 可以开关口述（同时开关截图）。弹出面板里的“停止”会停止截图，已生成的口述保留。
+
+### 已知限制
+
+- **浏览器保护的画面（跨域）。** 如果视频是从其他网站加载、且对方没有允许跨域（CORS），浏览器会把 canvas 标记为“被污染”，不让网页读取画面。这时 SceneVoice 会明确告诉你截不到这个视频的画面、无法为它生成口述，并且不发送任何内容。有些 B 站视频可能用 B 站自己的 `<bwp-video>` 元素播放而不是 `<video>`，它无法画到 canvas 上，也会给出类似提示。
+- 第一次观看时口述会晚几秒，跳过的部分没有口述。模型只看到静止画面，画面之间的动作和所有声音它都不知道。
+- 费用：每分钟视频约 5 次请求，每次最多 6 张小图，费用记在你的阿里云账号上。
+- B 站的页面结构和网页接口没有公开文档，随时可能变化。未登录时可能拿不到字幕。暂不支持番剧、直播、嵌在其他网站里的播放器和移动版网页。
+- B 站内容脚本还没有在真实网站上用读屏软件试过（见下方的人工检查）。
+
+### 待确认事项
+
+以下是这个原型无法对照最新文档核实的内容。每一项都集中在一个设置或常量里，并在代码中标注了“待确认”。
+
+| 内容 | 位置 | 当前值 |
+| --- | --- | --- |
+| 阿里云百炼兼容 OpenAI 接口的地址（中国内地；其他地域不同） | 设置页 → 通义千问 → 高级；`src/shared/constants.js` 的 `DEFAULT_QWEN_API_BASE` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| 默认视觉模型 | 设置页 → 通义千问 → 模型名称；`DEFAULT_QWEN_MODEL` | `qwen-vl-max` |
+| 图片以 base64 `data:` URL 放在 `image_url` 里，以及每次请求最多几张 | `src/shared/qwen.js`；本机设置 `qwenMaxFrames` | 每次 6 张，640 像素宽 |
+| 视觉模型是否支持 `response_format: {"type": "json_object"}` | 本机设置 `qwenJsonMode` | 关闭：在提示词里要求 JSON，并宽松解析回复 |
+| 错误码（`invalid_api_key`、`Arrearage`、`data_inspection_failed` 等） | `src/shared/qwen.js` 的 `classifyQwenHttp` | 尽力识别 |
+| B 站接口 `x/web-interface/view` 和 `x/player/v2`（字幕可能需要登录或签名） | `src/content/bilibili.js` 的 `BILIBILI_API` | 不签名，带页面自己的 Cookie |
+| B 站播放器选择器、`<bwp-video>` 的行为、播放器内没有广告 | `src/content/bilibili.js` | `.bpx-player-container`、`.bpx-player-control-bottom-right` |
+| B 站分区 → 视频类型 | `src/shared/videotype.js` | 关键词匹配 |
+
+`qwenJsonMode` 和 `qwenMaxFrames` 暂时没有设置页控件。需要修改时，在设置页打开开发者工具，执行例如 `chrome.storage.local.get('local').then(({ local }) => chrome.storage.local.set({ local: { ...local, qwenMaxFrames: 4 } }))`。
+
+### 正式上线前的合规事项（待确认）
+
+这个原型仅供测试。在面向中国内地公众提供之前，至少需要请专业人士确认以下事项。以下内容都还没有核实，也不构成法律意见。
+
+- **生成式人工智能相关规定**：SceneVoice 用用户自己的密钥调用模型，是否需要依据《生成式人工智能服务管理暂行办法》《互联网信息服务深度合成管理规定》完成算法备案或生成式人工智能服务备案、登记；AI 生成的口述如何按《人工智能生成合成内容标识办法》进行标识。
+- **个人信息**（《个人信息保护法》）：中文隐私政策，以及把用户正在观看的画面发送给阿里云之前如何取得同意。
+- **分发渠道**：中国内地无法访问 Chrome 应用商店；Edge 加载项商店或国内浏览器的扩展商店各有审核要求。项目网站可能需要 ICP 备案。
+- **B 站**：B 站用户协议对自动读取页面和接口的规定，以及发送给模型的画面涉及的 UP 主权利。
+
 ## 工作原理
 
 ```
@@ -131,15 +186,15 @@ npm run dev          # 修改后自动重新构建
 
 目录结构：
 
-- `src/content/` —— 运行在 YouTube 页面：跟踪播放、实时区域、播放器按钮、提问对话框，以及 `generator.js`：页面这一侧的生成接口（启动、停止、提问；进度以消息形式送回）。
+- `src/content/` —— 运行在 YouTube 页面和 B 站视频页：跟踪播放、实时区域、播放器按钮、提问对话框，以及 `generator.js`：页面这一侧的生成接口（启动、停止、提问；进度以消息形式送回）。和网站有关的部分在平台适配器 `youtube.js`、`bilibili.js` 里（由 `platforms.js` 选择）；`frames.js` 为需要发送画面的模型截取播放中的视频画面。
 - `src/background/` —— 后台 Service Worker：语音合成、快捷键、给弹出面板的状态、缓存管理，以及生成任务的枢纽（启动任务、保存每段结果、通知各标签页）。它自己不调用 Gemini：Chrome 会终止 fetch 超过 30 秒还没响应的 Service Worker，而视频请求经常超过 30 秒。
 - `src/offscreen/` —— 隐藏页面及其 web worker，Gemini 请求真正在这里发出（`worker.js` 维护任务列表，`offscreen.js` 负责和 Service Worker 之间的消息）。
-- `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、调度、缓存、设置。
+- `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、调度、缓存、设置。每个网站用哪个模型、模型是打开视频链接还是接收画面，在 `providers.js` 里；`qwen.js` 是通义千问客户端，`frames.js` 是基于画面的提示词，`describe.js` 用任一模型执行它们，`coverage.js` 记录视频哪些部分已经有口述。
 - `src/popup/`、`src/options/` —— 工具栏弹出面板和设置页。
 - `scripts/locales.mjs` —— 全部界面文字的中英文；构建时生成 `_locales/`。
 - `test/` —— 单元测试，以及 `test/e2e/e2e.py`：在无头 Chromium 里驱动真实扩展，对接假 YouTube 页面和模拟 Gemini API（127 项检查，含 axe 无障碍扫描）。
 
-发布前用读屏软件测试的清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+发布前用读屏软件测试的清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)，其中也列出了 B 站的人工检查项。
 
 ## 路线图
 

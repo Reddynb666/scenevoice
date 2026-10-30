@@ -1,5 +1,11 @@
 // Everything that knows about YouTube's page structure lives here,
-// so a YouTube redesign only needs changes in one file.
+// so a YouTube redesign only needs changes in one file. `youtubePlatform` at
+// the end is what the content script uses (bilibili.js has the same shape).
+
+import { pageVideoType } from '../shared/videotype.js';
+import { containerForOverlays } from './dom.js';
+
+export { containerForOverlays };
 
 const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
@@ -75,16 +81,6 @@ export function getMeta() {
     document.querySelector('meta[name="description"]')?.getAttribute('content') ||
     '';
   return { title, channel, description: description.slice(0, 2000) };
-}
-
-/**
- * The element to render into while the player is fullscreen, so overlays stay visible
- * and reachable. A <video> element itself cannot hold children, so use its parent.
- */
-export function containerForOverlays() {
-  const fs = document.fullscreenElement;
-  if (!fs) return document.body;
-  return fs.tagName === 'VIDEO' ? fs.parentElement || document.body : fs;
 }
 
 /** Call fn() whenever YouTube's single-page navigation lands on a new page. */
@@ -227,3 +223,32 @@ export async function fetchWatchPage(videoId) {
 export function rightControls() {
   return getPlayer()?.querySelector('.ytp-right-controls') || null;
 }
+
+/**
+ * What the watch page says, for the content script: the category (for the
+ * video type) and the caption file to take dialogue timing from.
+ */
+export async function loadPageInfo(videoId) {
+  const page = await fetchWatchPage(videoId);
+  const track = pickCaptionTrack(page.tracks);
+  const url = track && timedTextUrl(track.baseUrl);
+  return { category: page.category, captionUrls: url ? [url] : [] };
+}
+
+/** YouTube, as the content script sees it. */
+export const youtubePlatform = Object.freeze({
+  id: 'youtube',
+  videoIdFromUrl,
+  getPlayer,
+  getVideo,
+  isAdShowing,
+  getPageDuration,
+  getMeta,
+  rightControls,
+  onNavigate,
+  loadPageInfo,
+  watchCaptionRequests: watchTimedTextRequests,
+  videoType: ({ category, title }) => pageVideoType({ category, title }),
+  buttonClass: 'ytp-button scenevoice-button',
+  buttonStyle: '',
+});

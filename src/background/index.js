@@ -1,22 +1,31 @@
 // Service worker: text-to-speech, keyboard commands, status for the popup,
 // cache housekeeping, and the hub for description generation.
 //
-// Gemini requests do not run here: Chrome terminates a service worker when a
+// Model requests do not run here: Chrome terminates a service worker when a
 // fetch takes longer than 30 seconds, and describing five minutes of video takes
 // 30–90 seconds. They run in a worker inside the offscreen document
 // (offscreen/worker.js), an extension page that Chrome keeps open and that has
 // the extension's own host permissions. This file starts jobs there, saves each
-// finished section to the cache, and tells the YouTube tabs what happened.
+// finished section to the cache, and tells the video tabs what happened.
+//
+// Which model, and how it is shown the video, follows the site of the tab that
+// asks (shared/providers.js): Gemini on YouTube opens the video link; otherwise
+// the tab sends frames from the playing video (MSG.GEN_FRAMES), described here
+// stretch by stretch and added to the same cache.
 
-import { MSG } from '../shared/constants.js';
-import { authorizeBackgroundMessage } from '../shared/sender.js';
-import { getLocal, protectLocalStorage, setLocal } from '../shared/storage.js';
+import { FRAME_SAMPLING, LANGUAGES, MSG } from '../shared/constants.js';
+import { authorizeBackgroundMessage, platformOfSender } from '../shared/sender.js';
+import { getLocal, getSettings, protectLocalStorage, setLocal } from '../shared/storage.js';
 import { addFeedback, cacheInfo, clearCache, deleteScript, getFeedback, getScript, putScript } from '../shared/cache.js';
+import { mergeFramesChunk, newFramesScript, recentCues } from '../shared/coverage.js';
+import { sanitizeFrames } from '../shared/frames.js';
+import { platformOfVideoId } from '../shared/platforms.js';
+import { inputModeFor, providerFor } from '../shared/providers.js';
 import { applyCorrections, cueRef, findCueIndex, replaceCue } from '../shared/revision.js';
 import { speechOptions } from '../shared/voices.js';
 
-// Content scripts share the YouTube process and must not read the API key or
-// the description cache. The level does not always survive a browser restart,
+// Content scripts share the YouTube (or Bilibili) process and must not read the
+// API keys or the description cache. The level does not always survive a browser restart,
 // so set it on every worker start, before handling messages. Stored records
 // are left as they are: existing users keep their key and cached scripts.
 function restrictStorage() {
@@ -79,7 +88,7 @@ async function ensureOffscreen() {
       .createDocument({
         url: OFFSCREEN_URL,
         reasons: ['WORKERS'],
-        justification: 'Runs the worker that sends long video-description requests to the Gemini API; such requests take longer than a service worker may wait.',
+        justification: 'Runs the worker that sends long video-description requests to the Gemini or Qwen API; such requests take longer than a service worker may wait.',
       })
       .catch((err) => {
         // Another caller won the race.
@@ -123,12 +132,46 @@ function scheduleIdleClose() {
   }, IDLE_CLOSE_MS);
 }
 
-/** What the worker needs to call Gemini, or an error when no key is set. */
-async function geminiConfig() {
-  const local = await getLocal();
+/** What the worker needs to call a provider, or an error when its key is not set. */
+function providerConfig(local, provider) {
+  if (provider === 'qwen') {
+    if (!local.qwenApiKey) return { error: 'no-key' };
+    return {
+      config: {
+        apiKey: local.qwenApiKey,
+        apiBase: local.qwenApiBase,
+        model: local.qwenModel,
+        jsonMode: Boolean(local.qwenJsonMode),
+        maxFrames: local.qwenMaxFrames,
+      },
+    };
+  }
   if (!local.apiKey) return { error: 'no-key' };
   return { config: { apiKey: local.apiKey, apiBase: local.apiBase, model: local.model } };
 }
+
+/**
+ * The provider for the tab that asks, from its site (never from the message)
+ * and the settings, how it takes the video, and its config.
+ * @returns {Promise<{platform: string, provider: string, mode: 'video'|'frames', config?: object, error?: string}>}
+ */
+async function setupFor(sender) {
+  const platform = platformOfSender(sender, chrome.runtime.id) || 'youtube';
+  const provider = providerFor(await getSettings(), platform);
+  const { config, error } = providerConfig(await getLocal(), provider);
+  return { platform, provider, mode: inputModeFor(provider, platform), config, error };
+}
+
+/** Most frames one request carries: the per-computer limit for Qwen (待确认), at most 12. */
+function frameLimit(config, fallback = FRAME_SAMPLING.maxFrames) {
+  const n = Math.floor(Number(config?.maxFrames));
+  return Number.isFinite(n) && n > 0 ? Math.min(12, n) : fallback;
+}
+
+const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
+const text = (value, n) => (typeof value === 'string' ? value.slice(0, n) : '');
+/** Title, uploader and description from the tab, as plain strings of sensible length. */
+const cleanMeta = (meta) => ({ title: text(meta?.title, 300), channel: text(meta?.channel, 120), description: text(meta?.description, 2000) });
 
 const jobKey = (videoId, lang) => `${videoId}:${lang}`;
 
@@ -169,9 +212,11 @@ async function broadcast(msg) {
   }
 }
 
-async function startGeneration({ videoId, duration, meta, lang, force }) {
-  const { config, error } = await geminiConfig();
+async function startGeneration({ videoId, duration, meta, lang, force }, sender) {
+  const { config, error, mode } = await setupFor(sender);
   if (error) return { error };
+  // Only a model that opens the video link describes ahead of playback; the others are sent frames.
+  if (mode !== 'video') return { error: 'provider-unsupported' };
   const script = force ? null : await getScript(videoId, lang);
   if (script?.complete) return { status: 'ready' };
   const reply = await offscreen({ cmd: 'start', key: jobKey(videoId, lang), config, params: { videoId, duration, meta, lang }, script, force });
@@ -201,10 +246,13 @@ async function workerRequest(data) {
   }
 }
 
-async function ask(params) {
-  const { config, error } = await geminiConfig();
+async function ask(params, sender) {
+  const { config, error, mode, provider } = await setupFor(sender);
   if (error) return { error };
-  return workerRequest({ cmd: 'ask', config, params });
+  if (mode !== 'frames') return workerRequest({ cmd: 'ask', config, params });
+  const frames = sanitizeFrames(params?.frames, { max: Math.min(4, frameLimit(config)) });
+  if (!frames.length) return { error: 'frames-missing' };
+  return workerRequest({ cmd: 'ask', mode, provider, config, params: { ...params, meta: cleanMeta(params?.meta), frames } });
 }
 
 /**
@@ -214,28 +262,30 @@ async function ask(params) {
  * and applied again to sections a running job saves later.
  * Resolves to { status: 'revised', cue } | { status: 'removed' } | { error }.
  */
-async function revise({ videoId, lang, cue, meta, duration }) {
+async function revise({ videoId, lang, cue, meta, duration, frames: sent }, sender) {
   if (typeof videoId !== 'string' || typeof lang !== 'string' || !cue || typeof cue !== 'object') return { error: 'unknown' };
-  const { config, error } = await geminiConfig();
+  const { config, error, mode, provider } = await setupFor(sender);
   if (error) return { error };
+  // A model that is sent pictures looks again at those of that moment.
+  const frames = mode === 'frames' ? sanitizeFrames(sent, { max: frameLimit(config) }) : null;
+  if (frames && !frames.length) return { error: 'frames-missing' };
   const script = await getScript(videoId, lang);
   if (!script) return { error: 'no-script' };
   const i = findCueIndex(script.cues, cueRef(cue));
   if (i < 0) return { error: 'cue-not-found' };
   const old = script.cues[i];
   const mark = { at: Date.now(), ...cueRef(old) };
-  const reply = await workerRequest({
-    cmd: 'revise',
-    config,
-    params: {
-      videoId,
-      lang,
-      meta: meta || {},
-      duration: Number.isFinite(duration) && duration > 0 ? duration : script.duration,
-      cue: old,
-      characters: script.characters || [],
-    },
-  });
+  const params = {
+    videoId,
+    lang,
+    meta: meta || {},
+    duration: Number.isFinite(duration) && duration > 0 ? duration : script.duration,
+    cue: old,
+    characters: script.characters || [],
+  };
+  const reply = frames
+    ? await workerRequest({ cmd: 'revise', mode, provider, config, params: { ...params, meta: cleanMeta(meta), frames } })
+    : await workerRequest({ cmd: 'revise', config, params });
   if (reply.error) {
     await inTurn(jobKey(videoId, lang), () => addFeedback(videoId, lang, { ...mark, status: 'failed', error: reply.error })).catch(() => {});
     return { error: reply.error, detail: reply.detail };
@@ -249,6 +299,51 @@ async function revise({ videoId, lang, cue, meta, duration }) {
   });
   await broadcast({ type: MSG.GEN_EVENT, event: 'revised', videoId, lang });
   return replacement ? { status, cue: replacement } : { status };
+}
+
+/**
+ * Frames of one stretch of the video from the tab playing it: have them
+ * described, then add the descriptions to the saved script (with the
+ * corrections the user made) and count the stretch as described.
+ * Resolves to { status: 'ok'|'done', cues, cueCount, completedUntil, complete } | { error }.
+ */
+async function describeStretch(msg, sender) {
+  const { videoId, lang } = msg;
+  const start = Number(msg.window?.start);
+  const end = Number(msg.window?.end);
+  if (typeof videoId !== 'string' || !LANGUAGE_CODES.has(lang) || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end - start > 120) {
+    return { error: 'unknown' };
+  }
+  const setup = await setupFor(sender);
+  // A tab describes only videos of its own site.
+  if (platformOfVideoId(videoId) !== setup.platform) return { error: 'unknown' };
+  if (setup.error) return { error: setup.error };
+  if (setup.mode !== 'frames') return { error: 'provider-unsupported' };
+  const frames = sanitizeFrames(msg.frames, { max: frameLimit(setup.config) });
+  if (!frames.length) return { error: 'frames-missing' };
+  const saved = await getScript(videoId, lang);
+  const duration = Number.isFinite(msg.duration) && msg.duration > 0 ? msg.duration : saved?.duration;
+  const reply = await workerRequest({
+    cmd: 'frames',
+    provider: setup.provider,
+    config: setup.config,
+    params: { meta: cleanMeta(msg.meta), duration, lang, window: { start, end }, frames, characters: saved?.characters || [], recent: recentCues(saved, start) },
+  });
+  if (reply.error || !Array.isArray(reply.chunk?.cues)) return { error: reply.error || 'unknown', detail: reply.detail };
+  const script = await inTurn(jobKey(videoId, lang), async () => {
+    const base = (await getScript(videoId, lang)) || newFramesScript({ videoId, lang, duration, platform: setup.platform, provider: setup.provider });
+    const merged = mergeFramesChunk(base, reply.chunk, { start, end, duration, model: reply.model, provider: setup.provider });
+    const fixed = applyCorrections(merged, await getFeedback(videoId, lang));
+    await putScript(videoId, lang, fixed);
+    return fixed;
+  });
+  return {
+    status: script.complete ? 'done' : 'ok',
+    cues: reply.chunk.cues,
+    cueCount: script.cues.length,
+    completedUntil: script.completedUntil,
+    complete: script.complete,
+  };
 }
 
 /** Events from the worker: save finished sections, then tell the tabs. */
@@ -281,7 +376,8 @@ async function handle(msg, sender) {
   switch (msg?.type) {
     case MSG.GET_STATUS: {
       const local = await getLocal();
-      return { hasKey: Boolean(local.apiKey), model: local.model, shortcuts: await shortcuts() };
+      // Only whether each key exists: never the key itself.
+      return { hasKey: Boolean(local.apiKey), keys: { gemini: Boolean(local.apiKey), qwen: Boolean(local.qwenApiKey) }, model: local.model, shortcuts: await shortcuts() };
     }
     case MSG.GET_SCRIPT:
       return { script: await getScript(msg.videoId, msg.lang) };
@@ -290,15 +386,17 @@ async function handle(msg, sender) {
       await deleteScript(msg.videoId, msg.lang);
       return { ok: true };
     case MSG.GEN_START:
-      return startGeneration(msg);
+      return startGeneration(msg, sender);
     case MSG.GEN_STOP:
       return stopGeneration(msg);
     case MSG.GEN_STATUS:
       return generationStatus(msg);
     case MSG.ASK:
-      return ask(msg.params);
+      return ask(msg.params, sender);
     case MSG.REVISE:
-      return revise(msg);
+      return revise(msg, sender);
+    case MSG.GEN_FRAMES:
+      return describeStretch(msg, sender);
     case MSG.JOB_EVENT:
       await onJobEvent(msg);
       return { ok: true };

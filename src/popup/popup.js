@@ -4,6 +4,7 @@ import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
 import { typeAdjustedText } from '../shared/labels.js';
 import { voiceTestMessage } from '../shared/settings.js';
+import { platformOfUrl } from '../shared/platforms.js';
 import { getSettings, resolveLanguage } from '../shared/storage.js';
 import { typeAdjustments } from '../shared/videotype.js';
 
@@ -45,7 +46,8 @@ function renderProgress(state) {
   const box = $('progressBox');
   const generating = state?.status === 'generating';
   box.hidden = !generating;
-  $('stop').hidden = !generating;
+  // Describing as the video plays can be stopped too; it has no end to estimate.
+  $('stop').hidden = !generating && state?.status !== 'live';
   if (!generating) return;
   const percent = Math.max(2, Math.min(100, state.percent || 0));
   $('progress').value = percent;
@@ -55,9 +57,20 @@ function renderProgress(state) {
 }
 
 let current = null;
+/** From the service worker: which keys exist ({ gemini, qwen }), or only whether the Gemini key does. */
+let keyStatus = null;
+
+/** Ask for a key when the model this tab's site uses has none. */
+function renderKeyBanner() {
+  const provider = current?.supported && current.provider ? current.provider : 'gemini';
+  const has = keyStatus?.keys ? keyStatus.keys[provider] : keyStatus?.hasKey;
+  $('keyBanner').hidden = Boolean(has);
+  $('setupBody').textContent = provider === 'qwen' ? t('popup_setup_body_qwen') : t('popup_setup_body');
+}
 
 function render(state) {
   current = state;
+  if (keyStatus) renderKeyBanner();
   const title = $('videoTitle');
   const statusEl = $('videoStatus');
   const gen = $('generate');
@@ -70,8 +83,8 @@ function render(state) {
   $('reportHint').hidden = $('report').hidden;
 
   if (!state || state.unreachable) {
-    const onYouTube = /youtube(-nocookie)?\.com/.test(state?.url || '');
-    text = onYouTube ? t('popup_reload_tab') : t('popup_open_video');
+    const onVideoSite = Boolean(platformOfUrl(state?.url || ''));
+    text = onVideoSite ? t('popup_reload_tab') : t('popup_open_video');
     title.textContent = '';
     actions.forEach((b) => (b.disabled = true));
   } else if (!state.supported) {
@@ -84,6 +97,10 @@ function render(state) {
     gen.hidden = false;
     gen.textContent = state.cueCount ? t('popup_regenerate') : t('popup_generate');
     switch (state.status) {
+      case 'live':
+        text = t('popup_live', String(state.cueCount || 0));
+        gen.hidden = true;
+        break;
       case 'generating':
         text = state.total > 1
           ? t('status_progress_percent', String(state.percent || 0), String(Math.min(state.done + 1, state.total)), String(state.total))
@@ -100,7 +117,7 @@ function render(state) {
         gen.textContent = t('popup_continue');
         break;
       case 'error':
-        text = errorMessage(state.errorCode);
+        text = errorMessage(state.errorCode, state.provider);
         cls = 'status-bad';
         break;
       case 'loading':
@@ -117,6 +134,7 @@ function render(state) {
   }
   clearTimeout(pollTimer);
   if (state?.status === 'generating' || state?.status === 'loading') pollTimer = setTimeout(refresh, 1000);
+  else if (state?.status === 'live') pollTimer = setTimeout(refresh, 3000);
   renderType();
 }
 
@@ -197,7 +215,8 @@ async function init() {
   });
 
   const status = await chrome.runtime.sendMessage({ type: MSG.GET_STATUS });
-  $('keyBanner').hidden = Boolean(status?.hasKey);
+  keyStatus = status || {};
+  renderKeyBanner();
   const sc = status?.shortcuts || {};
   if (sc['toggle-descriptions'] || sc['describe-now']) {
     $('shortcutHint').textContent = t('popup_shortcut_hint', sc['toggle-descriptions'] || '—', sc['describe-now'] || '—');

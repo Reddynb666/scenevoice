@@ -1,10 +1,12 @@
 // On-page UI: a caption-style text overlay for low-vision and sighted co-viewers,
 // a button in the player controls, and the "ask about this moment" dialog.
-// Everything visual lives in a shadow root so YouTube's CSS cannot reach it.
+// Everything visual lives in a shadow root so the site's CSS cannot reach it.
+// Where the player and its controls are comes from the site's platform object.
 
 import { t } from '../shared/i18n.js';
 import { formatTime } from '../shared/script.js';
-import { containerForOverlays, getPlayer, rightControls } from './youtube.js';
+import { containerForOverlays } from './dom.js';
+import { youtubePlatform } from './youtube.js';
 
 const CSS = `
 :host { all: initial; }
@@ -67,8 +69,9 @@ button[disabled] { opacity: .6; cursor: progress; }
 const ICON = `<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true" focusable="false"><path fill="#fff" d="M10 11h12a2 2 0 0 1 2 2v1.5l4-2.5v12l-4-2.5V23a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V13a2 2 0 0 1 2-2zm2 5v2h8v-2h-8zm0 3.5v2h5v-2h-5z"/></svg>`;
 
 export class PageUI {
-  constructor({ onToggle }) {
+  constructor({ onToggle, platform = youtubePlatform }) {
     this.onToggle = onToggle;
+    this.platform = platform;
     this.host = document.createElement('div');
     this.host.dataset.scenevoice = 'ui';
     this.root = this.host.attachShadow({ mode: 'open' });
@@ -93,7 +96,7 @@ export class PageUI {
 
   /** Keep the overlay inside the current player and the button in its controls. */
   mount() {
-    const player = getPlayer();
+    const player = this.platform.getPlayer();
     if (player && this.host.parentNode !== player) {
       if (getComputedStyle(player).position === 'static') player.style.position = 'relative';
       player.appendChild(this.host);
@@ -102,11 +105,12 @@ export class PageUI {
   }
 
   mountButton() {
-    const controls = rightControls();
+    const controls = this.platform.rightControls();
     if (!controls) return;
     if (!this.button || !controls.contains(this.button)) {
       const b = document.createElement('button');
-      b.className = 'ytp-button scenevoice-button';
+      b.className = this.platform.buttonClass;
+      if (this.platform.buttonStyle) b.style.cssText = this.platform.buttonStyle;
       b.type = 'button';
       b.innerHTML = ICON;
       b.addEventListener('click', (e) => {
@@ -217,7 +221,7 @@ export class PageUI {
       jump.textContent = answerTime == null ? '' : t('ask_jump', formatTime(answerTime));
     };
 
-    // Keep YouTube's single-key shortcuts (k, j, l, f, m…) from firing while typing.
+    // Keep the player's single-key shortcuts (YouTube's k, j, l, f, m; Bilibili's space, d, f…) from firing while typing.
     for (const type of ['keydown', 'keyup', 'keypress']) {
       dialog.addEventListener(type, (e) => {
         if (type === 'keydown' && e.key === 'Enter' && !e.shiftKey && e.target === input) {

@@ -1,5 +1,5 @@
-// Real dialogue timing from YouTube captions, used to correct the pauses the
-// model estimated, so descriptions do not talk over speech.
+// Real dialogue timing from YouTube captions or Bilibili CC subtitles, used to
+// correct the pauses the model estimated, so descriptions do not talk over speech.
 // No browser APIs here, so everything is unit-testable.
 
 /** Seconds a word-timed (auto-generated) caption line is assumed to run past its last word. */
@@ -25,7 +25,8 @@ function attr(attrs, name) {
 }
 
 /**
- * Parse a YouTube timedtext response (json3, srv3 XML or the older srv1 XML).
+ * Parse a YouTube timedtext response (json3, srv3 XML or the older srv1 XML),
+ * or a Bilibili subtitle file (BCC JSON: {"body": [{"from", "to", "content"}]}).
  * @returns {Array<{start: number, end: number, text: string}>} seconds, sorted by start
  */
 export function parseTimedText(body) {
@@ -39,6 +40,13 @@ export function parseTimedText(body) {
       json = JSON.parse(src);
     } catch {
       return lines;
+    }
+    // Bilibili: times in seconds, one line per entry.
+    for (const item of Array.isArray(json?.body) ? json.body : []) {
+      const start = Number(item?.from);
+      const end = Number(item?.to);
+      const text = typeof item?.content === 'string' ? item.content.trim() : '';
+      if (text && Number.isFinite(start) && Number.isFinite(end) && end > start && start >= 0) lines.push({ start, end, text });
     }
     for (const ev of Array.isArray(json?.events) ? json.events : []) {
       if (!Array.isArray(ev?.segs)) continue;

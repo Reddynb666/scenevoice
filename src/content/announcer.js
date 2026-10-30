@@ -5,7 +5,7 @@ import { MSG } from '../shared/constants.js';
 import { authorizeContentMessage } from '../shared/sender.js';
 import { estimateSeconds } from '../shared/script.js';
 import { voiceFor } from '../shared/settings.js';
-import { containerForOverlays } from './youtube.js';
+import { containerForOverlays } from './dom.js';
 
 const HIDDEN_STYLE = [
   'position:absolute',

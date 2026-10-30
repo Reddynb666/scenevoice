@@ -11,6 +11,7 @@
 //   2. the category the uploader chose, from the watch page that is fetched
 //      anyway for caption timing (available before any description exists);
 //   3. words such as "tutorial" in the title, when the category says little.
+// On Bilibili the category is the video's section (分区, "tname").
 
 import { VIDEO_TYPES } from './constants.js';
 import { CHOICES } from './settings.js';
@@ -58,6 +59,21 @@ const TUTORIAL_TITLE = [
   /(教程|教学|讲解|入门|课程|详解|如何|手把手|演示|科普|做法|怎么做)/,
 ];
 
+/**
+ * Bilibili's sections, matched by keyword: there are many sub-sections and
+ * their names change (待确认 against the current list). Teaching words win, so
+ * "音乐教学" is a tutorial and "音乐现场" entertainment.
+ */
+const BILIBILI_TUTORIAL = /(知识|科普|科学|学习|校园|职业|职场|技能|教程|教学|课程|财经|商业|社科|法律|心理|人文|历史|计算机|软件|编程|数码|科技|设计|手工|绘画|美食制作|汽车知识|健身)/;
+const BILIBILI_ENTERTAINMENT = /(游戏|音乐|演奏|翻唱|MV|舞蹈|宅舞|动画|番剧|国创|鬼畜|影视|电影|电视剧|综艺|娱乐|明星|搞笑|日常|vlog|萌宠|动物|运动|体育|赛事|旅游|出行|美妆|穿搭|时尚|ASMR)/i;
+
+/** The type a Bilibili section suggests, or ''. */
+export function bilibiliCategoryType(name) {
+  if (typeof name !== 'string' || !name.trim()) return '';
+  if (BILIBILI_TUTORIAL.test(name)) return 'tutorial';
+  return BILIBILI_ENTERTAINMENT.test(name) ? 'entertainment' : '';
+}
+
 function normalizeCategory(category) {
   if (typeof category !== 'string') return '';
   return category.replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -68,7 +84,8 @@ export function titleLooksLikeTutorial(title) {
 }
 
 /** The type the watch page suggests, from its category and title. '' when it does not say. */
-export function pageVideoType({ category, title } = {}) {
+export function pageVideoType({ category, title, platform = 'youtube' } = {}) {
+  if (platform === 'bilibili') return bilibiliCategoryType(category) || (titleLooksLikeTutorial(title) ? 'tutorial' : '');
   const c = normalizeCategory(category);
   if (CATEGORY_TYPES[c]) return CATEGORY_TYPES[c];
   if (titleLooksLikeTutorial(title)) return 'tutorial';

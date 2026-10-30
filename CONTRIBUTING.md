@@ -18,7 +18,7 @@ npm test             # unit tests
 npm run test:e2e     # end-to-end test (needs Python 3 and playwright with Chromium)
 ```
 
-Load `dist/` as an unpacked extension. After changing the content script, reload the YouTube tab too.
+Load `dist/` as an unpacked extension. After changing the content script, reload the YouTube (or Bilibili) tab too.
 
 ## Before a release: screen reader checklist
 
@@ -65,6 +65,21 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 
 **Popup**
 - [ ] Every control is reachable with Tab; status is announced when it changes.
+
+**China site: Bilibili with Qwen (experimental)**
+
+On a real Bilibili video (`www.bilibili.com/video/…`), from mainland China if possible, with a Qwen key from Alibaba Cloud Model Studio:
+- [ ] *Save and test* in the Qwen section says which model is in use; a wrong key gives a spoken error in Chinese and English.
+- [ ] The popup on a Bilibili video names the video; without a Qwen key it asks for one (not for a Gemini key).
+- [ ] `Alt+Shift+D` says SceneVoice is describing as you watch; within about 20 seconds of playback the first description is heard, in a pause, a few seconds late. It is in Chinese with the description language set to follow the browser.
+- [ ] On a video with CC subtitles (written or AI), descriptions do not talk over dialogue; the console shows "dialogue timing from captions".
+- [ ] The SceneVoice button appears in Bilibili's control bar and has a spoken name; Bilibili's own shortcuts (space, f, d) do not fire while typing in the ask dialog.
+- [ ] `Alt+Shift+S` and `Alt+Shift+Q` answer about the current picture; *Last description is wrong* describes that moment again.
+- [ ] `Alt+Shift+D` again says descriptions are off and no more pictures are sent; the network panel shows no more requests to dashscope.aliyuncs.com.
+- [ ] Watching the same stretch again says the saved descriptions on time, without new requests.
+- [ ] A part (分P) switch, and a jump to a related video, start over for the new video.
+- [ ] Find a video whose picture cannot be taken (if any: a `<bwp-video>` player, or a cross-origin stream): SceneVoice says so clearly and sends nothing.
+- [ ] Not logged in: subtitles may be missing; descriptions still work with the model's own timing.
 
 ## Reporting bugs
 
