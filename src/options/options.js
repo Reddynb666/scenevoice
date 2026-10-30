@@ -433,8 +433,9 @@ async function init() {
     await renderCache();
   });
 
-  // No key yet: start where one goes.
-  if (!local.apiKey && !local.qwenApiKey) $('apiKey').focus();
+  // No key yet: start where one goes. In Chinese, at the Qwen key: Gemini needs Google,
+  // which mainland China cannot reach (the Gemini key is one heading up).
+  if (!local.apiKey && !local.qwenApiKey) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
 }
 
 init();

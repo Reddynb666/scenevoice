@@ -205,6 +205,19 @@ function renderQuickKeys(sc) {
   $('quickKeys').textContent = items.length ? t('popup_quick_keys', items.join(' · ')) : t('popup_quick_keys_none');
 }
 
+/** Every SceneVoice shortcut, as a list: what it does, then its key or "not set". */
+async function renderAllKeys() {
+  const list = $('keyList');
+  list.replaceChildren();
+  const commands = await chrome.commands.getAll().catch(() => []);
+  for (const c of commands) {
+    if (!c.name || c.name.startsWith('_')) continue;
+    const li = document.createElement('li');
+    li.textContent = `${c.description || c.name}: ${c.shortcut || t('opt_keys_unset')}`;
+    list.append(li);
+  }
+}
+
 async function testVoice() {
   const settings = await getSettings();
   chrome.runtime.sendMessage(voiceTestMessage(settings, resolveLanguage(settings.language, chrome.i18n.getUILanguage())));
@@ -227,6 +240,8 @@ async function init() {
     $('shortcutHint').textContent = t('popup_shortcut_hint', sc['toggle-descriptions'] || '—', sc['describe-now'] || '—');
   }
   renderQuickKeys(sc);
+  await renderAllKeys();
+  $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   $('testVoice').addEventListener('click', testVoice);
 
   $('setupKey').addEventListener('click', () => chrome.runtime.openOptionsPage());

@@ -46,8 +46,8 @@ async function openPage(page, opts = {}) {
   vi.resetModules();
   await import(`../src/${page}/${page}.js`);
   // Wait for init() to finish: these are filled in after every listener is attached.
-  const last = page === 'options' ? '#cacheInfo' : '#quickKeys';
-  await vi.waitFor(() => expect(document.querySelector(last).textContent).not.toBe(''));
+  const last = { options: '#cacheInfo', guide: null, popup: '#quickKeys' }[page];
+  if (last) await vi.waitFor(() => expect(document.querySelector(last).textContent).not.toBe(''));
 }
 
 const $ = (sel) => document.querySelector(sel);
@@ -92,6 +92,13 @@ describe('accessibility checks', () => {
     expect(await axeViolations()).toEqual([]);
     choose($('input[name=output][value=tts]'));
     await vi.waitFor(() => expect($('#ttsSpeed').hidden).toBe(false));
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('key guide, in both languages', async () => {
+    await openPage('guide');
+    expect(await axeViolations()).toEqual([]);
+    await openPage('guide', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -611,7 +618,7 @@ describe('settings page: models for each site, and the Qwen key', () => {
     vi.stubGlobal('fetch', fetchMock);
     await openPage('options');
     expect($('#qwenApiKey').type).toBe('password');
-    expect($('#qwenApiKey').getAttribute('aria-describedby')).toBe('qwenKeyStatus qwenKeyPrivacy');
+    expect($('#qwenApiKey').getAttribute('aria-describedby')).toBe('qwenKeyHint qwenKeyStatus qwenKeyPrivacy');
     expect($('#qwenKeyStatus').getAttribute('role')).toBe('status');
     expect($('#qwenModel').value).toBe('qwen-vl-max');
     $('#qwenApiKey').value = '  sk-qwen-test  ';
@@ -644,6 +651,57 @@ describe('settings page: models for each site, and the Qwen key', () => {
     $('#removeQwenKey').click();
     await vi.waitFor(() => expect(fake.areas.local.local.qwenApiKey).toBe(''));
     expect($('#qwenKeyStatus').textContent).toBe('Key removed.');
+  });
+});
+
+describe('shortcuts in the popup', () => {
+  it('lists every shortcut with its key or "not set", and opens Chrome\u2019s shortcut page to change them', async () => {
+    await openPage('popup');
+    const items = [...document.querySelectorAll('#keyList li')].map((li) => li.textContent);
+    expect(items).toEqual([
+      'Create descriptions, or turn them on and off: Alt+Shift+D',
+      'Change the level of detail: Not set',
+      'Speak faster: Not set',
+    ]);
+    const create = vi.spyOn(fake.chrome.tabs, 'create');
+    $('#editShortcuts').click();
+    expect(create).toHaveBeenCalledWith({ url: 'chrome://extensions/shortcuts' });
+    expect($('#allKeys summary').textContent).toBe('All keyboard shortcuts');
+  });
+});
+
+describe('first use: getting a key', () => {
+  it('starts at the Gemini key in English, with a sentence saying what to paste and where to get it', async () => {
+    await openPage('options');
+    expect(document.activeElement.id).toBe('apiKey');
+    expect($('#apiKey').getAttribute('aria-describedby').split(' ')[0]).toBe('keyHint');
+    expect($('#keyHint').textContent).toMatch(/^Paste your Gemini API key here\. Get one free/);
+    const links = [...document.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(links).toContainEqual(['Get a Gemini key at Google AI Studio (opens in a new tab)', 'https://aistudio.google.com/apikey']);
+    expect(links).toContainEqual(['Step-by-step guide, written for screen readers', 'guide.html#gemini']);
+    expect(links).toContainEqual(['Step-by-step guide, written for screen readers', 'guide.html#qwen']);
+  });
+
+  it('starts at the Qwen key in Chinese, since Gemini needs Google', async () => {
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    expect(document.activeElement.id).toBe('qwenApiKey');
+    expect($('#qwenKeyHint').textContent).toMatch(/^在这里粘贴通义千问 API Key/);
+  });
+
+  it('stays where it is once a key is saved', async () => {
+    await openPage('options', { local: { local: { apiKey: 'k' } } });
+    expect(document.activeElement.id).not.toBe('apiKey');
+  });
+
+  it('the guide reads the part asked for first, with numbered steps for each key', async () => {
+    window.location.hash = '#qwen';
+    await openPage('guide', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    expect(document.activeElement.id).toBe('qwen');
+    expect(document.activeElement.textContent).toBe('通义千问 Key（用于 B 站，以及在中国大陆使用）');
+    expect(document.querySelectorAll('#gemini ~ ol li').length).toBe(7);
+    expect(document.querySelectorAll('section[aria-labelledby=qwen] ol li').length).toBe(7);
+    expect(document.title).toBe('如何申请 API Key');
+    window.location.hash = '';
   });
 });
 

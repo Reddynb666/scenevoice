@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="guide_title">How to get an API key</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <main class="stack">
+    <h1 data-i18n="guide_title">How to get an API key</h1>
+    <p data-i18n="guide_intro">SceneVoice is free, but the AI model that watches the video needs a key of your own. Pick the model for the site you watch. Each step below is one thing to do; the sites change their pages from time to time, so a button may be named slightly differently.</p>
+    <p><a href="options.html" data-i18n="guide_back">Back to SceneVoice settings</a></p>
+
+    <section class="card stack" aria-labelledby="gemini">
+      <h2 id="gemini" tabindex="-1" data-i18n="guide_gemini_title">Gemini key (for YouTube)</h2>
+      <p data-i18n="guide_gemini_cost">Free: no card is needed. The free tier has a daily limit, which is enough for everyday watching; it resets the next day. Gemini needs Google to be reachable from where you are.</p>
+      <ol class="steps">
+        <li><span data-i18n="guide_gemini_1">Open Google AI Studio:</span> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" data-i18n="guide_gemini_link">Google AI Studio API keys page (opens in a new tab)</a></li>
+        <li data-i18n="guide_gemini_2">Sign in with a Google account. If you have none, choose “Create account” first.</li>
+        <li data-i18n="guide_gemini_3">The first time, you are asked to accept the terms of service. Check the box and continue.</li>
+        <li data-i18n="guide_gemini_4">Find the button “Create API key”. With a screen reader, jump between buttons (B in NVDA and JAWS browse mode; the rotor in VoiceOver) or search the page for “Create API key”.</li>
+        <li data-i18n="guide_gemini_5">If you are asked to choose a Google Cloud project, pick the one offered, or “Create project”.</li>
+        <li data-i18n="guide_gemini_6">A long key appears, starting with “AIza”. Press the “Copy” button next to it.</li>
+        <li data-i18n="guide_gemini_7">Come back to SceneVoice settings, paste the key into “Gemini API key” and press “Save and test”. When it works you hear which model will be used.</li>
+      </ol>
+    </section>
+
+    <section class="card stack" aria-labelledby="qwen">
+      <h2 id="qwen" tabindex="-1" data-i18n="guide_qwen_title">Qwen key (for Bilibili, and from mainland China)</h2>
+      <p data-i18n="guide_qwen_cost">New accounts usually get a free allowance; the console shows how much is left. After that it is charged to your Alibaba Cloud account by use. Setting a budget alert in the Alibaba Cloud billing centre is a good idea.</p>
+      <ol class="steps">
+        <li><span data-i18n="guide_qwen_1">Open the Alibaba Cloud Model Studio console:</span> <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener" data-i18n="guide_qwen_link">Model Studio console (opens in a new tab)</a></li>
+        <li data-i18n="guide_qwen_2">Sign in with an Alibaba Cloud account, or register with a phone number. A Taobao or Alipay account can also sign in.</li>
+        <li data-i18n="guide_qwen_3">Complete real-name verification when asked (for example with Alipay). Alibaba Cloud requires it before a key can be used.</li>
+        <li data-i18n="guide_qwen_4">The first time, the console asks you to activate Model Studio. Activating is free; use is charged afterwards.</li>
+        <li data-i18n="guide_qwen_5">Find “API-KEY” (key management) and choose “Create API key”.</li>
+        <li data-i18n="guide_qwen_6">A key starting with “sk-” appears. Copy it.</li>
+        <li data-i18n="guide_qwen_7">Come back to SceneVoice settings, paste the key into “Qwen API key” and press “Save and test”.</li>
+      </ol>
+    </section>
+
+    <section class="card stack" aria-labelledby="privacy">
+      <h2 id="privacy" data-i18n="guide_privacy_title">Your key stays with you</h2>
+      <p data-i18n="guide_privacy">The key is stored only on this computer and sent only to the model's own address. SceneVoice has no server and never sees it. Do not share the key with others: whoever has it can use your quota.</p>
+    </section>
+  </main>
+  <script src="guide.js"></script>
+</body>
+</html>

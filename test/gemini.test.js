@@ -271,7 +271,10 @@ describe('GeminiClient', () => {
       [{ status: 400, body: { error: { message: 'API key not valid. Please pass a valid API key.' } } }, 'bad-key'],
       [{ status: 404, body: { error: { message: 'models/x is not found' } } }, 'model-not-found'],
       [{ status: 400, body: { error: { message: 'Video is private or unavailable' } } }, 'video-unsupported'],
-      [{ status: 403, body: { error: { message: 'User location is not supported for the API use.' } } }, 'forbidden'],
+      [{ status: 403, body: { error: { message: 'User location is not supported for the API use.' } } }, 'region'],
+      [{ status: 400, body: { error: { message: 'User location is not supported for the API use.', status: 'FAILED_PRECONDITION' } } }, 'region'],
+      [{ status: 403, body: { error: { message: 'Permission denied on resource project.' } } }, 'bad-key'],
+      [{ status: 429, body: { error: { message: 'Resource has been exhausted (e.g. check quota).' } } }, 'quota'],
     ];
     for (const [resp, code] of cases) {
       const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: fakeFetch([resp]) });

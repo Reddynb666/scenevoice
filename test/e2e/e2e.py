@@ -319,7 +319,9 @@ def main():
             opt.goto(f"chrome-extension://{ext_id}/options.html")
         opt.on("console", lambda m: m.type == "error" and console_errors.append(f"options: {m.text}"))
         opt.wait_for_load_state()
-        check(wait_until(opt, "() => document.activeElement && document.activeElement.id === 'apiKey'", 5), "focus starts in the API key field")
+        # A Chinese browser starts at the Qwen key (Gemini needs Google); any other at the Gemini key.
+        want = "qwenApiKey" if opt.evaluate("chrome.i18n.getUILanguage()").startswith("zh") else "apiKey"
+        check(wait_until(opt, f"() => document.activeElement && document.activeElement.id === '{want}'", 5), f"focus starts in the API key field for the browser's language ({want})")
         check(opt.locator("h1").inner_text().startswith("SceneVoice"), "options page is localized")
         opt.fill("#apiKey", "wrong-key")
         opt.click("#saveKey")

@@ -94,6 +94,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   announceStatus: true,
   /** Also say how far generation has got, at every quarter (needs announceStatus). */
   announceProgress: true,
+  /** The "press the shortcut to create descriptions" hint has been given (it is given once, ever). */
+  generateHintGiven: false,
   /** Pause the video while the "ask a question" dialog is open. */
   pauseOnAsk: true,
   /** The model that describes videos on each site (see providers.js). */

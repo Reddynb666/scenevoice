@@ -385,10 +385,12 @@ function main() {
     return t('status_loaded', String(n));
   }
 
-  /** Tell the user once per video that descriptions can be created. */
+  /** Tell the user, the first time they play a video without descriptions, how to create them. */
   function maybeHint() {
-    if (!videoId || hintedFor === videoId || status !== 'none' || !settings.enabled || isAdShowing()) return;
+    if (!videoId || hintedFor === videoId || settings.generateHintGiven || status !== 'none' || !settings.enabled || isAdShowing()) return;
     hintedFor = videoId;
+    // Once, ever: after that the user knows the key, and hearing it on every video is noise.
+    setSettings({ generateHintGiven: true }).catch(() => {});
     const key = shortcut('toggle-descriptions');
     announcer.status(key ? t('status_hint_generate', key) : t('status_hint_generate_button'));
   }

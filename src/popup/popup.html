@@ -121,6 +121,13 @@
       <p id="settingsStatus" class="small status-bad" role="status" aria-live="polite"></p>
     </section>
 
+    <details id="allKeys">
+      <summary data-i18n="popup_all_keys">All keyboard shortcuts</summary>
+      <ul id="keyList" class="small"></ul>
+      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_edit">Change shortcuts</button></div>
+      <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader. Chrome opens its shortcut settings page, chrome://extensions/shortcuts.</p>
+    </details>
+
     <footer class="row">
       <button type="button" id="openOptions" class="secondary" data-i18n="popup_all_settings">All settings</button>
       <p class="small muted" id="shortcutHint"></p>

@@ -39,13 +39,15 @@
       <h3 id="h-gemini" data-i18n="provider_gemini">Gemini (Google)</h3>
       <p data-i18n="opt_key_intro">SceneVoice uses Google's Gemini model to watch the video and write descriptions. You use your own free API key, so there is no account and no subscription.</p>
       <ol class="steps">
-        <li><span data-i18n="opt_key_step1">Open Google AI Studio and sign in with a Google account:</span> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></li>
+        <li><span data-i18n="opt_key_step1">Open Google AI Studio and sign in with a Google account:</span> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" data-i18n="opt_get_gemini_key">Get a Gemini key at Google AI Studio (opens in a new tab)</a></li>
         <li data-i18n="opt_key_step2">Choose “Create API key” and copy it.</li>
         <li data-i18n="opt_key_step3">Paste it below and press Save and test.</li>
       </ol>
+      <p><a href="guide.html#gemini" target="_blank" rel="noopener" data-i18n="opt_guide_link">Step-by-step guide, written for screen readers</a></p>
+      <p id="keyHint" class="small muted" data-i18n="opt_key_hint">Paste your Gemini API key here. Get one free at Google AI Studio (link above); the free tier has a daily limit.</p>
       <label class="field" for="apiKey"><span data-i18n="opt_key_label">Gemini API key</span></label>
       <div class="row nowrap">
-        <input type="password" id="apiKey" autocomplete="off" spellcheck="false" aria-describedby="keyStatus keyPrivacy">
+        <input type="password" id="apiKey" autocomplete="off" spellcheck="false" aria-describedby="keyHint keyStatus keyPrivacy">
         <button type="button" id="toggleKey" class="secondary" aria-pressed="false" data-i18n="opt_key_show">Show</button>
       </div>
       <div class="row">
@@ -76,13 +78,15 @@
       <h3 id="h-qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</h3>
       <p data-i18n="opt_qwen_intro">Qwen can be used from mainland China.</p>
       <ol class="steps">
-        <li><span data-i18n="opt_qwen_step1">Open the Alibaba Cloud Model Studio console and sign in:</span> <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener">bailian.console.aliyun.com</a></li>
+        <li><span data-i18n="opt_qwen_step1">Open the Alibaba Cloud Model Studio console and sign in:</span> <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener" data-i18n="opt_get_qwen_key">Get a Qwen key in the Model Studio console (opens in a new tab)</a></li>
         <li data-i18n="opt_qwen_step2">Create an API key there and copy it.</li>
         <li data-i18n="opt_key_step3">Paste it below and press Save and test.</li>
       </ol>
+      <p><a href="guide.html#qwen" target="_blank" rel="noopener" data-i18n="opt_guide_link">Step-by-step guide, written for screen readers</a></p>
+      <p id="qwenKeyHint" class="small muted" data-i18n="opt_qwen_key_hint">Paste your Qwen API key here. Create one in the Alibaba Cloud Model Studio console (link above); new accounts usually get a free allowance.</p>
       <label class="field" for="qwenApiKey"><span data-i18n="opt_qwen_key_label">Qwen API key</span></label>
       <div class="row nowrap">
-        <input type="password" id="qwenApiKey" autocomplete="off" spellcheck="false" aria-describedby="qwenKeyStatus qwenKeyPrivacy">
+        <input type="password" id="qwenApiKey" autocomplete="off" spellcheck="false" aria-describedby="qwenKeyHint qwenKeyStatus qwenKeyPrivacy">
         <button type="button" id="toggleQwenKey" class="secondary" aria-pressed="false" data-i18n="opt_key_show">Show</button>
       </div>
       <div class="row">
@@ -274,14 +278,14 @@
     <!-- 4. Shortcuts -->
     <section class="card stack" aria-labelledby="h-keys">
       <h2 id="h-keys" data-i18n="opt_keys_title">4. Keyboard shortcuts</h2>
-      <p data-i18n="opt_keys_intro">These work on any YouTube video, even while focus is on the player.</p>
+      <p data-i18n="opt_keys_intro">These work on YouTube and Bilibili videos, even while focus is on the player.</p>
       <table>
         <caption class="visually-hidden" data-i18n="opt_keys_title">Keyboard shortcuts</caption>
         <thead><tr><th scope="col" data-i18n="opt_keys_action">Action</th><th scope="col" data-i18n="opt_keys_key">Shortcut</th></tr></thead>
         <tbody id="shortcuts"></tbody>
       </table>
       <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_edit">Change shortcuts</button></div>
-      <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader. Chrome opens its shortcut settings page.</p>
+      <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader. Chrome opens its shortcut settings page, chrome://extensions/shortcuts.</p>
     </section>
 
     <!-- 5. Data -->

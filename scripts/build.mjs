@@ -71,7 +71,7 @@ function writeLocales() {
 
 function copyStatic() {
   cpSync(join(root, 'static'), dist, { recursive: true });
-  for (const page of ['popup', 'options', 'transcript']) {
+  for (const page of ['popup', 'options', 'transcript', 'guide']) {
     cpSync(join(root, 'src', page, `${page}.html`), join(dist, `${page}.html`));
     cpSync(join(root, 'src', page, `${page}.css`), join(dist, `${page}.css`));
   }
@@ -98,6 +98,7 @@ const entries = [
   { entryPoints: [join(root, 'src/popup/popup.js')], outfile: join(dist, 'popup.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/options/options.js')], outfile: join(dist, 'options.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/transcript/transcript.js')], outfile: join(dist, 'transcript.js'), format: 'iife' },
+  { entryPoints: [join(root, 'src/guide/guide.js')], outfile: join(dist, 'guide.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/offscreen/offscreen.js')], outfile: join(dist, 'offscreen.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/offscreen/worker.js')], outfile: join(dist, 'offscreen-worker.js'), format: 'iife' },
 ];

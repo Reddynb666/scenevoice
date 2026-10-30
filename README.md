@@ -31,7 +31,8 @@ Coming soon. Until then, install the unpacked build below. SceneVoice works in C
 
 1. Download the latest `scenevoice-<version>.zip` from the Releases page and unzip it, or build it yourself (see Development).
 2. Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and pick the unzipped `dist` folder.
-3. The settings page opens. Follow the three steps there to add a Gemini API key.
+3. The settings page opens, with focus on the key field (the Qwen key field in a Chinese browser). Follow the steps there, or the step-by-step guide linked from it, written for screen reader users, to add a key. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are.
+4. The first time you play a video without descriptions, SceneVoice says once which key creates them. The popup lists every shortcut under *All keyboard shortcuts*, with a button to change them.
 
 ### Getting a Gemini API key
 

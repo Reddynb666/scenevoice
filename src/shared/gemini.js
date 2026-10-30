@@ -458,13 +458,14 @@ export function usableModels(models) {
 function classifyHttp(status, body) {
   const msg = body?.error?.message || '';
   const reason = JSON.stringify(body?.error?.details || '');
+  // Checked first: it can come as a 400 or a 403, and is not about the key.
+  if (/location is not supported|not available in your (country|region)/i.test(msg)) return new GeminiError('region', msg, status);
   if (status === 400 && /api key|API_KEY_INVALID/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
   if (status === 401 || status === 403) {
     if (/api key|permission|PERMISSION_DENIED|API_KEY/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
     return new GeminiError('forbidden', msg, status);
   }
   if (status === 404) return new GeminiError('model-not-found', msg, status);
-  if (/location is not supported|not available in your (country|region)/i.test(msg)) return new GeminiError('forbidden', msg, status);
   if (status === 429) return new GeminiError('quota', msg, status);
   if (status === 400 && /(video|youtube|file|uri|private|unavailable|not supported)/i.test(msg)) {
     return new GeminiError('video-unsupported', msg, status);
