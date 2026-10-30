@@ -326,6 +326,9 @@ function main() {
     if (cached) {
       setScript(cached);
       console.info(`[SceneVoice] ${cached.cues.length} saved descriptions for ${id} (${l})${cached.complete ? '' : ', incomplete'}`);
+      // Say that the saved descriptions are there, so opening the video is not met with silence.
+      // An unfinished one is said with "carrying on" when generation resumes (begin()).
+      if (cached.complete) announcer.status(loadedText(cached));
       announceType();
       // A previous run stopped part-way (tab closed, quota): carry on where it left off.
       // From frames, only while descriptions are on: pictures are taken as the video plays.
@@ -354,6 +357,22 @@ function main() {
     const v = getVideo();
     if (v && !v.paused) maybeHint();
     return undefined;
+  }
+
+  /** Minutes of video a saved script covers, at least 1. */
+  function savedMinutes(sc) {
+    return String(Math.max(1, Math.round((sc.completedUntil || 0) / 60)));
+  }
+
+  /** What is said when a video opens with all its descriptions saved. */
+  function loadedText(sc) {
+    const n = sc.cues.length;
+    if (!n) return t('status_loaded_empty');
+    if (!settings.enabled) {
+      const key = shortcut('toggle-descriptions');
+      return key ? t('status_loaded_off', String(n), key) : t('status_loaded_off_button', String(n));
+    }
+    return t('status_loaded', String(n));
   }
 
   /** Tell the user once per video that descriptions can be created. */
@@ -548,7 +567,7 @@ function main() {
     renderProgress();
     progressSaid = { milestone: 0, at: Date.now() };
     if (!quiet) feedback(t('status_generating'));
-    else announcer.status(t('status_resuming'));
+    else announcer.status(script?.cues?.length ? t('status_resuming_loaded', savedMinutes(script), String(script.cues.length)) : t('status_resuming'));
 
     const res = await startGeneration(send, { videoId: id, duration: v.duration, meta: getMeta(), lang: l, force });
     if (id !== videoId || l !== lang || seq !== beginSeq) return undefined;

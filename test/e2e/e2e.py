@@ -756,6 +756,8 @@ def main():
         st = tab_state()
         check(st and st["status"] == "ready" and st["cueCount"] == 5, "reloading uses the saved descriptions")
         check(len(REQUESTS) == before, "no new API calls for a cached video")
+        e = wait_for_log(page, r"already saved for this video", 4)
+        check(e is not None and "5 in total" in e["text"], f"opening a described video says the saved descriptions are loaded ({e and e['text'][:70]})")
         st = tab_state()
         check(st and st["firstCue"] == 1, "tab state reports the first description's time for the popup")
 

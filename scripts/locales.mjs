@@ -60,6 +60,23 @@ export const STRINGS = {
     zh_CN: 'SceneVoice 正在生成口述，每 5 分钟视频约需半分钟，你可以继续观看。',
   },
   status_resuming: { en: 'Continuing descriptions for this video.', zh_CN: '继续为这个视频生成口述。' },
+  status_resuming_loaded: {
+    en: 'Saved descriptions loaded for the first $1 minutes ($2). Creating the rest.',
+    zh_CN: '已加载前 $1 分钟的口述（$2 条），继续生成其余部分。',
+  },
+  status_loaded: { en: 'Descriptions already saved for this video, loaded: $1 in total.', zh_CN: '已有口述，已加载，共 $1 条。' },
+  status_loaded_empty: {
+    en: 'This video was described before: it has nothing visual that needs describing.',
+    zh_CN: '这个视频之前已生成过：没有需要描述的画面内容。',
+  },
+  status_loaded_off: {
+    en: 'Descriptions already saved for this video ($1). They are off; press $2 to turn them on.',
+    zh_CN: '已有口述（$1 条），目前处于关闭状态，按 $2 打开。',
+  },
+  status_loaded_off_button: {
+    en: 'Descriptions already saved for this video ($1). They are off; use the SceneVoice button in the player to turn them on.',
+    zh_CN: '已有口述（$1 条），目前处于关闭状态，可用播放器上的 SceneVoice 按钮打开。',
+  },
   status_partial_ready: {
     en: 'You can start watching: descriptions are ready for the first $1 minutes ($2 so far). The rest is on the way.',
     zh_CN: '可以开始看了：前 $1 分钟的口述已就绪（目前 $2 条），其余部分正在生成。',
