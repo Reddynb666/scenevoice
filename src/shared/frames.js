@@ -5,7 +5,7 @@
 // enforces the JSON with a schema, other models get `jsonShape` in words.
 // No browser APIs here, so everything is unit-testable.
 
-import { languageName, scriptInstructions } from './gemini.js';
+import { languageName, peopleText, scriptInstructions } from './gemini.js';
 import { pickEvenly } from './coverage.js';
 import { formatTime } from './script.js';
 import { askHistoryText } from './ask.js';
@@ -64,11 +64,7 @@ const FRAMES_NOTE = [
   '- Descriptions given just before these frames are listed in the request: do not say them again. When nothing new and important is visible, return an empty "cues" list.',
 ].join('\n');
 
-function peopleLine(characters) {
-  return characters?.length
-    ? `People already introduced earlier in the video (reuse these labels): ${characters.map((c) => `${c.label}${c.description ? ` (${c.description})` : ''}`).join('; ')}`
-    : '';
-}
+const peopleLine = peopleText;
 
 function videoLines(meta = {}, duration) {
   return [
@@ -108,7 +104,7 @@ export function framesScriptPrompt({ meta, window, duration, characters = [], re
 }
 
 /** Answer a question about the moment the viewer is at, from the frames up to it. */
-export function framesAskPrompt({ meta, time, duration, question, nearbyText, history, lang, frames }) {
+export function framesAskPrompt({ meta, time, duration, question, nearbyText, history, characters, lang, frames }) {
   return {
     kind: 'ask',
     system: [
@@ -129,6 +125,7 @@ export function framesAskPrompt({ meta, time, duration, question, nearbyText, hi
       Number.isFinite(duration) && duration > 0 ? `Full video length: ${formatTime(duration)} (${Math.round(duration)} seconds).` : '',
       `The viewer asked at ${formatTime(time)} (${Math.round(time)} seconds).`,
       nearbyText ? `Recent audio descriptions (may be wrong): ${shorten(nearbyText, 800)}` : '',
+      peopleLine(characters),
       askHistoryText(history),
       `Question: ${shorten(question, 500)}`,
     ]

@@ -6,6 +6,16 @@ import { ApiError } from './errors.js';
 import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
 import { askHistoryText } from './ask.js';
 
+/** The people the descriptions have labelled so far, for the model to keep calling them the same. */
+export function peopleText(characters) {
+  const list = (Array.isArray(characters) ? characters : [])
+    .filter((c) => c && typeof c.label === 'string' && c.label.trim())
+    .slice(0, 20);
+  if (!list.length) return '';
+  const one = (c) => `${clip(c.label, 80)}${typeof c.description === 'string' && c.description ? ` (${clip(c.description, 160)})` : ''}`;
+  return `People already introduced earlier in the video (reuse these labels): ${list.map(one).join('; ')}`;
+}
+
 /** @see ApiError; Gemini's own name, kept for the code and tests that use it. */
 export class GeminiError extends ApiError {}
 
@@ -143,6 +153,8 @@ export function scriptInstructions(lang) {
     'People:',
     '- Use a name only after on-screen text or the dialogue has tied it to that person. The title or the uploader\'s description may say who is in the video, but not which person on screen is who. Until then use a short, consistent visual label (for example "the woman in the red coat") and keep using it.',
     '- Keep labels consistent with the provided character list. Add new people to "characters" with a one-line description of how they look, not of who you think they are.',
+    '- Make a label tell people apart: two visible features, such as clothing colour and role or hair (for example "the woman host in red", "the man with glasses"; in Chinese "穿红衣服的女主持人", "戴眼镜的男人"). Never a bare "a man", "a woman", "一个男人", "一位女士".',
+    '- When someone already in the character list appears again, call them by that same label every time (or "he" / "she" when it cannot be confused). Never introduce them again as a new, unnamed person: not "A man walks in." but "The man with glasses walks back in."; not "一个男人走进来。" but "戴眼镜的男人又走了进来。"',
     '',
     'On-screen text (kind "text"):',
     '- Give meaningful text its own "text" cue; never fold it into a visual description. That includes titles and title cards, names and roles in lower thirds, chapter cards, subtitles burned into the picture, slides, chart and graph labels with their numbers, prices, scores, dates, phone numbers, email and web addresses, social media handles, code, menu items and buttons in a screen recording, signs, labels, chat and phone screens.',
@@ -191,7 +203,7 @@ export function scriptPrompt({ meta = {}, chunk, duration, characters = [], lang
     Number.isFinite(duration) ? `Full video length: ${formatTime(duration)} (${Math.round(duration)} seconds).` : '',
     `Describe only the section from ${formatTime(chunk.start)} to ${formatTime(chunk.end)} (${chunk.start}s to ${chunk.end}s). Timestamps must be seconds from the start of the full video.`,
     characters.length
-      ? `People already introduced earlier in the video (reuse these labels): ${characters.map((c) => `${c.label}${c.description ? ` (${c.description})` : ''}`).join('; ')}`
+      ? peopleText(characters)
       : '',
     `Write in ${languageName(lang)}.`,
   ];
@@ -247,7 +259,7 @@ export function askClip(time, duration) {
   return { start, end: Math.max(end, start + 2) };
 }
 
-export function buildAskRequest({ videoId, meta, time, duration, question, nearbyText, history, lang, model }) {
+export function buildAskRequest({ videoId, meta, time, duration, question, nearbyText, history, characters, lang, model }) {
   const { start, end } = askClip(time, duration);
   return {
     systemInstruction: {
@@ -279,6 +291,7 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
               `Video title: ${clip(meta?.title, 200) || 'unknown'}`,
               `The viewer paused at ${formatTime(time)} (${Math.round(time)} seconds). The clip covers ${formatTime(start)} to ${formatTime(end)} (${start}s to ${end}s) of the full video.`,
               nearbyText ? `Recent audio descriptions (may be wrong): ${clip(nearbyText, 800)}` : '',
+              peopleText(characters),
               askHistoryText(history),
               `Question: ${clip(question, 500)}`,
             ]

@@ -1195,6 +1195,8 @@ function main() {
       nearbyText: nearbyText(video.currentTime),
       // Earlier questions about this video, so that a follow-up question is understood.
       history: askHistory.videoId === videoId ? askHistory.items : [],
+      // The labels the descriptions use for people, so the answer calls them the same.
+      characters: script?.characters || [],
       lang,
       ...(frames ? { frames } : {}),
     });
