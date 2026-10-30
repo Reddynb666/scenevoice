@@ -199,15 +199,24 @@ LOGGER = """
 AXE = (ROOT / "node_modules" / "axe-core" / "axe.min.js").read_text()
 
 
+TAB_UNREACHABLE = """() => [...document.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]')]
+  .filter((el) => el.offsetParent !== null && !el.disabled && el.tabIndex < 0 && el.id !== 'main' && el.tagName !== 'H2')
+  .map((el) => el.id || el.textContent.trim().slice(0, 30) || el.tagName)"""
+
+
+def tab_reachable(page, label):
+    missing = page.evaluate(TAB_UNREACHABLE)
+    check(not missing, f"{label}: every visible control is in the Tab order ({missing})")
+
+
 def axe(page, label, context="document"):
     res = page.evaluate(
-        f"async () => (await axe.run({context}, {{ runOnly: ['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice'] }}))"
+        f"async () => (await axe.run({context}, {{ runOnly: ['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa','best-practice'] }}))"
         ".violations.map(v => ({id: v.id, impact: v.impact, nodes: v.nodes.length, help: v.help}))"
     )
-    serious = [v for v in res if v["impact"] in ("serious", "critical")]
     for v in res:
         print(f"       axe {label}: {v['impact']} {v['id']} x{v['nodes']} — {v['help']}")
-    check(not serious, f"{label}: no serious or critical accessibility violations")
+    check(not res, f"{label}: no accessibility violations (axe, WCAG 2.2 AA and best practice)")
     return res
 
 
@@ -359,6 +368,14 @@ def main():
         opt.click("#resetEndpoint")
         check(wait_until(opt, "() => document.querySelector('#keyStatus').className === 'status-good'", 10), "resetting the API address re-tests the key")
         axe(opt, "options page")
+        tab_reachable(opt, "options page")
+        guide = ctx.new_page()
+        guide.goto(f"chrome-extension://{ext_id}/guide.html#qwen")
+        guide.wait_for_load_state()
+        check(wait_until(guide, "() => document.activeElement && document.activeElement.id === 'qwen'", 5), "the key guide opened at #qwen starts at that part")
+        axe(guide, "key guide")
+        tab_reachable(guide, "key guide")
+        guide.close()
         opt.screenshot(path=str(OUT / "options.png"), full_page=True)
         opt.emulate_media(color_scheme="dark")
         opt.screenshot(path=str(OUT / "options-dark.png"), full_page=True)
@@ -377,6 +394,7 @@ def main():
         check(has_key(pop.inner_text("#shortcutHint"), "D"), "popup shows the real shortcuts")
         check(pop.is_hidden("#progressBox") and pop.is_hidden("#stop"), "popup hides the progress bar and Stop when nothing is generating")
         axe(pop, "popup")
+        tab_reachable(pop, "popup")
         pop.screenshot(path=str(OUT / "popup.png"), full_page=True)
         pop.close()
 
