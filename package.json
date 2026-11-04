@@ -1,6 +1,6 @@
 {
   "name": "scenevoice",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI audio description for YouTube, made for screen reader users",
   "scripts": {
     "build": "node scripts/build.mjs",
