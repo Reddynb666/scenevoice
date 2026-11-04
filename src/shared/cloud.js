@@ -69,7 +69,19 @@ const detailOf = (status, body) => String(body?.error?.message || `HTTP ${status
  */
 export async function registerDevice(fetchImpl, { version = '', locale = '' } = {}) {
   const { status, body } = await cloudRequest(fetchImpl, '/v1/devices', { method: 'POST', body: { client: 'extension', version, locale } });
-  if (status === 429) throw new ApiError('rate-limited', detailOf(status, body), status);
+  if (status === 429) {
+    // The relay's own 429 here: this network has set up as many new devices as
+    // it may today. Not a rate limit a minute's wait would clear, so it is its
+    // own code, with the time (next UTC midnight) the relay says it opens again.
+    const details = Array.isArray(body?.error?.details) ? body.error.details : [];
+    const limit = details.find((d) => d?.reason === 'SCENEVOICE_DEVICE_LIMIT');
+    if (limit) {
+      const err = new ApiError('device-limit', detailOf(status, body), status);
+      err.resetAt = cleanAllowance(limit).resetsAt;
+      throw err;
+    }
+    throw new ApiError('rate-limited', detailOf(status, body), status);
+  }
   if (status < 200 || status >= 300 || !validToken(body?.token)) throw new ApiError('request-failed', detailOf(status, body), status);
   return { token: body.token, plan: cleanPlan(body.plan), allowance: cleanAllowance(body.allowance) };
 }

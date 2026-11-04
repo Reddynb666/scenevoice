@@ -50,16 +50,30 @@ export async function addCacheHit(env, token) {
   return total;
 }
 
+/** One more on a counter key, with a TTL; returns the count including this call. */
+async function bump(env, key, ttl) {
+  const n = Number(await env.USAGE.get(key)) || 0;
+  const total = n + 1;
+  await env.USAGE.put(key, String(total), { expirationTtl: ttl });
+  return total;
+}
+
 /**
  * Device registrations from one network address today. The address itself is
  * never stored: the caller passes a hash. Returns the count including this call.
  */
-export async function countRegistration(env, ipHash, day) {
-  const key = `ip:${ipHash}:${day}`;
-  const n = Number(await env.USAGE.get(key)) || 0;
-  const total = n + 1;
-  await env.USAGE.put(key, String(total), { expirationTtl: DAY_SECONDS });
-  return total;
+export function countRegistration(env, ipHash, day) {
+  return bump(env, `ip:${ipHash}:${day}`, DAY_SECONDS);
+}
+
+/** Model calls one device started in a minute (minute = floor(ms / 60000)), including this one. */
+export function countRequest(env, token, minute) {
+  return bump(env, `rpm:${token}:${minute}`, 120);
+}
+
+/** Shared scripts one device uploaded today, including this one. */
+export function countScriptPut(env, token, day) {
+  return bump(env, `puts:${token}:${day}`, USAGE_TTL_SECONDS);
 }
 
 /** Shared scripts: videoId:lang:version -> script JSON (text only). */
@@ -69,6 +83,17 @@ export async function getScript(env, videoId, lang, version) {
 
 export async function putScript(env, videoId, lang, version, script) {
   await env.SCRIPTS.put(`${videoId}:${lang}:${version}`, JSON.stringify(script), { expirationTtl: SCRIPT_TTL_SECONDS });
+}
+
+/**
+ * Stores a script only when none is there yet; returns whether it was stored.
+ * KV has no compare-and-set, so two first uploads in the same moment can both
+ * land (the later write stays); for a text cache that is acceptable.
+ */
+export async function putScriptIfAbsent(env, videoId, lang, version, script) {
+  if (await getScript(env, videoId, lang, version)) return false;
+  await putScript(env, videoId, lang, version, script);
+  return true;
 }
 
 /** Licences: key -> { plan, seats, used, created, session }; session:<id> -> key. */

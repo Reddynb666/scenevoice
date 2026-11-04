@@ -161,6 +161,26 @@ describe('fitCuesToDialogue', () => {
       expect(chooseUtterance(raw, { mode: 'gaps', detail: 'brief', rate: 3, onScreenText: true })).toBeNull();
       expect(chooseUtterance(raw, { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
     });
+    it('frames mode: a gap of 0 takes the measured room whatever the priority, so a lesser cue in a long silence is still said', () => {
+      // Speech 10-20 and 26-30; the model could not see whether anyone speaks at 20.5.
+      const quiet = [
+        { start: 10, end: 20 },
+        { start: 26, end: 30 },
+      ];
+      const [c] = fitCuesToDialogue([short(20.5, 0, { priority: 2 })], quiet);
+      expect(c).toMatchObject({ start: 20.5, gap: 5.2, gapMeasured: true });
+      expect(chooseUtterance(c, gaps)).toEqual({ text: 'A tall man opens the front door and steps inside.', needsPause: false });
+      expect(fitCuesToDialogue([short(20.5, 0, { priority: 3 })], quiet)[0].gap).toBe(5.2);
+      // A priority-1 cue in the same silence too (sayHeld: start is the current time).
+      expect(fitCuesToDialogue([short(22, 0)], quiet)[0]).toMatchObject({ start: 22, gap: 3.7 });
+      // On speech that ends within reach it moves to the end of the speech and takes the room there.
+      expect(fitCuesToDialogue([short(19, 0, { priority: 2 })], quiet)[0]).toMatchObject({ start: 20, gap: 5.7 });
+      // In the middle of long speech it stays blocked; after the last caption there is nothing to measure.
+      expect(fitCuesToDialogue([short(12, 0, { priority: 2 })], quiet)[0]).toMatchObject({ start: 12, gap: 0 });
+      expect(fitCuesToDialogue([short(31, 0, { priority: 2 })], quiet)[0]).toMatchObject({ start: 31, gap: 0 });
+      // A real estimate is still the upper bound.
+      expect(fitCuesToDialogue([short(20.5, 2, { priority: 2 })], quiet)[0].gap).toBe(2);
+    });
   });
 });
 

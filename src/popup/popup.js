@@ -1,7 +1,7 @@
 import { LANGUAGES, MSG, RTL_LANGUAGES } from '../shared/constants.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
-import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
+import { errorMessage, interfaceLocale, localizeDocument, t } from '../shared/i18n.js';
 import { generationProgressLabels, liveProgressLabels, typeAdjustedText } from '../shared/labels.js';
 import { voiceTestMessage } from '../shared/settings.js';
 import { platformOfUrl } from '../shared/platforms.js';
@@ -38,8 +38,8 @@ function nativeName(code) {
   }
 }
 
-/** The interface language, as a tag: the locale SceneVoice's strings are shown in ("en", "zh_CN"). */
-const interfaceLanguage = () => (chrome.i18n.getMessage('@@ui_locale') || 'en').replace(/_/g, '-');
+/** The interface language, as a tag: the locale SceneVoice's strings are shown in ("en", "zh-CN"), which is English for a browser language without strings of its own. */
+const interfaceLanguage = () => interfaceLocale();
 
 /**
  * Under the language choice, which language the descriptions come in when it

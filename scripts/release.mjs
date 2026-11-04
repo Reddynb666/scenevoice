@@ -2,7 +2,8 @@
 //
 // Checks the working tree is clean, moves CHANGELOG.md's "## Unreleased" into
 // "## <version> — <today>", sets the version in package.json and
-// package-lock.json, runs the unit tests and the build, then commits
+// package-lock.json, runs the unit tests and the build (with the bundle-size
+// check, so an oversize content.js is caught before a tag exists), then commits
 // "Release <version>" and tags v<version>. It never pushes: the owner pushes
 // the tag (git push --follow-tags), and .github/workflows/release.yml takes it
 // from there.
@@ -64,9 +65,10 @@ console.log(`release: CHANGELOG.md, package.json and package-lock.json set to ${
 
 // The tests and the build run against the files as they will be committed, so
 // a failing suite leaves the version edits in the tree for the owner to see
-// and nothing committed.
+// and nothing committed. build:meta is the build plus the size table; it exits
+// 1 when a bundle is over its limit (dist-meta.json is ignored by git).
 run('npm', ['test']);
-run('npm', ['run', 'build']);
+run('npm', ['run', 'build:meta']);
 
 git('add', 'CHANGELOG.md', 'package.json', 'package-lock.json');
 git('commit', '-m', `Release ${version}`);

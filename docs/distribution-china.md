@@ -29,7 +29,7 @@ Desktop browsers in China, July 2026 (StatCounter): Chrome 48%, Edge 29%,
    1. 下载 `scenevoice-<version>.zip` 并解压到一个固定的文件夹（以后不要删除或移动它）。
    2. 在 Chrome 打开 `chrome://extensions`（Edge 为 `edge://extensions`，360 浏览器为“扩展中心”），打开“开发者模式”。
    3. 选择“加载已解压的扩展程序”，选中刚才解压的文件夹。
-   4. 设置页会自动打开，按页面上的“分步申请指南”添加通义千问 Key。
+   4. 欢迎页会自动打开：先听一段示例，再选“自己的密钥”，设置页就会在通义千问 Key 输入框打开；按页面上的“分步申请指南”添加 Key。
    5. 更新时下载新版本，覆盖同一个文件夹后，在扩展页面按“重新加载”。
 
    Developer mode shows a warning on every browser start; the store versions do not.

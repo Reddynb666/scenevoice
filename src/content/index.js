@@ -104,6 +104,8 @@ function main() {
   let beginSeq = 0;
   /** Stretches of speech in the current video, from its captions; null when unknown. */
   let dialogue = null;
+  /** The reading speed and playback rate the cues were last fitted to the dialogue with (fitOptions), or null. */
+  let fittedWith = null;
   /** The caption lines themselves, to leave out on-screen text the viewer hears anyway. */
   let captionLines = [];
   /** Caption URLs already tried for the current video. */
@@ -168,9 +170,10 @@ function main() {
   const scheduler = new CueScheduler([]);
   const announcer = new Announcer(() => settings, {
     // Whether this tab's video is playing with sound: a hidden tab then still describes (see Announcer.speakTts).
+    // A video paused by SceneVoice itself (pause mode) is still being listened to; one the user or the site paused is not.
     isAudible: () => {
       const v = getVideo();
-      return Boolean(v && !v.paused && !v.muted && v.volume > 0);
+      return Boolean(v && (!v.paused || pausedByUs) && !v.muted && v.volume > 0);
     },
   });
   const ui = new PageUI({ onToggle: () => toggle(), platform });
@@ -209,11 +212,11 @@ function main() {
   const setting = (key) => (key in adjusted ? adjusted[key] : settings[key]);
   const shortcut = (name) => shortcuts[name] || '';
 
-  /** Direct feedback to a user action: always delivered, cutting off any description in flight. */
+  /** Direct feedback to a user action (in the interface language): always delivered, cutting off any description in flight. */
   const feedback = (text) => {
     if (settings.output === 'tts') {
       announcer.announceToScreenReader(text, false);
-      return announcer.say(text);
+      return announcer.say(text, { lang: announcer.uiLang });
     }
     return announcer.say(text, { status: true, urgent: false });
   };
@@ -280,12 +283,13 @@ function main() {
   // page reads them directly. Shortcuts come from the service worker.
   watchSettings((s) => {
     const prevLang = lang;
-    const prev = settings;
     const wasEnabled = settings.enabled;
     settings = s;
     updateType();
-    // The pauses a cue waits for are measured against the reading speed: fit them again when it changes.
-    if (script && dialogue && (prev.readerSpeed !== s.readerSpeed || prev.ttsRate !== s.ttsRate || prev.output !== s.output)) scheduleCues();
+    // The pauses a cue waits for are measured against the reading speed: fit them again when it
+    // changes. Compared with what the last fit used, not with the previous settings: a shortcut
+    // (change()) writes the new speed into the local settings before the storage event arrives.
+    if (script && dialogue && fittedWith && fittedWith.rate !== readerRate()) scheduleCues();
     lang = resolveLanguage(s.language, chrome.i18n.getUILanguage(), platform.id);
     announcer.lang = lang;
     ui.lang = lang;
@@ -555,10 +559,12 @@ function main() {
     // Playback may move a cue; `source` is the saved one, which "Description is wrong" points at.
     let cues = (script?.cues || []).map((c) => ({ ...c, source: c }));
     const v = getVideo();
+    fittedWith = null;
     if (dialogue) {
       const { cues: kept, dropped } = dropTextHeardInCaptions(cues, captionLines);
       if (dropped.length) console.info(`[SceneVoice] ${dropped.length} on-screen texts left out: already in the captions`, dropped.map((c) => `${formatTime(c.start)} ${c.onScreenText || c.standard}`));
-      cues = fitCuesToDialogue(kept, dialogue, fitOptions(v));
+      fittedWith = fitOptions(v);
+      cues = fitCuesToDialogue(kept, dialogue, fittedWith);
     }
     scheduler.setCues(cues);
     scheduler.reset(v && !isAdShowing() ? v.currentTime : null);
@@ -1118,7 +1124,13 @@ function main() {
     const now = video.currentTime;
     const source = held.source || held;
     let cue = { ...held, start: now, source };
-    if (dialogue) cue = { ...fitCuesToDialogue([cue], dialogue, fitOptions(video))[0], source };
+    if (dialogue) {
+      // A cue fitted earlier carries the room it had at its own moment (often little: that is why it
+      // waited), not the model's estimate. Fit it again from the estimate, so the room is the lesser
+      // of that and the pause we are in now, rather than capped at what it had then.
+      const base = held.gapMeasured ? { ...cue, gap: source.gap ?? held.gap, gapMeasured: false } : cue;
+      cue = { ...fitCuesToDialogue([base], dialogue, fitOptions(video))[0], source };
+    }
     if (cue.start > now + 0.15) return false; // speech ends in a moment: wait for it
     if (!utteranceFor(cue, video)) return false;
     deliver(cue, { prefix });
@@ -1199,8 +1211,9 @@ function main() {
   /**
    * @param {object} [o.cue]  the cue being spoken during playback, so a cue no more important does not cut it off.
    *   Without one the text is what the user asked for (describe now, repeat, an answer): nothing scheduled cuts it off.
+   * @param {string} [o.lead]  words in the interface language the text begins with ("Earlier: "); the rest is in the description language.
    */
-  async function speakText(text, { pause = false, kind = 'visual', urgent = false, cue = null } = {}) {
+  async function speakText(text, { pause = false, kind = 'visual', urgent = false, cue = null, lead = '' } = {}) {
     const video = getVideo();
     const token = (speechToken += 1);
     speakingCue = cue ? { kind: cue.kind, priority: cue.priority } : { kind: 'manual', priority: 0 };
@@ -1213,7 +1226,7 @@ function main() {
     } else if (!pausedByUs) {
       duck(video);
     }
-    await announcer.say(text, { urgent });
+    await announcer.say(text, { urgent, lead });
     if (token !== speechToken) return; // a newer utterance took over
     speakingCue = null;
     unduck();
@@ -1249,7 +1262,7 @@ function main() {
     const text = prefix ? `${prefix}${u.text}` : u.text;
     console.info(`[SceneVoice] ${formatTime(cue.start)} ${cue.kind}${u.needsPause ? ' (pause)' : ''}: ${text}`);
     lastSpoken = { text, kind: cue.kind, cue: cue.source || cue };
-    speakText(text, { pause: u.needsPause, kind: cue.kind, urgent: manual, cue: manual ? null : cue });
+    speakText(text, { pause: u.needsPause, kind: cue.kind, urgent: manual, cue: manual ? null : cue, lead: prefix });
   }
 
   function stopSpeaking() {

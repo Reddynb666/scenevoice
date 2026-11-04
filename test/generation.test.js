@@ -73,6 +73,32 @@ describe('runGeneration', () => {
     expect(split.usage).toEqual({ input: 2000, output: 200, thinking: 20, requests: 2 });
   });
 
+  it('counts a reply that was billed but could not be read: with the halves of the split section, or with the error', async () => {
+    // A 200 whose output hit the token cap: billed in full, unreadable, so the section is split.
+    const cut = { candidates: [{ content: { parts: [{ text: '{"cues": [{"start": 1' }] }, finishReason: 'MAX_TOKENS' }], usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 10 } };
+    const client = fakeClient();
+    client.generate.mockResolvedValueOnce(cut);
+    const split = await runGeneration({ client, ...params, duration: 200, script: null });
+    expect(client.generate).toHaveBeenCalledTimes(3);
+    expect(split.usage).toEqual({ input: 3000, output: 300, thinking: 30, requests: 3 });
+
+    // Too short a section to split: the error carries what the reply cost, so the caller can still count it.
+    const short = fakeClient();
+    short.generate.mockResolvedValueOnce(cut);
+    await expect(runGeneration({ client: short, ...params, duration: 60, script: null })).rejects.toMatchObject({ code: 'truncated', usage: one });
+    // A request that got no answer has nothing to count.
+    const unanswered = await runGeneration({ client: fakeClient({ fail: () => new GeminiError('video-unsupported', 'private') }), ...params, script: null }).catch((e) => e);
+    expect(unanswered.code).toBe('video-unsupported');
+    expect(unanswered.usage).toBeUndefined();
+
+    // A cut-off reply, then a half that finds the model overloaded: the switch to another model keeps the cost of the first reply.
+    const switching = fakeClient({ model: 'gemini-3.8-flash', models: ['gemini-3.8-flash', 'gemini-2.5-flash'], fail: () => (switching.calls.length === 1 ? new GeminiError('server', 'high demand', 503) : null) });
+    switching.generate.mockResolvedValueOnce(cut);
+    const script = await runGeneration({ client: switching, ...params, duration: 200, script: null });
+    expect(switching.model).toBe('gemini-2.5-flash');
+    expect(script.usage).toEqual({ input: 2000, output: 200, thinking: 20, requests: 2 });
+  });
+
   it("saves Gemini's video type with the descriptions, from the first section", async () => {
     const seen = [];
     const script = await runGeneration({ client: fakeClient({ videoType: 'tutorial' }), ...params, script: null, onChunk: (sc) => seen.push(sc.videoType) });
@@ -254,8 +280,11 @@ describe('runRevision', () => {
     expect(cueOut).toMatchObject({ confidence: 'low', priority: 2, standard: 'Not certain. A woman in red smiles at the camera.' });
   });
 
-  it('reports a failure', async () => {
+  it('reports a failure, with what a billed but unreadable reply cost', async () => {
     const client = fakeClient({ fail: () => new GeminiError('quota', 'later', 429) });
     await expect(runRevision(client, { ...params, cue: old })).rejects.toMatchObject({ code: 'quota' });
+    const cut = fakeClient();
+    cut.generate.mockResolvedValueOnce({ candidates: [{ content: { parts: [{ text: 'not json' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 10 } });
+    await expect(runRevision(cut, { ...params, cue: old })).rejects.toMatchObject({ code: 'bad-json', usage: one });
   });
 });

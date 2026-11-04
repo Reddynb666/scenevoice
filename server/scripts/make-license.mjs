@@ -43,5 +43,5 @@ console.log('');
 console.log('Store it (run from the server/ folder; add --preview false on older wrangler versions):');
 console.log(`  npx wrangler kv key put --binding LICENSES --remote ${JSON.stringify(key)} ${JSON.stringify(JSON.stringify(record))}`);
 console.log('');
-console.log('Revoke it later with:');
+console.log('Revoke it later with (every device on it drops to the free plan at its next request):');
 console.log(`  npx wrangler kv key delete --binding LICENSES --remote ${JSON.stringify(key)}`);

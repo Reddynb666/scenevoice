@@ -35,8 +35,9 @@ Errors use Google's JSON shape on `/v1beta/*` and on the relay's own `/v1/*` rou
 | `SCENEVOICE_DEVICE_UNKNOWN` (401) | no token, malformed token, or a token the relay does not know: register again |
 | `SCENEVOICE_DEVICE_LIMIT` (429) | too many new devices from one network address today |
 | `SCENEVOICE_ALLOWANCE` (429) | today's seconds are used up; the extension maps this to its own error code `allowance`, not `quota` |
-| `SCENEVOICE_MODEL_NOT_ALLOWED` (404) | a free device asked for a model outside `FREE_MODELS` |
-| `SCENEVOICE_SCRIPT_NOT_FOUND` (404), `SCENEVOICE_SCRIPT_INVALID` (400) | shared cache |
+| `SCENEVOICE_RATE_LIMIT` (429) | more than `REQUESTS_PER_MINUTE` model calls from one token this minute; carries a `RetryInfo` of 60 s, which the extension's retry honours |
+| `SCENEVOICE_MODEL_NOT_ALLOWED` (404) | a free device asked for a model outside `FREE_MODELS` (Gemini) or `QWEN_FREE_MODELS` (DashScope), or for an image, TTS, live or audio model |
+| `SCENEVOICE_SCRIPT_NOT_FOUND` (404), `SCENEVOICE_SCRIPT_INVALID` (400), `SCENEVOICE_SCRIPT_UNEARNED` (403), `SCENEVOICE_SHARE_LIMIT` (429) | shared cache |
 | `SCENEVOICE_LICENCE_NOT_FOUND` (404), `SCENEVOICE_LICENCE_FULL` (409) | licences |
 | `SCENEVOICE_UPSTREAM_TIMEOUT` (504), `SCENEVOICE_UPSTREAM_UNREACHABLE` (502) | the model did not answer |
 | `SCENEVOICE_NOT_CONFIGURED` (501) | the deployment lacks the secret that route needs |
@@ -52,9 +53,9 @@ Every authenticated response (and every proxied one) carries `x-scenevoice-plan`
 
 ### Gemini-compatible proxy
 
-`GET /v1beta/models?pageSize=…&pageToken=…` → forwarded to Gemini with the server's key. For free devices the list is filtered to `FREE_MODELS` (default `^gemini-\d(\.\d)?-flash(-lite)?`: the flash and flash-lite families); Plus and organisation devices see every model Google returns (the extension drops the ones that cannot read video).
+`GET /v1beta/models?pageSize=…&pageToken=…` → forwarded to Gemini with the server's key. For free devices the list is filtered to `FREE_MODELS` (default `^gemini-\d(\.\d)?-flash(-lite)?(-preview(-\d{2}-\d{2,4})?|-\d{3})?$`: the flash and flash-lite text/vision families, with a dated preview or numbered snapshot, anchored at both ends) and, whatever the pattern says, never includes a model whose name contains `image`, `tts`, `audio`, `live`, `native` or `embedding`, since those are billed per picture or per second of sound; Plus and organisation devices see every model Google returns (the extension drops the ones that cannot read video).
 
-`POST /v1beta/models/{model}:generateContent` → the relay checks the allowance for today, refuses with the 429 below if `usedToday >= secondsPerDay`, otherwise forwards the bytes unchanged with the server's key. After a successful answer it charges `ceil(usageMetadata.promptTokenCount / 100)` seconds (about 100 tokens per second of video at low resolution; pictures and text count the same way), then returns the upstream status and body unchanged plus the `x-scenevoice-*` headers. An upstream error (any 4xx/5xx) is passed through unchanged and charges nothing. A free device asking for a model outside `FREE_MODELS` gets a 404 before anything is forwarded.
+`POST /v1beta/models/{model}:generateContent` → the relay checks the allowance for today, refuses with the 429 below if `usedToday >= secondsPerDay`, refuses with `SCENEVOICE_RATE_LIMIT` past `REQUESTS_PER_MINUTE` calls in the current minute, otherwise forwards the bytes unchanged with the server's key. After a successful answer it charges `ceil((promptTokenCount + OUTPUT_TOKEN_WEIGHT × (candidatesTokenCount + thoughtsTokenCount)) / 100)` seconds (about 100 prompt tokens per second of video at low resolution, pictures and text alike; output and thinking tokens weigh `OUTPUT_TOKEN_WEIGHT`, default 5, because Google bills them at that multiple of the input price), then returns the upstream status and body unchanged plus the `x-scenevoice-*` headers. An upstream error (any 4xx/5xx) is passed through unchanged and charges nothing. A free device asking for a model outside `FREE_MODELS` gets a 404 before anything is forwarded.
 
 Allowance used up:
 
@@ -65,13 +66,13 @@ Allowance used up:
 
 ### Qwen-compatible proxy (mainland China)
 
-`POST /compatible-mode/v1/chat/completions` with `Authorization: Bearer <token>` → forwarded to DashScope with the server's key (`DASHSCOPE_API_KEY`; without it the route answers 501). Charged by `usage.prompt_tokens / 100` the same way. The same 429 in OpenAI style:
+`POST /compatible-mode/v1/chat/completions` with `Authorization: Bearer <token>` → forwarded to DashScope with the server's key (`DASHSCOPE_API_KEY`; without it the route answers 501). Charged by `ceil((usage.prompt_tokens + OUTPUT_TOKEN_WEIGHT × usage.completion_tokens) / 100)` the same way (DashScope counts reasoning inside `completion_tokens`). DashScope names the model in the body, so for a free device the relay parses the JSON once to read the top-level `model`, refuses with a 400 when there is none and with `SCENEVOICE_MODEL_NOT_ALLOWED` (404, `type` `scenevoice_model_not_allowed`) when it is outside `QWEN_FREE_MODELS` (default `^qwen\d(\.\d)?-vl-(plus|flash)$`), and otherwise forwards the original bytes; nothing read there is stored or logged, and Plus and organisation bodies are not parsed at all. The same 429 in OpenAI style:
 
 ```json
 {"error":{"message":"SceneVoice allowance for today is used up","type":"scenevoice_allowance","code":"allowance","resetsAt":"2026-11-05T00:00:00.000Z"}}
 ```
 
-A successful upstream answer whose token count the relay cannot read (for example a stream, which the extension never asks for) is charged `UNMETERED_RESPONSE_SECONDS` (default 120) so nothing is free by accident.
+A successful upstream answer whose prompt token count the relay cannot read (for example a stream, which the extension never asks for) is charged `UNMETERED_RESPONSE_SECONDS` (default 120) so nothing is free by accident. The allowance is charged after the answer, so the per-minute limit is what stops a burst of requests from all passing the check at once; `REQUESTS_PER_MINUTE` (default 60) is well above what the extension sends (at most two picture requests in flight, one 5-minute section at a time on YouTube).
 
 ### Shared description cache
 
@@ -80,6 +81,8 @@ Text only, never pictures, never who asked.
 `GET /v1/scripts/{videoId}?lang=<code>&v=<SCRIPT_VERSION>` → `200` the script JSON (the shape the extension saves in `chrome.storage.local`, with `"source":"cloud"` added) or `404`. A token is optional; with one, the hit is counted for `GET /v1/me`.
 
 `PUT /v1/scripts/{videoId}?lang=<code>` with the token, body = a complete script → `204`. Stored only if `complete` is `true` and it validates: integer `version`, `cues` array where each cue has a non-negative `start` and a `standard` text, every string at most 2000 characters, `videoId` and `lang` matching the address when present. Unknown fields are dropped, so a picture cannot ride along. Size cap 512 KB, TTL 180 days, key `videoId:lang:version`. Does not count against the allowance. The extension sends it only when the setting `shareDescriptions` is on (default on with the cloud provider, off otherwise) and after a job completes.
+
+Because every Cloud listener of a video hears what is stored for it, three rules decide who may fill the cache, none of which needs anything about the uploader to be stored: the token must have been charged seconds today or yesterday (a real share always follows a model run through the relay; otherwise `403 SCENEVOICE_SCRIPT_UNEARNED`), a token may upload at most `SCRIPT_PUTS_PER_DAY` scripts a day (default 20; then `429 SCENEVOICE_SHARE_LIMIT` with `resetsAt`), and a script already stored under the key is never replaced: the first writer wins, the PUT still answers `204` (header `x-scenevoice-stored: 0`) and the extension has nothing to do. To remove a wrong or malicious script: `npx wrangler kv key delete --binding SCRIPTS --remote "<videoId>:<lang>:<version>"`; the next device that generates the video fills the slot again.
 
 ### Licences
 
@@ -112,7 +115,8 @@ npx wrangler secret put DASHSCOPE_API_KEY       # mainland China only
 npx wrangler secret put STRIPE_WEBHOOK_SECRET   # when Stripe is set up
 npx wrangler secret put ADMIN_TOKEN             # for GET /admin/licenses/…; e.g. `openssl rand -hex 32`
 
-# 3. settings: edit [vars] in wrangler.toml (allowances, ALLOWED_ORIGINS, FREE_MODELS)
+# 3. settings: edit [vars] in wrangler.toml (allowances, ALLOWED_ORIGINS, FREE_MODELS,
+#    QWEN_FREE_MODELS, OUTPUT_TOKEN_WEIGHT, REQUESTS_PER_MINUTE, SCRIPT_PUTS_PER_DAY)
 
 # 4. deploy
 npm run deploy
@@ -148,7 +152,9 @@ Gemini prices as of 2026-11-04 (input / output per million tokens): Gemini 3.8 F
 | 3.5 Flash-Lite | about $0.11 ($0.108 input + $0.03 to $0.05 output) |
 | 3.8 Flash | about $0.30 to $0.35 ($0.27 input + $0.04 to $0.08 output) |
 
-So a free device that uses its whole hour every day costs the operator $0.11 to $0.35 a day, and most devices use far less. The shared cache means a popular video is generated once; the Worker itself costs $5 a month plus fractions of a cent per million requests and KV operations. Google raises Gemini 3.x Flash prices on 2027-01-01; the default `FREE_MODELS` keeps free devices on the flash and flash-lite families, and the extension prefers flash-lite when it is available.
+So a free device that uses its whole hour every day costs the operator $0.11 to $0.35 a day, and most devices use far less. The shared cache means a popular video is generated once; the Worker itself costs $5 a month plus fractions of a cent per million requests and KV operations. Google raises Gemini 3.x Flash prices on 2027-01-01; the default `FREE_MODELS` keeps free devices on the flash and flash-lite text families, and the extension prefers flash-lite when it is available.
+
+The allowance is meant to bound that cost whatever a token sends, which is why output counts: an answer of 65 000 output tokens to a ten-token prompt costs the operator about as much as 50 minutes of video and is charged 3 250 of the 3 600 free seconds, not 1. `OUTPUT_TOKEN_WEIGHT` should track the output/input price ratio of the free models (5 for flash, 8 for flash-lite; raise it rather than lower it).
 
 Qwen (`qwen3-vl-plus`) at October 2026 prices is about ¥2 per hour of video; see `README.zh-CN.md`.
 
@@ -168,14 +174,14 @@ The code handles exactly this much, marked `OWNER TO FINISH` in `src/worker.js`:
 2. A webhook endpoint pointing at `https://<host>/webhooks/stripe` for `checkout.session.completed` (and `checkout.session.async_payment_succeeded` for delayed payment methods). Its signing secret goes into `STRIPE_WEBHOOK_SECRET`. The Worker verifies `Stripe-Signature` (HMAC-SHA256 of `t.body`, 5-minute tolerance) with Web Crypto; no Stripe SDK.
 3. On a paid session the Worker creates a key `svl-XXXX-XXXX-XXXX`, stores `{plan, seats, used: 0, created, session}`, and answers `{"received":true,"licenseKey":"svl-…","plan":"plus","seats":1}`. A retried webhook gets the same key.
 4. Delivering the key is the owner's part: the Checkout success page (on the owner's site, server side) calls `GET /admin/licenses/{CHECKOUT_SESSION_ID}` with `Authorization: Bearer <ADMIN_TOKEN>` and shows or emails the key. Never expose `ADMIN_TOKEN` to a browser.
-5. Refunds, cancellations and seat changes are not automated: delete or edit the licence record with `wrangler kv key …` (the key's record is at `LICENSES/<key>`, the session index at `LICENSES/session:<id>`).
+5. Refunds, cancellations and seat changes are not automated: delete or edit the licence record with `wrangler kv key …` (the key's record is at `LICENSES/<key>`, the session index at `LICENSES/session:<id>`). The plan is read from the licence record on every authenticated request, so a deleted record drops each device on it to the free plan at that device's next request (within about a minute, KV being eventually consistent), and an edited `plan` is followed the same way.
 
 Invoice customers (schools, libraries): `node server/scripts/make-license.mjs --plan org --seats 30 --note "Example School"` prints a key and the `wrangler kv key put` command that stores it.
 
 ## Privacy commitments
 
 - The cache stores text only: timestamps, sentences, language, video id, model name. No frames, no questions, no answers to questions, nothing about who uploaded it.
-- Request bodies are forwarded as bytes and never parsed, stored or logged. Responses are parsed only to read the token count.
+- Request bodies are forwarded as bytes and never stored or logged. The one field ever read from one is the top-level `model` of a free device's DashScope request (the API names the model in the body); Gemini bodies are not parsed at all. Responses are parsed only to read the token counts.
 - One log line per request: route template, status, first 8 characters of the token, seconds charged. No addresses, no video ids, no bodies.
 - Device records hold a plan, a creation date and a licence key. Registration limits use a one-day hash of the network address salted with the date.
 - The operator's upstream keys appear only in the request header to the upstream; tests assert they are in no response body, header or stored value.
@@ -183,6 +189,7 @@ Invoice customers (schools, libraries): `node server/scripts/make-license.mjs --
 
 ## Known limits
 
-- KV has no atomic increment: two requests in the same second can both read the old total, so an allowance can be overshot by one request. D1 or a Durable Object fixes this; `src/store.js` is the one file to change.
-- A device that changes licence keys keeps its seat on the old key until the owner edits the record.
+- KV has no atomic increment: two requests in the same second can both read the old total, so an allowance (or the per-minute and per-day counters) can be overshot by a few requests, and two first uploads of the same script in the same moment can both land. D1 or a Durable Object fixes this; `src/store.js` is the one file to change.
+- The shared cache trusts its first writer. A device that has spent allowance can still seed a video nobody has described yet with a wrong script (at most `SCRIPT_PUTS_PER_DAY` a day), and nothing about the uploader is kept, so a report can only be acted on by deleting the key; the extension says *Loaded from SceneVoice Cloud* before playing a shared script, and a listener can always have the video described again.
+- A device that changes licence keys keeps its seat on the old key until the owner edits the record; a revoked licence's `used` count is gone with the record.
 - There is no way to delete a device token server side except with `wrangler kv key delete --binding DEVICES <token>`.

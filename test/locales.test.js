@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CORE_LOCALES, LOCALES, STRINGS, TABLES, coverage, strayKeys } from '../scripts/locales.mjs';
+import { CORE_LOCALES, LOCALES, SPOKEN_KEYS, STRINGS, TABLES, coverage, strayKeys } from '../scripts/locales.mjs';
 import { COMMANDS } from '../src/shared/constants.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,6 +37,24 @@ describe('interface strings', () => {
     }
   });
 
+  it('has the strings spoken during playback in every language, so no English is spliced into a description', () => {
+    expect(SPOKEN_KEYS).toContain('late_prefix');
+    for (const l of LOCALES) for (const key of SPOKEN_KEYS) expect(STRINGS[key]?.[l]?.trim(), `${l}: ${key}`).toBeTruthy();
+  });
+
+  it('keeps Chinese characters out of short labels in languages whose voices cannot read them', () => {
+    // A Spanish or Russian screen-reader voice has no reading for 通义千问: a select option or
+    // heading holding it is announced with a gap or noise in the middle. Longer prose may gloss
+    // the Chinese name; the provider labels and guide headings must not.
+    const readsHan = ['ja', 'ko', 'zh_CN', 'zh_TW'];
+    for (const l of LOCALES) {
+      if (readsHan.includes(l)) continue;
+      for (const [key, text] of Object.entries(TABLES[l])) {
+        if (/^provider_|^guide_\w+_title$/.test(key)) expect(text, `${l}: ${key}`).not.toMatch(/\p{Script=Han}/u);
+      }
+    }
+  });
+
   it('keeps the store name and summary within the manifest limits, naming both sites', () => {
     // Chrome: name 45 characters, description 132. Both stores show these.
     for (const l of LOCALES) {
@@ -59,7 +77,9 @@ describe('interface strings', () => {
       for (const m of text.matchAll(/data-i18n="([a-z0-9_]+)"/g)) used.add(m[1]);
     }
     for (const m of read('static/manifest.json').matchAll(/__MSG_([a-z0-9_]+)__/g)) used.add(m[1]);
-    const missing = [...used].filter((k) => !STRINGS[k]);
+    // ui_lang and ui_dir are not strings: build.mjs writes them into each folder's messages.json (the folder's language and direction).
+    const generated = new Set(['ui_lang', 'ui_dir']);
+    const missing = [...used].filter((k) => !STRINGS[k] && !generated.has(k));
     expect(missing).toEqual([]);
   });
 });

@@ -76,7 +76,7 @@ export default {
   guide_qwen_7: 'Volte às configurações do SceneVoice, cole a chave em “Chave de API do Qwen” e pressione “Salvar e testar”.',
   guide_privacy_title: 'Sua chave fica com você',
   guide_privacy:
-    'A chave fica guardada só neste computador e é enviada só para o endereço do próprio modelo. O SceneVoice não tem servidor e nunca a vê. Não compartilhe a chave com outras pessoas: quem a tiver pode usar a sua cota.',
+    'A chave fica guardada só neste computador e é enviada só para o endereço do próprio modelo. Com a sua própria chave, o SceneVoice não tem nenhum servidor nesse caminho e nunca a vê. Não compartilhe a chave com outras pessoas: quem a tiver pode usar a sua cota.',
   opt_key_hint: 'Cole aqui a sua chave de API do Gemini. Obtenha uma gratuitamente no Google AI Studio, pelo link acima; o plano gratuito tem um limite diário.',
   opt_qwen_key_hint:
     'Cole aqui a sua chave de API do Qwen. Crie uma no console do Alibaba Cloud Model Studio, pelo link acima; contas novas costumam receber um crédito gratuito.',
@@ -457,14 +457,17 @@ export default {
   opt_cache_clear: 'Apagar todas as descrições salvas',
   opt_cache_info: '$1 vídeos descritos e salvos neste computador, $2 KB.',
   opt_cache_confirm: 'Apagar todas as descrições salvas? Os vídeos precisarão ser descritos de novo.',
-  privacy_1: 'O SceneVoice não tem servidor nem conta. Ele não coleta dados de uso.',
+  privacy_1:
+    'Com a sua própria chave, o SceneVoice não tem servidor nem conta, e nada é enviado ao desenvolvedor. Ele nunca coleta dados de uso. O SceneVoice Cloud, se você o ativar, é um retransmissor opcional mantido pelo projeto; o ponto seguinte diz o que ele recebe.',
+  privacy_6:
+    'O SceneVoice Cloud fica desligado até você apertar “Começar grátis”. Com ele ligado, as solicitações vão para api.scenevoice.app com um token de dispositivo anônimo no lugar de uma chave, e o retransmissor as repassa ao Gemini. Por token, ele guarda só quantos segundos de vídeo foram descritos hoje, o plano e a chave de licença, se houver, além do texto final das descrições de um vídeo quando o compartilhamento está ligado. Ele nunca guarda imagens, suas perguntas, as respostas nem seu endereço IP, e não registra as solicitações. “Parar de usar o Cloud” remove o token.',
   privacy_2:
     'Para criar descrições ou responder a uma pergunta, o endereço, o título, o canal e a descrição do vídeo do YouTube, sua pergunta e as descrições recentes são enviados à API do Gemini com a sua chave. Para descrever um momento de novo, a descrição que você marcou como errada também é enviada. Valem os termos do Google para a API do Gemini.',
   privacy_5:
     'Com o Qwen, e no Bilibili, o modelo não consegue abrir o vídeo pelo endereço: em vez disso, a cada poucos segundos é enviada uma imagem reduzida do vídeo em reprodução, com o título, o autor e a descrição. Para o Qwen valem os termos do Alibaba Cloud Model Studio. As imagens ficam na memória por um ou dois minutos e nunca são salvas.',
   privacy_3: 'As descrições são salvas neste computador, para que um vídeo seja descrito só uma vez.',
   privacy_4:
-    'As descrições que você marca como erradas são registradas só neste computador, para que as versões corrigidas sejam mantidas. Não há servidor de feedback: nada é enviado ao desenvolvedor. O registro é apagado junto com as descrições salvas.',
+    'As descrições que você marca como erradas são registradas só neste computador, para que as versões corrigidas sejam mantidas. Elas nunca são enviadas ao desenvolvedor e são retiradas antes de as descrições de um vídeo serem compartilhadas. O registro é apagado junto com as descrições salvas.',
   opt_reset_title: '6. Restaurar os padrões',
   opt_reset_intro:
     'Volta todas as configurações de descrição, voz e som ao que eram quando você instalou o SceneVoice. Sua chave de API, o modelo e as descrições salvas ficam. Os atalhos de teclado também ficam; mude-os na página de atalhos do Chrome.',
@@ -507,7 +510,7 @@ export default {
   welcome_sample_done: 'Esse foi o exemplo. Próximo: escolher como as descrições são criadas.',
   welcome_step2_title: '2. Escolha como as descrições são criadas',
   welcome_source_legend: 'As descrições são criadas por',
-  welcome_source_cloud: 'SceneVoice Cloud: cota gratuita, nada para configurar (recomendado)',
+  welcome_source_cloud: 'SceneVoice Cloud: cota gratuita, nada para configurar',
   welcome_source_cloud_hint: '60 minutos de vídeo recém-descrito por dia; vídeos que outras pessoas do SceneVoice já descreveram não contam. As solicitações passam pelo relé do SceneVoice com um identificador de dispositivo anônimo, sem conta.',
   welcome_source_own: 'Minha própria chave (Gemini ou Qwen): sem limite, privada',
   welcome_source_own_hint: 'Você obtém uma chave gratuita no Google AI Studio ou no Alibaba Cloud Model Studio e cola aqui. Nada passa pelo SceneVoice.',

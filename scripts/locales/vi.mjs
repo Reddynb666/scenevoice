@@ -76,7 +76,7 @@ export default {
   guide_qwen_7: 'Quay lại cài đặt SceneVoice, dán khóa vào ô “Khóa API Qwen” và nhấn “Lưu và kiểm tra”.',
   guide_privacy_title: 'Khóa của bạn luôn ở với bạn',
   guide_privacy:
-    'Khóa chỉ được lưu trên máy tính này và chỉ được gửi tới địa chỉ của chính mô hình. SceneVoice không có máy chủ và không bao giờ thấy khóa. Đừng chia sẻ khóa với người khác: ai có khóa đều dùng được hạn mức của bạn.',
+    'Khóa chỉ được lưu trên máy tính này và chỉ được gửi tới địa chỉ của chính mô hình. Khi dùng khóa của riêng bạn, SceneVoice không có máy chủ nào trên đường đi đó và không bao giờ thấy khóa. Đừng chia sẻ khóa với người khác: ai có khóa đều dùng được hạn mức của bạn.',
   opt_key_hint: 'Dán khóa API Gemini của bạn vào đây. Lấy miễn phí tại Google AI Studio, liên kết ở trên; gói miễn phí có giới hạn theo ngày.',
   opt_qwen_key_hint:
     'Dán khóa API Qwen của bạn vào đây. Tạo khóa trong bảng điều khiển Alibaba Cloud Model Studio, liên kết ở trên; tài khoản mới thường được tặng một khoản dùng thử miễn phí.',
@@ -396,7 +396,7 @@ export default {
   set_provider_youtube: 'Video YouTube',
   set_provider_bilibili: 'Video Bilibili, thử nghiệm',
   provider_gemini: 'Gemini, của Google',
-  provider_qwen: 'Qwen 通义千问, của Alibaba Cloud Model Studio',
+  provider_qwen: 'Qwen, của Alibaba Cloud Model Studio',
   opt_qwen_intro:
     'Qwen, tên tiếng Trung là 通义千问, là mô hình của Alibaba Cloud và dùng được từ Trung Quốc đại lục. Bạn dùng khóa API của riêng mình từ Alibaba Cloud Model Studio, còn gọi là Bailian, 阿里云百炼; mức dùng được tính vào tài khoản Alibaba Cloud của bạn.',
   opt_qwen_step1: 'Mở bảng điều khiển Alibaba Cloud Model Studio và đăng nhập:',
@@ -457,14 +457,17 @@ export default {
   opt_cache_clear: 'Xóa tất cả mô tả đã lưu',
   opt_cache_info: '$1 video đã được mô tả và lưu trên máy tính này, $2 KB.',
   opt_cache_confirm: 'Xóa tất cả mô tả đã lưu? Các video sẽ cần được mô tả lại.',
-  privacy_1: 'SceneVoice không có máy chủ và không có tài khoản. Nó không thu thập dữ liệu phân tích.',
+  privacy_1:
+    'Khi dùng khóa của riêng bạn, SceneVoice không có máy chủ và không có tài khoản, và không gì được gửi tới nhà phát triển. Nó không bao giờ thu thập dữ liệu phân tích. SceneVoice Cloud, nếu bạn bật, là một máy chuyển tiếp tùy chọn do dự án vận hành; mục tiếp theo nói nó nhận được gì.',
+  privacy_6:
+    'SceneVoice Cloud tắt cho đến khi bạn nhấn “Bắt đầu miễn phí”. Khi bật, các yêu cầu được gửi tới api.scenevoice.app kèm một mã thiết bị ẩn danh thay cho khóa, và máy chuyển tiếp chuyển chúng tới Gemini. Với mỗi mã, nó chỉ giữ số giây video đã được mô tả hôm nay, gói đang dùng và khóa bản quyền nếu có, cùng với văn bản hoàn chỉnh của các mô tả một video khi bật chia sẻ. Nó không bao giờ giữ hình ảnh, câu hỏi của bạn, câu trả lời hay địa chỉ IP của bạn, và không ghi lại các yêu cầu. “Ngừng dùng Cloud” sẽ xóa mã này.',
   privacy_2:
     'Để tạo mô tả hoặc trả lời câu hỏi, địa chỉ, tiêu đề, kênh và phần giới thiệu của video YouTube, câu hỏi của bạn và các mô tả gần đây được gửi tới API Gemini cùng khóa của bạn. Để mô tả lại một khoảnh khắc, mô tả bạn đánh dấu là sai cũng được gửi đi. Điều khoản của Google cho API Gemini được áp dụng.',
   privacy_5:
     'Với Qwen, và trên Bilibili, mô hình không mở được video qua địa chỉ: thay vào đó, cứ vài giây một ảnh thu nhỏ của video đang phát được gửi đi, kèm tiêu đề, người đăng và phần giới thiệu. Điều khoản của Alibaba Cloud Model Studio áp dụng cho Qwen. Ảnh chỉ được giữ trong bộ nhớ một hai phút và không bao giờ được lưu.',
   privacy_3: 'Mô tả được lưu trên máy tính này để mỗi video chỉ phải mô tả một lần.',
   privacy_4:
-    'Các mô tả bạn đánh dấu là sai chỉ được ghi lại trên máy tính này, để giữ các bản đã sửa. Không có máy chủ phản hồi: không có gì được gửi tới nhà phát triển. Bản ghi này bị xóa cùng với các mô tả đã lưu.',
+    'Các mô tả bạn đánh dấu là sai chỉ được ghi lại trên máy tính này, để giữ các bản đã sửa. Chúng không bao giờ được gửi tới nhà phát triển và bị loại bỏ trước khi các mô tả của một video được chia sẻ. Bản ghi này bị xóa cùng với các mô tả đã lưu.',
   opt_reset_title: '6. Khôi phục mặc định',
   opt_reset_intro:
     'Đưa mọi cài đặt về mô tả, giọng đọc và âm thanh trở lại như khi bạn mới cài SceneVoice. Khóa API, mô hình và các mô tả đã lưu vẫn giữ nguyên. Phím tắt cũng giữ nguyên; hãy đổi chúng trên trang phím tắt của Chrome.',
@@ -507,7 +510,7 @@ export default {
   welcome_sample_done: 'Đó là phần mẫu. Tiếp theo: chọn cách tạo mô tả.',
   welcome_step2_title: '2. Chọn cách tạo mô tả',
   welcome_source_legend: 'Mô tả được tạo bởi',
-  welcome_source_cloud: 'SceneVoice Cloud: có hạn mức miễn phí, không cần thiết lập (khuyên dùng)',
+  welcome_source_cloud: 'SceneVoice Cloud: có hạn mức miễn phí, không cần thiết lập',
   welcome_source_cloud_hint: 'Mỗi ngày 60 phút video được mô tả mới; video mà người dùng SceneVoice khác đã mô tả không bị tính. Yêu cầu đi qua máy trung chuyển của SceneVoice với mã thiết bị ẩn danh, không cần tài khoản.',
   welcome_source_own: 'Khóa của riêng tôi (Gemini hoặc Qwen): không giới hạn, riêng tư',
   welcome_source_own_hint: 'Bạn lấy khóa miễn phí từ Google AI Studio hoặc Alibaba Cloud Model Studio rồi dán vào. Không có gì đi qua SceneVoice.',

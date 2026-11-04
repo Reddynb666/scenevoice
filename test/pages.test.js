@@ -40,6 +40,9 @@ globalThis.setTimeout = (...args) => {
 
 /** Load an extension page's HTML (without running its script tag) and then its module. */
 async function openPage(page, opts = {}) {
+  // The page before is left, as when its tab closes: what it does on unload (the
+  // welcome page stops its sample) happens now, against its own fake, not in this test.
+  window.dispatchEvent(new Event('pagehide'));
   for (const id of timers) clearTimeout(id);
   timers.clear();
   const html = readFileSync(join(root, 'src', page, `${page}.html`), 'utf8');
@@ -96,6 +99,8 @@ async function axeViolations() {
 }
 
 afterEach(() => {
+  // Leave the page while it is still there, as a closing tab does (see openPage).
+  window.dispatchEvent(new Event('pagehide'));
   document.documentElement.innerHTML = '';
 });
 
@@ -273,6 +278,35 @@ describe('popup: interface and description languages', () => {
     expect($('#language option[value=ar]').getAttribute('dir')).toBe('rtl');
     expect($('#language option[value=ur]').lang).toBe('ur');
     expect($('#language option[value=fr]').hasAttribute('dir')).toBe(false);
+  });
+});
+
+describe('the language a page declares', () => {
+  it('is the language of the strings shown, not the browser locale: English, left to right, for a browser language without strings of its own', async () => {
+    // An Italian browser gets English strings (no it.mjs): a screen reader must not read them with an Italian voice.
+    await openPage('welcome', { locale: 'it', uiLanguage: 'it-IT' });
+    expect($('#title').textContent).toBe('Welcome to SceneVoice');
+    expect(document.documentElement.lang).toBe('en');
+    expect(document.documentElement.dir).toBe('ltr');
+    // Strings of its own: that language, and its direction.
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    expect(document.documentElement.lang).toBe('zh-CN');
+    expect(document.documentElement.dir).toBe('ltr');
+    await openPage('options', { locale: 'ar', uiLanguage: 'ar' });
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+  });
+
+  it('popup: a Hebrew browser gets English text, so not laid out right to left either', async () => {
+    await openPage('popup', { locale: 'he', uiLanguage: 'he' });
+    expect(document.documentElement.lang).toBe('en');
+    expect(document.documentElement.dir).toBe('ltr');
+  });
+
+  it('popup: names both languages for a browser language without strings of its own, whatever locale the browser reports', async () => {
+    await openPage('popup', { locale: 'sv', uiLanguage: 'sv-SE' });
+    await vi.waitFor(() => expect($('#languageNote').hidden).toBe(false));
+    expect($('#languageNote').textContent).toBe('Interface: English · Descriptions: svenska');
   });
 });
 
@@ -616,10 +650,16 @@ describe('settings page', () => {
   it('says that marks of wrong descriptions stay on this computer, and what a correction sends', async () => {
     await openPage('options');
     const items = [...document.querySelectorAll('ul.small li')].map((li) => li.textContent);
-    expect(items).toContain('The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. There is no feedback server: nothing is sent to the developer. The record is deleted with the saved descriptions.');
+    expect(items).toContain('The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer, and are stripped before a video’s descriptions are shared. The record is deleted with the saved descriptions.');
+    // The own-key statement is qualified, and the optional relay has a point of its own right after it.
+    const ownKey = items.findIndex((s) => s.startsWith('With your own key, SceneVoice has no server and no account'));
+    expect(ownKey).toBeGreaterThanOrEqual(0);
+    expect(items[ownKey + 1]).toMatch(/^SceneVoice Cloud is off until you press “Start free”\./);
+    expect(items[ownKey + 1]).toMatch(/“Stop using Cloud” removes the token\./);
+    expect(items.some((s) => /SceneVoice has no server and no account\. It does not/.test(s))).toBe(false);
     expect(items.find((s) => s.startsWith('To create descriptions'))).toMatch(/To describe a moment again, the description you marked as wrong is sent too\./);
     await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
-    expect([...document.querySelectorAll('ul.small li')].map((li) => li.textContent)).toContain('你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。SceneVoice 没有收集反馈的服务器，什么都不会发给开发者；删除已保存的口述时，这些记录会一并删除。');
+    expect([...document.querySelectorAll('ul.small li')].map((li) => li.textContent)).toContain('你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。它们不会发给开发者，分享口述前也会先去掉；删除已保存的口述时，这些记录会一并删除。');
   });
 
   it('lists the new speed shortcuts, unset by default', async () => {
@@ -969,9 +1009,13 @@ describe('welcome page (first run)', () => {
     expect($('main').children[2].getAttribute('aria-labelledby')).toBe('step1');
     expect(unnamedControls()).toEqual([]);
     expect(await axeViolations()).toEqual([]);
-    expect($('input[name=source][value=cloud]').checked).toBe(true);
-    expect($('#cloudBox').hidden).toBe(false);
-    expect($('#ownBox').hidden).toBe(true);
+    // "My own key" is the default until the Cloud relay is deployed: a listener who follows
+    // the preselected path must not be sent to a service that does not answer.
+    expect($('input[name=source][value=own]').checked).toBe(true);
+    expect($('input[name=source][value=cloud]').checked).toBe(false);
+    expect($('#cloudBox').hidden).toBe(true);
+    expect($('#ownBox').hidden).toBe(false);
+    expect($('span[data-i18n=welcome_source_cloud]').textContent).not.toMatch(/recommended/i);
     expect($('#ownKey').getAttribute('href')).toBe('options.html#gemini');
     expect($('#tryBilibiliItem').hidden).toBe(true);
     expect($('#tryYoutube').getAttribute('target')).toBe('_blank');
@@ -1024,6 +1068,79 @@ describe('welcome page (first run)', () => {
     expect($('#sampleOut').getAttribute('aria-live')).toBe('off');
   });
 
+  it('silences a built-in-voice sample before the screen reader takes over, when the output changes, and when the page is left', async () => {
+    await openPage('welcome');
+    pick($('input[name=output][value=tts]'));
+    await vi.waitFor(() => expect(stored().output).toBe('tts'));
+    const types = () => fake.sent.map((m) => m.type);
+    // Leaving the page or changing the output with no voice of ours speaking sends no stop: chrome.tts.stop() is
+    // global, and a description being read for a video in another tab must not be cut off.
+    window.dispatchEvent(new Event('pagehide'));
+    expect(types()).not.toContain(MSG.STOP_SPEAKING);
+    $('#sample').click();
+    await vi.waitFor(() => expect(types()).toContain(MSG.SPEAK));
+    expect($('#sample').textContent).toBe('Stop the sample');
+    // Switching to the screen reader and asking again: the voice is stopped before the live region gets its first sentence.
+    pick($('input[name=output][value=screenreader]'));
+    expect(types().filter((t) => t === MSG.STOP_SPEAKING)).toHaveLength(1);
+    expect(types().indexOf(MSG.STOP_SPEAKING)).toBeGreaterThan(types().indexOf(MSG.SPEAK));
+    expect($('#sample').textContent).toBe('Hear a sample');
+    await vi.waitFor(() => expect(stored().output).toBe('screenreader'));
+    $('#sample').click();
+    await vi.waitFor(() => expect($('#sampleOut').textContent).toBe('Title: How to repot a plant.'));
+    expect($('#sampleOut').getAttribute('aria-live')).toBe('polite');
+    expect(types().filter((t) => t === MSG.SPEAK)).toHaveLength(1);
+    // Back to the voice: the button becomes a stop control while it speaks, and the page's unload stops it too.
+    pick($('input[name=output][value=tts]'));
+    await vi.waitFor(() => expect(stored().output).toBe('tts'));
+    $('#sample').click();
+    await vi.waitFor(() => expect(types().filter((t) => t === MSG.SPEAK)).toHaveLength(2));
+    const second = fake.sent.filter((m) => m.type === MSG.SPEAK)[1];
+    expect(second.id).not.toBe(fake.sent.find((m) => m.type === MSG.SPEAK).id);
+    expect($('#sample').textContent).toBe('Stop the sample');
+    $('#sample').click();
+    expect(types().filter((t) => t === MSG.STOP_SPEAKING)).toHaveLength(2);
+    expect($('#sample').textContent).toBe('Hear a sample');
+    $('#sample').click();
+    await vi.waitFor(() => expect(types().filter((t) => t === MSG.SPEAK)).toHaveLength(3));
+    window.dispatchEvent(new Event('pagehide'));
+    expect(types().filter((t) => t === MSG.STOP_SPEAKING)).toHaveLength(3);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('says so, through the live region, when the built-in voice could not speak, and makes the region live again when it has finished', async () => {
+    await openPage('welcome', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    pick($('input[name=output][value=tts]'));
+    await vi.waitFor(() => expect(stored().output).toBe('tts'));
+    const out = $('#sampleOut');
+    $('#sample').click();
+    await vi.waitFor(() => expect(fake.sent.some((m) => m.type === MSG.SPEAK)).toBe(true));
+    const { id } = fake.sent.find((m) => m.type === MSG.SPEAK);
+    expect(out.getAttribute('aria-live')).toBe('off');
+    // Events of another utterance (the options page's voice test, a description in a video tab) are not this sample's.
+    fake.deliver({ type: MSG.TTS_EVENT, id: 'test', event: 'error' });
+    expect(out.getAttribute('aria-live')).toBe('off');
+    expect($('#sample').textContent).toBe('停止示例');
+    // Nor is a message from a web page or another extension, whatever it says.
+    fake.deliver({ type: MSG.TTS_EVENT, id, event: 'error' }, { id: 'other-extension', origin: 'https://evil.example', url: 'https://evil.example/' });
+    expect(out.getAttribute('aria-live')).toBe('off');
+    fake.deliver({ type: MSG.TTS_EVENT, id, event: 'error' });
+    expect(out.getAttribute('aria-live')).toBe('polite');
+    expect($('#sample').textContent).toBe('听一段示例');
+    // The failure is written after the region is live again, so a screen reader does not miss it.
+    await vi.waitFor(() => expect(out.textContent).toBe('这台电脑上的内置语音无法朗读。请在上面选择“我的读屏软件”，再按一次“听一段示例”。'));
+    expect(fake.sent.some((m) => m.type === MSG.STOP_SPEAKING)).toBe(false);
+
+    // A sample that ends well: the region is live again and keeps the sample text.
+    $('#sample').click();
+    await vi.waitFor(() => expect(fake.sent.filter((m) => m.type === MSG.SPEAK)).toHaveLength(2));
+    expect(out.getAttribute('aria-live')).toBe('off');
+    fake.deliver({ type: MSG.TTS_EVENT, id: fake.sent.filter((m) => m.type === MSG.SPEAK)[1].id, event: 'end' });
+    expect(out.getAttribute('aria-live')).toBe('polite');
+    expect(out.textContent).toMatch(/^标题：怎样给植物换盆。/);
+    expect($('#sample').textContent).toBe('听一段示例');
+  });
+
   it('Start free gets a device token, keeps it with the keys, has Cloud describe both sites with sharing on, and says the allowance', async () => {
     await openPage('welcome');
     globalThis.fetch = relay({ 'POST /v1/devices': [201, DEVICE] });
@@ -1047,10 +1164,18 @@ describe('welcome page (first run)', () => {
     await openPage('welcome');
     globalThis.fetch = relay({});
     $('#startFree').click();
-    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('Could not reach SceneVoice Cloud. Check your internet connection, or use a key of your own in settings. You can use your own key instead: choose “My own key” above.'));
+    // One remedy, named once, pointing at the radio right above the button: not the generation-time
+    // sentence about "settings" and the user's connection, followed by the same advice again.
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('SceneVoice Cloud could not be reached. You can use your own key instead: choose “My own key” above.'));
     expect(fake.areas.local.local?.cloudToken).toBeFalsy();
     expect(stored()).toEqual({});
     expect($('#startFree').disabled).toBe(false);
+
+    // The relay's per-minute 429: nothing about descriptions "saved so far", there are none yet.
+    globalThis.fetch = relay({ 'POST /v1/devices': [429, { error: { code: 429, message: 'Too many requests', status: 'RESOURCE_EXHAUSTED', details: [{ reason: 'SCENEVOICE_RATE_LIMIT' }] } }] });
+    $('#startFree').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('SceneVoice Cloud is busy right now. Try Start free again in a minute. You can use your own key instead: choose “My own key” above.'));
+    expect(fake.areas.local.local?.cloudToken).toBeFalsy();
 
     globalThis.fetch = relay({ 'POST /v1/devices': [200, { token: '<script>alert(1)</script>', plan: 'free' }] });
     $('#startFree').click();
@@ -1061,6 +1186,23 @@ describe('welcome page (first run)', () => {
     expect($('#ownBox').hidden).toBe(false);
     expect($('#cloudBox').hidden).toBe(true);
     expect($('#ownKey').textContent).toBe('Add my key in settings');
+  });
+
+  it('says when this network has started as many new devices as it may today, and when that opens again, not "wait a minute"', async () => {
+    await openPage('welcome');
+    const resetsAt = '2026-11-05T00:00:00Z';
+    const limit = (fields) => [429, { error: { code: 429, message: 'Too many new SceneVoice devices from this network today. Try again tomorrow.', status: 'RESOURCE_EXHAUSTED', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT', ...fields }] } }];
+    globalThis.fetch = relay({ 'POST /v1/devices': limit({ resetsAt }) });
+    $('#startFree').click();
+    const at = new Date(resetsAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe(`Too many computers on this network have started SceneVoice Cloud today. Try again after ${at}. You can use your own key instead: choose “My own key” above.`));
+    expect(fake.areas.local.local?.cloudToken).toBeFalsy();
+    expect($('#startFree').disabled).toBe(false);
+    // Without a time from the relay: midnight UTC. Nothing about saved descriptions, there are none.
+    globalThis.fetch = relay({ 'POST /v1/devices': limit({}) });
+    $('#startFree').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toMatch(/^Too many computers on this network have started SceneVoice Cloud today\. Try again after midnight UTC\. You can use your own key/));
+    expect($('#cloudStatus').textContent).not.toMatch(/saved/);
   });
 
   it('says Cloud is already set up when a token exists', async () => {
@@ -1133,6 +1275,15 @@ describe('settings page: SceneVoice Cloud', () => {
     expect(fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(['/v1/devices']);
   });
 
+  it('says when the network’s daily limit on new devices is reached, in Chinese too, and keeps no token', async () => {
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    globalThis.fetch = relay({ 'POST /v1/devices': [429, { error: { message: 'limit', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT' }] } }] });
+    $('#cloudStart').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('今天这个网络里开始使用 SceneVoice 云端的电脑太多了。请在 世界标准时间零点 之后再试。 也可以改用自己的密钥：下方的 Gemini 或通义千问。'));
+    expect(fake.areas.local.local?.cloudToken).toBeFalsy();
+    expect($('#cloudStart').hidden).toBe(false);
+  });
+
   it('reads the plan and today’s use with a token, once a minute, and activates a licence', async () => {
     globalThis.fetch = relay({
       '/v1/me': me('free', 600, 3600),
@@ -1198,5 +1349,26 @@ describe('settings page: SceneVoice Cloud', () => {
     window.location.hash = '';
     choose($('#shareDescriptions'));
     await vi.waitFor(() => expect(stored().shareDescriptions).toBe(true));
+  });
+
+  it('drops a token the relay no longer knows, shows Start free again (and lands on it when sent here), and keeps the sites on Cloud', async () => {
+    // The listener was told "Press Start free in settings" and sent to #cloud: that button must be the one there.
+    globalThis.fetch = relay({ '/v1/me': [401, { error: { code: 401, message: 'Unknown device token', status: 'UNAUTHENTICATED', details: [{ reason: 'SCENEVOICE_DEVICE_UNKNOWN' }] } }] });
+    window.location.hash = '#cloud';
+    await openPage('options', { local: { local: { cloudToken: TOKEN, cloudPlan: 'free' } }, sync: { settings: { youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true } } });
+    window.location.hash = '';
+    await vi.waitFor(() => expect($('#cloudStart').hidden).toBe(false));
+    expect($('#cloudStop').hidden).toBe(true);
+    expect($('#cloudInfo').textContent).toBe('SceneVoice Cloud no longer recognises this computer’s device token, so it has been removed. Press Start free to get a new one; your other settings are kept.');
+    expect(fake.areas.local.local).toMatchObject({ cloudToken: '', cloudPlan: '' });
+    expect(document.activeElement.id).toBe('cloudStart');
+    // Unlike Stop using Cloud: the sites and sharing stay as they were, so a new token is all Start free has to get.
+    expect(stored()).toMatchObject({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true });
+    // Not said through the live region: opening the page is not news.
+    expect($('#cloudStatus').textContent).toBe('');
+    globalThis.fetch = relay({ 'POST /v1/devices': [201, DEVICE] });
+    $('#cloudStart').click();
+    await vi.waitFor(() => expect($('#cloudStop').hidden).toBe(false));
+    expect(fake.areas.local.local).toMatchObject({ cloudToken: TOKEN, cloudPlan: 'free' });
   });
 });

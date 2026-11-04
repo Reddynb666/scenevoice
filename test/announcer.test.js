@@ -49,6 +49,64 @@ describe('live region writes', () => {
   });
 });
 
+describe('the language of each write', () => {
+  const filled = () => [...document.querySelectorAll('[data-scenevoice="live"]')].find((el) => el.textContent);
+
+  it('is the description language for a description and the interface language for status and feedback', () => {
+    const a = new Announcer(() => settings);
+    a.lang = 'it';
+    a.say('Una donna entra.');
+    vi.advanceTimersByTime(40);
+    expect(filled().getAttribute('lang')).toBe('it');
+    expect(filled().textContent).toBe('Una donna entra.');
+    a.status('Creating descriptions…');
+    vi.advanceTimersByTime(100);
+    expect(filled().getAttribute('lang')).toBe('en');
+    // Direct writes (feedback, errors) are interface text unless said otherwise.
+    a.announceToScreenReader('Descriptions off.', false);
+    vi.advanceTimersByTime(100);
+    expect(filled().getAttribute('lang')).toBe('en');
+    a.announceToScreenReader('Risposta.', false, { lang: 'it' });
+    vi.advanceTimersByTime(100);
+    expect(filled().getAttribute('lang')).toBe('it');
+  });
+
+  it('splits "Earlier:" from the description it leads, each in its own language, as one announcement', () => {
+    const a = new Announcer(() => settings);
+    a.lang = 'it';
+    a.say('Earlier: Una donna entra.', { lead: 'Earlier: ' });
+    vi.advanceTimersByTime(40);
+    const region = filled();
+    expect(region.hasAttribute('lang')).toBe(false);
+    expect(region.getAttribute('aria-atomic')).toBe('true');
+    expect([...region.children].map((el) => [el.getAttribute('lang'), el.textContent])).toEqual([
+      ['en', 'Earlier: '],
+      ['it', 'Una donna entra.'],
+    ]);
+    expect(region.textContent).toBe('Earlier: Una donna entra.');
+    // Same language on both sides: one plain write.
+    a.lang = 'en';
+    a.say('Earlier: A woman enters.', { lead: 'Earlier: ' });
+    vi.advanceTimersByTime(100);
+    expect(filled().getAttribute('lang')).toBe('en');
+    expect(filled().children).toHaveLength(0);
+  });
+
+  it('gives the built-in voice the interface language for status text and the description language for descriptions', () => {
+    const fake = fakeChrome();
+    globalThis.chrome = fake.chrome;
+    settings = { ...settings, output: 'tts', ttsVoices: { it: 'Alice', en: 'Daniel' } };
+    const a = new Announcer(() => settings);
+    a.lang = 'it';
+    a.status('Creating descriptions…');
+    a.say('Una donna entra.');
+    const spoken = fake.sent.filter((m) => m.type === 'sv:speak');
+    expect(spoken).toHaveLength(2);
+    expect(spoken[0]).toMatchObject({ text: 'Creating descriptions…', lang: 'en', voice: 'Daniel' });
+    expect(spoken[1]).toMatchObject({ text: 'Una donna entra.', lang: 'it', voice: 'Alice' });
+  });
+});
+
 describe('built-in voice in a hidden tab', () => {
   const hide = () => Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
   let sent;

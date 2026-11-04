@@ -187,8 +187,9 @@ describe('descriptions from frames', () => {
 
   it('with Qwen: an unreadable or cut-off answer is an error the page can explain', async () => {
     const client = (body) => createClient('qwen', { apiKey: 'k' }, fakeFetch({ status: 200, body }));
-    await expect(describeFrames('qwen', client(chat('sorry, I cannot')), params)).rejects.toMatchObject({ code: 'bad-json' });
-    await expect(describeFrames('qwen', client(chat('{"cues": [{"start": 12', 'length')), params)).rejects.toMatchObject({ code: 'truncated' });
+    // The reply was billed all the same: the error carries its cost, so the service worker can count it.
+    await expect(describeFrames('qwen', client(chat('sorry, I cannot')), params)).rejects.toMatchObject({ code: 'bad-json', usage: counted });
+    await expect(describeFrames('qwen', client(chat('{"cues": [{"start": 12', 'length')), params)).rejects.toMatchObject({ code: 'truncated', usage: counted });
   });
 
   it('with Gemini (Bilibili): frames go as inline JPEGs, with the response schema', async () => {

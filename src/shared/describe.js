@@ -53,11 +53,14 @@ export function createClient(provider, config, fetchImpl) {
   return adapter(provider).createClient(config || {}, fetchImpl);
 }
 
-function readJson({ text, finishReason }) {
+/** The JSON in a reply. A reply that cannot be read was billed all the same: the error carries its usage. */
+function readJson({ text, finishReason, usage }) {
   try {
     return extractJson(text);
   } catch {
-    throw new ApiError(finishReason === 'MAX_TOKENS' ? 'truncated' : 'bad-json');
+    const err = new ApiError(finishReason === 'MAX_TOKENS' ? 'truncated' : 'bad-json');
+    err.usage = usage;
+    throw err;
   }
 }
 

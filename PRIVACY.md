@@ -1,14 +1,14 @@
 # SceneVoice privacy policy
 
-Last updated: 31 October 2026
+Last updated: 4 November 2026
 
-SceneVoice is a browser extension that creates audio description for YouTube videos and, experimentally, Bilibili videos. It is designed so that the developer never sees your data.
+SceneVoice is a browser extension that creates audio description for YouTube videos and, experimentally, Bilibili videos. With your own API key it is designed so that the developer never sees your data; the optional SceneVoice Cloud relay is described below.
 
 ## What SceneVoice does not do
 
-- It has no server of its own. Nothing you do is sent to the developer.
-- It has no accounts, sign-ins or subscriptions.
-- It does not collect analytics, usage statistics, crash reports or identifiers.
+- With your own API key, SceneVoice has no server of its own and nothing you do is sent to the developer. The optional SceneVoice Cloud relay, which you turn on yourself with *Start free*, is the one exception; see *SceneVoice Cloud* below.
+- It has no accounts or sign-ins. SceneVoice Cloud uses an anonymous device token; an optional paid Plus or organisation licence key can be attached to it (see *Licences* below).
+- It does not collect analytics, usage statistics or crash reports. The only identifier is the random SceneVoice Cloud device token, which exists only after you press *Start free* and is removed by *Stop using Cloud*.
 - It does not read, record or upload the video or audio stream.
 
 ## What leaves your computer, and where it goes
@@ -51,14 +51,14 @@ No other network requests are made.
 
 ## What is stored on your computer
 
-- **Your API keys** (Gemini, Qwen), with the model and address for each, and the SceneVoice Cloud device token if you have one, in the browser's local extension storage (`chrome.storage.local`). They never leave your computer except as described above, and are never placed in a URL. Remove them at any time on the settings page.
+- **Your API keys** (Gemini, Qwen), with the model and address for each, and the SceneVoice Cloud device token if you have one (with its plan and model), in the browser's local extension storage (`chrome.storage.local`). They never leave your computer except as described above, and are never placed in a URL. Remove them at any time on the settings page.
 - **Descriptions** that have been generated, keyed by video and language, so a video is described only once, with the kind of video Gemini judged it to be (entertainment or tutorial). The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
-- **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server) and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
-- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language, the daily limit, and whether SceneVoice has already told you how to create descriptions. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server), are stripped before a video's descriptions are shared through SceneVoice Cloud, and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
+- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language, the daily limit, whether finished descriptions are shared with other SceneVoice users, and whether SceneVoice has already told you how to create descriptions. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
 - **Usage counts** — the tokens and requests each model reports for the current day, with a rough cost estimate from list prices, and each video's own token count next to its descriptions — are kept on this computer only, so the settings page can show today's usage and the popup what a video cost; they are never sent anywhere.
 - **Videos whose "AI-generated" notice you have heard**, only if you set that notice to once per video: the video IDs (YouTube's or Bilibili's), the last 300, in the same synced settings storage, so the notice is not repeated.
 
-Nothing is stored anywhere else.
+Nothing else is stored on your computer; what the SceneVoice Cloud relay keeps, if you use it, is listed above.
 
 ## Permissions the extension asks for
 

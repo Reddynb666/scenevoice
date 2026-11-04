@@ -9,7 +9,8 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statS
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
-import { CORE_LOCALES, LOCALES, STRINGS, coverage, strayKeys } from './locales.mjs';
+import { CORE_LOCALES, LOCALES, SPOKEN_KEYS, STRINGS, coverage, strayKeys } from './locales.mjs';
+import { RTL_LANGUAGES } from '../src/shared/constants.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -17,6 +18,14 @@ const dist = join(root, 'dist');
 // are kept with each release (the -sourcemaps zip) to read a stack trace.
 const maps = join(root, 'dist-maps');
 const args = new Set(process.argv.slice(2));
+
+/**
+ * Messages written into every _locales folder by writeLocales() rather than
+ * translated: ui_lang is the folder's language as a BCP 47 tag and ui_dir its
+ * direction, which shared/i18n.js puts on <html>. Not in the locale files, so
+ * the completeness checks leave them out.
+ */
+const GENERATED_KEYS = new Set(['ui_lang', 'ui_dir']);
 
 /** Minified bundle sizes CI refuses to exceed; the content script loads on every YouTube page. */
 const SIZE_LIMITS = { 'content.js': 120 * 1024 };
@@ -48,10 +57,12 @@ function checkStrings() {
   for (const p of ['announce_detail_', 'announce_mode_', 'announce_density_', 'status_fallback_', 'opt_next_']) for (const k of Object.keys(STRINGS)) if (k.startsWith(p)) used.add(k);
   const problems = [];
   for (const key of used) {
-    if (key.startsWith('@@')) continue;
+    if (key.startsWith('@@') || GENERATED_KEYS.has(key)) continue;
     if (!STRINGS[key]) problems.push(`missing string: ${key}`);
     else for (const l of CORE_LOCALES) if (!STRINGS[key][l]) problems.push(`missing ${l}: ${key}`);
   }
+  // Text read aloud during playback must never fall back to English.
+  for (const l of LOCALES) for (const key of SPOKEN_KEYS) if (!STRINGS[key]?.[l]) problems.push(`missing ${l}: ${key} (spoken during playback)`);
   for (const [key, v] of Object.entries(STRINGS)) {
     const reference = (v.en.match(/\$\d/g) || []).sort().join();
     for (const l of LOCALES) {
@@ -82,6 +93,12 @@ function writeLocales() {
       });
       out[key] = Object.keys(placeholders).length ? { message, placeholders } : { message };
     }
+    // Which language this folder's strings are in, for the pages' <html lang>
+    // and dir (shared/i18n.js): @@ui_locale is the browser's locale, which may
+    // have no folder here and then gets English. Generated, so the locale
+    // files themselves need not carry it.
+    out.ui_lang = { message: folder === 'zh' ? 'zh-CN' : folder.replace('_', '-') };
+    out.ui_dir = { message: RTL_LANGUAGES.includes(folder) ? 'rtl' : 'ltr' };
     const dir = join(dist, '_locales', folder);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'messages.json'), `${JSON.stringify(out, null, 2)}\n`);

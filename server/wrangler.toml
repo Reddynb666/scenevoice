@@ -25,8 +25,13 @@ enabled = true
 FREE_SECONDS_PER_DAY = "3600"
 PLUS_SECONDS_PER_DAY = "21600"
 # ORG_SECONDS_PER_DAY = "21600"   # defaults to PLUS_SECONDS_PER_DAY
-# Regular expression (JavaScript) for the model names a free device may use.
-FREE_MODELS = "^gemini-\\d(\\.\\d)?-flash(-lite)?"
+# Regular expression (JavaScript) for the Gemini model names a free device may
+# use. Keep it anchored with $: image, TTS, live and native-audio variants of
+# the flash family cost far more than text, and are refused for free devices
+# whatever this says.
+FREE_MODELS = "^gemini-\\d(\\.\\d)?-flash(-lite)?(-preview(-\\d{2}-\\d{2,4})?|-\\d{3})?$"
+# The same for DashScope (the model is read from the request body on the free plan).
+QWEN_FREE_MODELS = "^qwen\\d(\\.\\d)?-vl-(plus|flash)$"
 # Web origins allowed besides the extension (which sends chrome-extension://
 # or no Origin at all and needs no entry here). Comma separated.
 ALLOWED_ORIGINS = "https://scenevoice.app,https://www.scenevoice.app"
@@ -34,6 +39,14 @@ ALLOWED_ORIGINS = "https://scenevoice.app,https://www.scenevoice.app"
 DEVICES_PER_IP_PER_DAY = "20"
 # Seconds charged for a successful upstream answer without a token count.
 UNMETERED_RESPONSE_SECONDS = "120"
+# One output or thinking token is charged as this many prompt tokens (the
+# flash output/input price ratio): seconds = ceil((prompt + weight * output) / 100).
+OUTPUT_TOKEN_WEIGHT = "5"
+# Model calls one device may start per minute (the allowance is charged after
+# the answer, so a burst needs its own limit).
+REQUESTS_PER_MINUTE = "60"
+# Shared description scripts one device may upload per day.
+SCRIPT_PUTS_PER_DAY = "20"
 # Upstream addresses; change DASHSCOPE_API_BASE to the per-workspace address
 # (https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1) when
 # Alibaba Cloud retires the legacy one.
@@ -47,7 +60,7 @@ binding = "DEVICES"      # token -> { plan, created, licence }
 id = "REPLACE_WITH_DEVICES_ID"
 
 [[kv_namespaces]]
-binding = "USAGE"        # token:day -> seconds; hits:token -> cache hits; ip:hash:day -> registrations
+binding = "USAGE"        # token:day -> seconds; hits:token -> cache hits; ip:hash:day -> registrations; rpm:token:minute, puts:token:day -> counters
 id = "REPLACE_WITH_USAGE_ID"
 
 [[kv_namespaces]]

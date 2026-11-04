@@ -143,17 +143,25 @@ describe('the page carries the description language', () => {
     delete globalThis.chrome;
   });
 
-  it('marks every live region with it, so a screen reader can switch voice', async () => {
-    const { Announcer } = await import('../src/content/announcer.js');
-    const a = new Announcer(() => settings);
-    const regions = () => [...document.querySelectorAll('[data-scenevoice="live"]')];
-    expect(regions()).toHaveLength(4);
-    expect(regions().map((el) => el.getAttribute('lang'))).toEqual(['en', 'en', 'en', 'en']);
-    a.lang = 'ar';
-    expect(a.lang).toBe('ar');
-    expect(regions().map((el) => el.getAttribute('lang'))).toEqual(['ar', 'ar', 'ar', 'ar']);
-    a.lang = '';
-    expect(regions().map((el) => el.getAttribute('lang'))).toEqual(['en', 'en', 'en', 'en']);
+  it('marks each description written to a live region with it, and status text with the interface language', async () => {
+    vi.useFakeTimers();
+    try {
+      const { Announcer } = await import('../src/content/announcer.js');
+      const a = new Announcer(() => settings);
+      const filled = () => [...document.querySelectorAll('[data-scenevoice="live"]')].filter((el) => el.textContent);
+      a.lang = 'ar';
+      expect(a.lang).toBe('ar');
+      a.say('امرأة تدخل.');
+      vi.advanceTimersByTime(40);
+      expect(filled().map((el) => el.getAttribute('lang'))).toEqual(['ar']);
+      a.status('Descriptions loaded.');
+      vi.advanceTimersByTime(100);
+      expect(filled().map((el) => el.getAttribute('lang'))).toEqual(['en']);
+      a.lang = '';
+      expect(a.lang).toBe('en');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks the text overlay and the answer to a question, with direction by content', async () => {

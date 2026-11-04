@@ -318,9 +318,13 @@ async function startGeneration({ videoId, duration, meta, lang, force }, sender)
   if (script?.complete) return { status: 'ready' };
   // Through the relay, a video someone else already had described costs nothing and takes no time.
   if (provider === 'cloud' && !force && (await fetchSharedScript(config, { videoId, lang, duration }))) return { status: 'ready', fromCloud: true };
-  // The day's limit is checked when a job starts; a job already running finishes its video.
-  if (await overBudget()) return { error: 'budget' };
-  const reply = await offscreen({ cmd: 'start', key: jobKey(videoId, lang), provider, config, params: { videoId, duration, meta, lang }, script, force });
+  // The day's limit stops new jobs only: one already running finishes its video,
+  // and a tab asking after it must be told so, not refused while it goes on. The
+  // worker decides, as the only one that knows whether the job is still there.
+  const newJobsAllowed = !(await overBudget());
+  // Without an offscreen document no job is running, so there is nothing to open one for.
+  if (!newJobsAllowed && !(await chrome.offscreen.hasDocument())) return { error: 'budget' };
+  const reply = await offscreen({ cmd: 'start', key: jobKey(videoId, lang), provider, config, params: { videoId, duration, meta, lang }, script, force, newJobsAllowed });
   if (!reply || reply.error) return { error: reply?.error || 'offscreen-unavailable', detail: reply?.detail };
   return { status: 'generating', done: reply.done, total: reply.total, chunkStartedAt: reply.chunkStartedAt, chunkMs: reply.chunkMs, already: Boolean(reply.already) };
 }
@@ -491,8 +495,11 @@ async function onJobEvent(ev) {
     saved = await saveJobScript(videoId, lang, { ...ev.script, provider });
     // The event carries this section's own usage, counted on the row of whoever is paying for it.
     if (ev.usage) await countUsage(provider, ev.usage, { model: ev.model || ev.script?.model, seconds: ev.seconds });
-    if (event === 'done' && provider === 'cloud') shareScript(videoId, lang, { ...ev.script, provider }).catch(() => {});
+    // What is shared is the saved script: the descriptions this listener marked as wrong are already out of it (PRIVACY.md).
+    if (event === 'done' && provider === 'cloud') shareScript(videoId, lang, saved).catch(() => {});
   }
+  // A job that ended in an error, or was stopped, may still have been billed for a reply it could not use.
+  if ((event === 'error' || event === 'stopped') && ev.usage) await countUsage(provider, ev.usage, { model: ev.model });
   if (event === 'model') {
     console.info(`[SceneVoice] switched to ${ev.model} (${ev.reason})`);
     // A model this key cannot use any more is replaced for good; an overloaded one is only skipped this time.

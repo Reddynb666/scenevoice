@@ -11,12 +11,12 @@ const BASE = 'https://example.test/scenevoice/';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const scriptSource = readFileSync(new URL('./script.js', import.meta.url), 'utf8');
 
-/** A page with script.js running, short pauses, and an optional fake speechSynthesis. */
-function openPage(rel, { synth, stored } = {}) {
+/** A page with script.js running, short pauses (`gap` ms), and an optional fake speechSynthesis. */
+function openPage(rel, { synth, stored, gap = 30 } = {}) {
   const url = rel === 'index.html' ? BASE : `${BASE}zh-CN/`;
   const dom = loadPage(rel, { url });
   const { window } = dom;
-  window.document.getElementById('sample').setAttribute('data-gap', '30');
+  window.document.getElementById('sample').setAttribute('data-gap', String(gap));
   if (stored) window.localStorage.setItem('scenevoice-lang', stored);
   if (synth) {
     window.speechSynthesis = synth;
@@ -66,6 +66,16 @@ describe('site: accessibility', () => {
     expect(contrastIssues()).toEqual([]);
     expect(contrastIssues({ light: { bg: '#ffffff', text: '#777777', muted: '#111111', link: '#111111', visited: '#111111', 'button-text': '#ffffff', 'button-bg': '#111111', panel: '#ffffff', focus: '#111111', border: '#111111', 'focus-gap': '#ffffff' } }))
       .toEqual(['light: --text on --bg is 4.48:1, needs 7:1', 'light: --text on --panel is 4.48:1, needs 7:1']);
+  });
+
+  it('install steps describe the welcome page, which is what opens after install', () => {
+    // The extension opens welcome.html on install (focus on its heading); the settings
+    // page with the key field only opens once "My own key" is chosen there.
+    const install = (rel) => $(loadPage(rel), '#install').textContent;
+    expect(install('index.html')).toMatch(/welcome page then opens/);
+    expect(install('index.html')).not.toMatch(/settings page then opens|focus on the key field/);
+    expect(install('zh-CN/index.html')).toMatch(/会打开欢迎页/);
+    expect(install('zh-CN/index.html')).not.toMatch(/设置页会自动打开|焦点就在/);
   });
 
   it('works without JavaScript: the sample text is already on the page', () => {
@@ -127,6 +137,23 @@ describe('site: "Hear it" sample', () => {
     expect($(dom, '#sample').getAttribute('aria-live')).toBe('polite');
     expect($(dom, '#sample-status').textContent).toBe('示例播放完了。');
     expect(button.textContent).toBe('用浏览器的语音听');
+  });
+
+  it('built-in voice: waits a full gap (not a third) for the status and the renamed button to be read before speaking', async () => {
+    // Muting the live region does not stop what the screen reader is already saying,
+    // so the voice must not start until that has had the same time as in screen-reader mode.
+    const synth = fakeSynth();
+    const dom = openPage('index.html', { synth, gap: 600 });
+    const button = $(dom, '#hear-tts');
+    button.click();
+    expect(button.textContent).toBe('Stop the sample'); // a second press still stops
+    expect($(dom, '#sample-status').textContent).toBe("Playing three sample descriptions with the browser's voice.");
+    await wait(300); // half the gap: the old third-of-a-gap delay would have spoken by now
+    expect(synth.spoken).toEqual([]);
+    expect($(dom, '#sample').getAttribute('aria-live')).toBe('polite');
+    await wait(400); // 700 ms: the first line, and only the first, has been handed to the voice
+    expect(synth.spoken).toEqual(['Dialogue.']);
+    expect($(dom, '#sample').getAttribute('aria-live')).toBe('off');
   });
 
   it('built-in voice: stopping cancels speech; the other button cancels it too', async () => {

@@ -7,6 +7,10 @@ const MODELS = {
     { name: 'models/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash-Lite', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/gemini-3.5-flash-lite-preview', displayName: 'Gemini 3.5 Flash-Lite Preview', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/gemini-3.8-flash', displayName: 'Gemini 3.8 Flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.5-flash-preview-05-20', displayName: 'Gemini 2.5 Flash Preview', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.5-flash-image', displayName: 'Gemini 2.5 Flash Image', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.5-flash-preview-tts', displayName: 'Gemini 2.5 Flash TTS', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.5-flash-native-audio-preview-09-2025', displayName: 'Gemini 2.5 Flash Native Audio', supportedGenerationMethods: ['bidiGenerateContent'] },
     { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/gemini-3.8-pro-preview', displayName: 'Gemini 3.8 Pro', supportedGenerationMethods: ['generateContent'] },
     { name: 'models/embedding-001', displayName: 'Embedding', supportedGenerationMethods: ['embedContent'] },
@@ -24,7 +28,7 @@ describe('GET /v1beta/models', () => {
     const res = await call(env, { path: '/v1beta/models?pageSize=1000&pageToken=abc', headers: { 'x-goog-api-key': token }, fetch });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(names(body)).toEqual(['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite', 'models/gemini-3.5-flash-lite-preview', 'models/gemini-3.8-flash']);
+    expect(names(body)).toEqual(['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite', 'models/gemini-3.5-flash-lite-preview', 'models/gemini-3.8-flash', 'models/gemini-2.5-flash-preview-05-20']);
     expect(body.nextPageToken).toBe('page2');
     expect(res.headers.get('x-scenevoice-plan')).toBe('free');
     const [up] = fetch.calls;
@@ -51,7 +55,13 @@ describe('GET /v1beta/models', () => {
     expect(names(await (await call(env, { path: '/v1beta/models', headers: { 'x-goog-api-key': token }, fetch })).json())).toEqual(['models/gemini-2.5-flash-lite']);
     const broken = makeEnv({ FREE_MODELS: '(' });
     const token2 = await register(broken);
-    expect(names(await (await call(broken, { path: '/v1beta/models', headers: { 'x-goog-api-key': token2 }, fetch })).json())).toHaveLength(4);
+    expect(names(await (await call(broken, { path: '/v1beta/models', headers: { 'x-goog-api-key': token2 }, fetch })).json())).toHaveLength(5);
+    // Even a pattern that admits everything leaves the picture, speech and audio models out for free devices.
+    const loose = makeEnv({ FREE_MODELS: '^gemini-' });
+    const token3 = await register(loose);
+    const listed = names(await (await call(loose, { path: '/v1beta/models', headers: { 'x-goog-api-key': token3 }, fetch })).json());
+    expect(listed).toContain('models/gemini-2.5-pro');
+    expect(listed.filter((n) => /image|tts|audio/.test(n))).toEqual([]);
   });
 
   it('passes an upstream error through unchanged', async () => {

@@ -160,12 +160,12 @@
       <a class="button" href="https://github.com/reddynb666/scenevoice/releases" data-store="github">GitHub Releases</a>
       <a class="button" href="#" data-store="gitee" aria-disabled="true">Gitee, for mainland China (coming soon)</a>
     </div>
-    <p>From a GitHub release: download the zip, unzip it, open <code>chrome://extensions</code>, turn on Developer mode, choose "Load unpacked" and pick the unzipped folder. The settings page then opens with focus on the key field. The <a href="https://github.com/reddynb666/scenevoice#install">README</a> has the full steps, including how to get a free key.</p>
+    <p>From a GitHub release: download the zip, unzip it, open <code>chrome://extensions</code>, turn on Developer mode, choose "Load unpacked" and pick the unzipped folder. The welcome page then opens: hear a sample, then choose “My own key” and the settings page opens at the key field (SceneVoice Cloud will be offered there once it is live). The <a href="https://github.com/reddynb666/scenevoice#install">README</a> has the full steps, including how to get a free key.</p>
   </section>
 
   <section id="cost" aria-labelledby="cost-heading">
     <h2 id="cost-heading">Who it is for and what it costs</h2>
-    <p>For anyone who is blind or has low vision and watches YouTube or Bilibili; for the people who watch with them; and for schools, libraries and employers who need described video. The extension is free and open source (MIT licence), with no account and no server of its own.</p>
+    <p>For anyone who is blind or has low vision and watches YouTube or Bilibili; for the people who watch with them; and for schools, libraries and employers who need described video. The extension is free and open source (MIT licence), with no account and, with your own key, no server of its own; SceneVoice Cloud, when it opens, is an optional relay (see Privacy).</p>
     <dl class="plans">
       <dt>Your own key — free, always</dt>
       <dd>Bring a Gemini key (YouTube) or a Qwen key (Bilibili). Every feature, no limits from us, nothing leaves your computer except the request to the model. This is the whole product today.</dd>
@@ -182,10 +182,10 @@
   <section id="privacy" aria-labelledby="privacy-heading">
     <h2 id="privacy-heading">Privacy</h2>
     <ul>
-      <li><strong>No server, no account, no tracking.</strong> SceneVoice has no backend. Nothing you do is sent to the developer; there are no analytics, usage statistics, crash reports or identifiers. This website has none either, and sets no cookies.</li>
+      <li><strong>No account, no tracking.</strong> With your own key, SceneVoice has no backend and nothing you do is sent to the developer; there are no analytics, usage statistics, crash reports or identifiers. SceneVoice Cloud (optional, not open yet) will send requests through the project's relay at api.scenevoice.app with an anonymous device token; the privacy policy below says what the relay keeps and what it never keeps. This website has no analytics either, and sets no cookies.</li>
       <li><strong>The video is never recorded or uploaded.</strong> With Gemini on YouTube, the request carries the video's address, title and the time span to describe, so the model reads the public video itself. With Qwen, or on Bilibili, small pictures of the frame (at most 640 pixels wide) are sent instead, and kept only in the tab's memory for a minute or two.</li>
       <li><strong>Your key stays yours.</strong> It is kept in the browser's local extension storage, travels only in a request header, is never placed in a web address, and never enters the YouTube or Bilibili page.</li>
-      <li><strong>Only the model you chose sees a request.</strong> Requests go to Google's Gemini API or Alibaba Cloud's Model Studio, under their terms, and nowhere else. A Qwen key with the mainland China address keeps requests inside mainland China.</li>
+      <li><strong>Only the model you chose sees a request.</strong> With your own key, requests go to Google's Gemini API or Alibaba Cloud's Model Studio, under their terms, and nowhere else; with SceneVoice Cloud they go to the relay, which forwards them to the model without logging them. A Qwen key with the mainland China address keeps requests inside mainland China.</li>
       <li><strong>Everything is on your computer and you can delete it.</strong> Descriptions, corrections and settings are stored locally; the settings page shows what is kept and deletes it in one step.</li>
     </ul>
     <p>The full <a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md">privacy policy</a> lists every request and every permission, and why.</p>
@@ -204,7 +204,7 @@
     <h3>One sentence</h3>
     <p>Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.</p>
     <h3>Boilerplate</h3>
-    <p>SceneVoice is a free, open-source browser extension that adds AI audio description to YouTube and Bilibili videos for blind and low-vision viewers. Press one key on any video and, about half a minute later, short descriptions of what is on screen are read in the pauses between dialogue — through the viewer's own screen reader, or a built-in voice. Descriptions follow audio description guidelines: what is visible, on-screen text word for word, and "hard to see" when it is. Viewers can ask a question about any moment and correct a wrong description. SceneVoice has no server and no account; it runs in the browser with the viewer's own model key. Source code is on GitHub under the MIT licence.</p>
+    <p>SceneVoice is a free, open-source browser extension that adds AI audio description to YouTube and Bilibili videos for blind and low-vision viewers. Press one key on any video and, about half a minute later, short descriptions of what is on screen are read in the pauses between dialogue — through the viewer's own screen reader, or a built-in voice. Descriptions follow audio description guidelines: what is visible, on-screen text word for word, and "hard to see" when it is. Viewers can ask a question about any moment and correct a wrong description. SceneVoice has no account; with the viewer's own model key it runs in the browser with no server of its own (an optional SceneVoice Cloud relay is planned). Source code is on GitHub under the MIT licence.</p>
     <h3>Links</h3>
     <ul>
       <li><a href="https://github.com/reddynb666/scenevoice#readme">README, in English</a></li>

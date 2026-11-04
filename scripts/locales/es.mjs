@@ -63,7 +63,7 @@ export default {
   guide_gemini_6: 'Aparece una clave larga que empieza por “AIza”. Pulsa el botón “Copy”, copiar, que está a su lado.',
   guide_gemini_7:
     'Vuelve a los ajustes de SceneVoice, pega la clave en “Clave de API de Gemini” y pulsa “Guardar y probar”. Cuando funciona, oyes qué modelo se va a usar.',
-  guide_qwen_title: 'Clave de Qwen 通义千问, para Bilibili y desde China continental',
+  guide_qwen_title: 'Clave de Qwen, para Bilibili y desde China continental',
   guide_qwen_cost:
     'Las cuentas nuevas suelen recibir un saldo gratuito; la consola muestra cuánto queda. Después se cobra según el uso en tu cuenta de Alibaba Cloud. Es buena idea poner una alerta de presupuesto en el centro de facturación de Alibaba Cloud.',
   guide_qwen_1: 'Abre la consola de Alibaba Cloud Model Studio:',
@@ -76,7 +76,7 @@ export default {
   guide_qwen_7: 'Vuelve a los ajustes de SceneVoice, pega la clave en “Clave de API de Qwen” y pulsa “Guardar y probar”.',
   guide_privacy_title: 'Tu clave se queda contigo',
   guide_privacy:
-    'La clave se guarda solo en este equipo y se envía solo a la dirección del propio modelo. SceneVoice no tiene servidor y nunca la ve. No compartas la clave con nadie: quien la tenga puede gastar tu cuota.',
+    'La clave se guarda solo en este equipo y se envía solo a la dirección del propio modelo. Con tu propia clave, SceneVoice no tiene ningún servidor en ese camino y nunca la ve. No compartas la clave con nadie: quien la tenga puede gastar tu cuota.',
   opt_key_hint: 'Pega aquí tu clave de API de Gemini. Consigue una gratis en Google AI Studio, en el enlace de arriba; el nivel gratuito tiene un límite diario.',
   opt_qwen_key_hint:
     'Pega aquí tu clave de API de Qwen. Créala en la consola de Alibaba Cloud Model Studio, en el enlace de arriba; las cuentas nuevas suelen recibir un saldo gratuito.',
@@ -396,7 +396,7 @@ export default {
   set_provider_youtube: 'Videos de YouTube',
   set_provider_bilibili: 'Videos de Bilibili, experimental',
   provider_gemini: 'Gemini (Google)',
-  provider_qwen: 'Qwen 通义千问 (Alibaba Cloud Model Studio)',
+  provider_qwen: 'Qwen (Alibaba Cloud Model Studio)',
   opt_qwen_intro:
     'Qwen, también llamado 通义千问, es el modelo de Alibaba Cloud y funciona desde China continental. Usas tu propia clave de API de Alibaba Cloud Model Studio, en chino 阿里云百炼; lo que uses se cobra en tu cuenta de Alibaba Cloud.',
   opt_qwen_step1: 'Abre la consola de Alibaba Cloud Model Studio e inicia sesión:',
@@ -457,14 +457,17 @@ export default {
   opt_cache_clear: 'Eliminar todas las descripciones guardadas',
   opt_cache_info: '$1 videos descritos y guardados en este equipo, $2 KB.',
   opt_cache_confirm: '¿Eliminar todas las descripciones guardadas? Los videos tendrán que describirse otra vez.',
-  privacy_1: 'SceneVoice no tiene servidor ni cuenta. No recopila estadísticas de uso.',
+  privacy_1:
+    'Con tu propia clave, SceneVoice no tiene servidor ni cuenta, y nada se envía al desarrollador. Nunca recopila estadísticas de uso. SceneVoice Cloud, si lo activas, es un relé opcional gestionado por el proyecto; el punto siguiente dice qué recibe.',
+  privacy_6:
+    'SceneVoice Cloud está desactivado hasta que pulsas «Empezar gratis». Con él activado, las solicitudes van a api.scenevoice.app con un token de dispositivo anónimo en lugar de una clave, y el relé las pasa a Gemini. Por cada token guarda solo cuántos segundos de video se describieron hoy, el plan y la clave de licencia si la hay, además del texto final de las descripciones de un video cuando el uso compartido está activado. Nunca guarda imágenes, tus preguntas, las respuestas ni tu dirección IP, y no registra las solicitudes. «Dejar de usar Cloud» elimina el token.',
   privacy_2:
     'Para crear descripciones o responder a una pregunta, se envían a la API de Gemini, con tu clave, la dirección, el título, el canal y la descripción del video de YouTube, tu pregunta y las descripciones recientes. Para describir un momento otra vez, también se envía la descripción que marcaste como errónea. Se aplican las condiciones de Google para la API de Gemini.',
   privacy_5:
     'Con Qwen, y en Bilibili, el modelo no puede abrir el video por su dirección: en su lugar, cada pocos segundos se envía una imagen reducida del video en reproducción, con el título, el autor y la descripción. A Qwen se le aplican las condiciones de Alibaba Cloud Model Studio. Las imágenes se mantienen en memoria uno o dos minutos y nunca se guardan.',
   privacy_3: 'Las descripciones se guardan en este equipo para que cada video se describa solo una vez.',
   privacy_4:
-    'Las descripciones que marcas como erróneas se registran solo en este equipo, para conservar las versiones corregidas. No hay servidor de comentarios: no se envía nada al desarrollador. El registro se elimina junto con las descripciones guardadas.',
+    'Las descripciones que marcas como erróneas se registran solo en este equipo, para conservar las versiones corregidas. Nunca se envían al desarrollador y se quitan antes de compartir las descripciones de un video. El registro se elimina junto con las descripciones guardadas.',
   opt_reset_title: '6. Restaurar los valores predeterminados',
   opt_reset_intro:
     'Vuelve a dejar todos los ajustes de descripciones, voz y sonido como estaban al instalar SceneVoice. Tu clave de API, el modelo y las descripciones guardadas se conservan. Los atajos de teclado también; cámbialos en la página de atajos de Chrome.',
@@ -507,7 +510,7 @@ export default {
   welcome_sample_done: 'Ese fue el ejemplo. Siguiente: elegir cómo se crean las descripciones.',
   welcome_step2_title: '2. Elige cómo se crean las descripciones',
   welcome_source_legend: 'Las descripciones las crea',
-  welcome_source_cloud: 'SceneVoice Cloud: cuota gratuita, nada que configurar (recomendado)',
+  welcome_source_cloud: 'SceneVoice Cloud: cuota gratuita, nada que configurar',
   welcome_source_cloud_hint: '60 minutos de video nuevo descrito al día; los videos que otras personas de SceneVoice ya describieron no cuentan. Las solicitudes pasan por el relé de SceneVoice con un identificador de dispositivo anónimo, sin cuenta.',
   welcome_source_own: 'Mi propia clave (Gemini o Qwen): sin límite, privada',
   welcome_source_own_hint: 'Obtienes una clave gratuita en Google AI Studio o en Alibaba Cloud Model Studio y la pegas. Nada pasa por SceneVoice.',

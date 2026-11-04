@@ -144,7 +144,9 @@
     region.textContent = '';
     setStatus(data.status.tts);
     var lines = sequence();
-    // Let the status sentence be read by a screen reader before the voice starts.
+    // A screen reader now has the renamed, pressed button and the status sentence to
+    // read. Muting the region does not cut it off, so give it the same time the
+    // status gets in screen-reader mode (a full gap) before the voice starts.
     later(function () {
       if (playing !== 'tts') return;
       region.setAttribute('aria-live', 'off');
@@ -184,7 +186,7 @@
           setStatus(data.status.unavailable);
         }
       }, 4000);
-    }, shortGap);
+    }, gap);
   }
 
   srButton.addEventListener('click', function () {

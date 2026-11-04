@@ -2,13 +2,15 @@
 // Storage keeps values in memory and reports changes like Chrome does
 // (asynchronously, to every onChanged listener); i18n reads scripts/locales.mjs.
 
-import { STRINGS } from '../scripts/locales.mjs';
+import { LOCALES, STRINGS } from '../scripts/locales.mjs';
+import { RTL_LANGUAGES } from '../src/shared/constants.js';
 
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
 /**
  * @param {object} opts
- * @param {'en'|'zh_CN'} [opts.locale]  interface language for chrome.i18n.getMessage
+ * @param {string} [opts.locale]  interface language for chrome.i18n.getMessage, as a _locales folder ('en', 'zh_CN');
+ *   one with no strings of its own ('it') gets English, as in Chrome
  * @param {string} [opts.uiLanguage]    chrome.i18n.getUILanguage()
  * @param {object} [opts.sync]          initial chrome.storage.sync contents
  * @param {object} [opts.local]         initial chrome.storage.local contents
@@ -20,6 +22,7 @@ const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)
 export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, local = {}, reply = () => ({}), commands = [], tabReply = null } = {}) {
   const areas = { sync: clone(sync), local: clone(local) };
   const listeners = new Set();
+  const messageListeners = new Set();
   const sent = [];
   const failures = { sync: 0 };
 
@@ -70,6 +73,10 @@ export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, loc
       getMessage(key, subs = []) {
         if (key === '@@ui_locale') return locale;
         if (key === '@@bidi_dir') return 'ltr';
+        // Written into each folder's messages.json by build.mjs: the language of the strings that folder holds.
+        const folder = LOCALES.includes(locale) ? locale : 'en';
+        if (key === 'ui_lang') return folder.replace('_', '-');
+        if (key === 'ui_dir') return RTL_LANGUAGES.includes(folder) ? 'rtl' : 'ltr';
         const entry = STRINGS[key];
         const text = entry?.[locale] ?? entry?.en;
         if (!text) return '';
@@ -91,7 +98,7 @@ export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, loc
       getManifest: () => ({ version: '1.0.0' }),
       getURL: (path) => `chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef/${path}`,
       async openOptionsPage() {},
-      onMessage: { addListener() {} },
+      onMessage: { addListener: (fn) => messageListeners.add(fn), removeListener: (fn) => messageListeners.delete(fn) },
     },
     tabs: {
       async query() {
@@ -119,6 +126,10 @@ export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, loc
     chrome,
     areas,
     sent,
+    /** Deliver a message to the page's chrome.runtime.onMessage listeners, from the service worker unless another sender is given. */
+    deliver(msg, sender = { id: chrome.runtime.id, origin: `chrome-extension://${chrome.runtime.id}` }) {
+      for (const fn of messageListeners) fn(msg, sender, () => {});
+    },
     /** Make the next n writes to chrome.storage.sync fail, as when the write quota is used up. */
     failSyncWrites(n = 1) {
       failures.sync = n;

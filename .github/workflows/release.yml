@@ -3,9 +3,11 @@ name: Release
 # Runs when a version tag is pushed (scripts/release.mjs makes the commit and
 # the tag; the owner pushes). Tests, builds, checks that the tag, package.json,
 # the built manifest and CHANGELOG.md all name the same version, then publishes
-# a GitHub Release with the package, its source maps and SHA256SUMS. When the
-# store secrets exist, it also uploads a draft to the Chrome Web Store and to
-# Edge Add-ons; nothing is published in a store without a click there.
+# a GitHub Release with the package, its source maps and SHA256SUMS. When a
+# store's secrets all exist, it also uploads a draft to the Chrome Web Store
+# and to Edge Add-ons; nothing is published in a store without a click there.
+# The store secrets reach only the steps that upload (and the step that checks
+# they are set), never npm ci, pip, the e2e suite or a third-party action.
 # How to set the secrets: docs/release.md.
 
 on:
@@ -25,15 +27,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write # to create the GitHub Release
-    env:
-      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
-      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
-      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
-      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
-      CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
-      EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
-      EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
-      EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+    # No job-level env: the store secrets are step-scoped, see the last three steps.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -43,6 +37,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - name: Build, with bundle sizes
+        # build:meta exits 1 when content.js is over 120 KB; `shell: bash` gives `-o pipefail`, so that exit status survives the pipe into tee.
+        shell: bash
         run: |
           npm run build:meta | tee build.log
           { echo "### Bundle sizes (minified)"; echo; grep '^|' build.log; } >> "$GITHUB_STEP_SUMMARY"
@@ -111,17 +107,50 @@ jobs:
             scenevoice-${{ steps.version.outputs.version }}-sourcemaps.zip
             SHA256SUMS
 
-      - name: Chrome Web Store (upload as draft)
-        # Only when every secret is set. `upload` leaves the new version as a draft; publishing is a click in the developer dashboard.
-        if: env.CWS_EXTENSION_ID != '' && env.CWS_CLIENT_ID != '' && env.CWS_CLIENT_SECRET != '' && env.CWS_REFRESH_TOKEN != ''
+      # `secrets` cannot be read in an `if:`, so this step (the first one that sees
+      # the store secrets) says which store has every secret it needs. It runs only
+      # when everything before it, the GitHub Release included, succeeded.
+      - name: Which store credentials exist
+        id: stores
         env:
-          EXTENSION_ID: ${{ env.CWS_EXTENSION_ID }}
-          CLIENT_ID: ${{ env.CWS_CLIENT_ID }}
-          CLIENT_SECRET: ${{ env.CWS_CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ env.CWS_REFRESH_TOKEN }}
-          PUBLISHER_ID: ${{ env.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          # The publisher id is required too: chrome-webstore-upload-cli 4.x speaks the v2 API, publishers/{publisherId}/items/{id}.
+          if [ -n "$CWS_EXTENSION_ID" ] && [ -n "$CWS_CLIENT_ID" ] && [ -n "$CWS_CLIENT_SECRET" ] && [ -n "$CWS_REFRESH_TOKEN" ] && [ -n "$CWS_PUBLISHER_ID" ]; then
+            echo "cws=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Chrome Web Store: not all of CWS_EXTENSION_ID, CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN, CWS_PUBLISHER_ID are set; the upload is skipped."
+          fi
+          if [ -n "$EDGE_PRODUCT_ID" ] && [ -n "$EDGE_CLIENT_ID" ] && [ -n "$EDGE_API_KEY" ]; then
+            echo "edge=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Edge Add-ons: not all of EDGE_PRODUCT_ID, EDGE_CLIENT_ID, EDGE_API_KEY are set; the upload is skipped."
+          fi
+
+      - name: Chrome Web Store (upload as draft)
+        # `upload` leaves the new version as a draft; publishing is a click in the developer dashboard.
+        if: steps.stores.outputs.cws == 'true'
+        env:
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
         run: npx --yes chrome-webstore-upload-cli@4.0.2 upload --source "scenevoice-${{ steps.version.outputs.version }}.zip"
 
       - name: Edge Add-ons (upload to the draft submission)
-        if: env.EDGE_PRODUCT_ID != '' && env.EDGE_CLIENT_ID != '' && env.EDGE_API_KEY != ''
+        # `!cancelled()` so a failed Chrome Web Store upload does not skip this one; the stores check above only
+        # ran (and its output is only set) when the tests, the build, the checks and the GitHub Release all succeeded.
+        if: ${{ !cancelled() && steps.stores.outputs.edge == 'true' }}
+        env:
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
         run: node scripts/edge-upload.mjs "scenevoice-${{ steps.version.outputs.version }}.zip"

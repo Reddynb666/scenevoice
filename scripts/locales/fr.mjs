@@ -77,7 +77,7 @@ export default {
   guide_qwen_7: 'Revenez aux réglages de SceneVoice, collez la clé dans « Clé API Qwen » et appuyez sur « Enregistrer et tester ».',
   guide_privacy_title: 'Votre clé reste chez vous',
   guide_privacy:
-    'La clé est enregistrée seulement sur cet ordinateur et envoyée seulement à l’adresse du modèle lui-même. SceneVoice n’a pas de serveur et ne la voit jamais. Ne partagez pas la clé : quiconque la possède peut utiliser votre quota.',
+    'La clé est enregistrée seulement sur cet ordinateur et envoyée seulement à l’adresse du modèle lui-même. Avec votre propre clé, SceneVoice n’a aucun serveur sur ce chemin et ne la voit jamais. Ne partagez pas la clé : quiconque la possède peut utiliser votre quota.',
   opt_key_hint: 'Collez ici votre clé API Gemini. Obtenez-en une gratuitement sur Google AI Studio, lien ci-dessus ; l’offre gratuite a une limite quotidienne.',
   opt_qwen_key_hint:
     'Collez ici votre clé API Qwen. Créez-en une dans la console Alibaba Cloud Model Studio, lien ci-dessus ; les nouveaux comptes reçoivent en général un crédit gratuit.',
@@ -458,14 +458,17 @@ export default {
   opt_cache_clear: 'Supprimer toutes les descriptions enregistrées',
   opt_cache_info: '$1 vidéos décrites et enregistrées sur cet ordinateur, $2 Ko.',
   opt_cache_confirm: 'Supprimer toutes les descriptions enregistrées ? Les vidéos devront être décrites à nouveau.',
-  privacy_1: 'SceneVoice n’a ni serveur ni compte. Il ne collecte aucune statistique d’utilisation.',
+  privacy_1:
+    'Avec votre propre clé, SceneVoice n’a ni serveur ni compte, et rien n’est envoyé au développeur. Il ne collecte jamais de statistiques d’utilisation. SceneVoice Cloud, si vous l’activez, est un relais facultatif tenu par le projet ; le point suivant dit ce qu’il reçoit.',
+  privacy_6:
+    'SceneVoice Cloud est désactivé tant que vous n’appuyez pas sur « Commencer gratuitement ». Une fois activé, les requêtes vont à api.scenevoice.app avec un jeton d’appareil anonyme à la place d’une clé, et le relais les transmet à Gemini. Par jeton, il ne garde que le nombre de secondes de vidéo décrites aujourd’hui, l’offre et l’éventuelle clé de licence, plus le texte final des descriptions d’une vidéo quand le partage est activé. Il ne garde jamais les images, vos questions, les réponses ni votre adresse IP, et ne journalise pas les requêtes. « Ne plus utiliser Cloud » supprime le jeton.',
   privacy_2:
     'Pour créer les descriptions ou répondre à une question, l’adresse, le titre, la chaîne et la description de la vidéo YouTube, votre question et les descriptions récentes sont envoyés à l’API Gemini avec votre clé. Pour décrire un moment à nouveau, la description que vous avez signalée comme fausse est envoyée aussi. Les conditions de Google pour l’API Gemini s’appliquent.',
   privacy_5:
     'Avec Qwen, et sur Bilibili, le modèle ne peut pas ouvrir la vidéo par son adresse : toutes les quelques secondes, une image réduite de la vidéo en cours est envoyée à la place, avec le titre, l’auteur et la description. Les conditions d’Alibaba Cloud Model Studio s’appliquent à Qwen. Les images restent en mémoire une minute ou deux et ne sont jamais enregistrées.',
   privacy_3: 'Les descriptions sont enregistrées sur cet ordinateur, une vidéo n’est donc décrite qu’une fois.',
   privacy_4:
-    'Les descriptions que vous signalez comme fausses sont notées seulement sur cet ordinateur, pour garder les versions corrigées. Il n’y a pas de serveur de retours : rien n’est envoyé au développeur. Ces notes sont supprimées avec les descriptions enregistrées.',
+    'Les descriptions que vous signalez comme fausses sont notées seulement sur cet ordinateur, pour garder les versions corrigées. Elles ne sont jamais envoyées au développeur et sont retirées avant le partage des descriptions d’une vidéo. Ces notes sont supprimées avec les descriptions enregistrées.',
   opt_reset_title: '6. Rétablir les réglages par défaut',
   opt_reset_intro:
     'Remet tous les réglages de description, de voix et de son comme à l’installation de SceneVoice. Votre clé API, votre modèle et les descriptions enregistrées restent. Les raccourcis clavier restent aussi ; modifiez-les sur la page des raccourcis de Chrome.',
@@ -508,7 +511,7 @@ export default {
   welcome_sample_done: 'C’était l’exemple. Ensuite : choisir comment les descriptions sont créées.',
   welcome_step2_title: '2. Choisissez comment les descriptions sont créées',
   welcome_source_legend: 'Les descriptions sont créées par',
-  welcome_source_cloud: 'SceneVoice Cloud : quota gratuit, rien à configurer (recommandé)',
+  welcome_source_cloud: 'SceneVoice Cloud : quota gratuit, rien à configurer',
   welcome_source_cloud_hint: '60 minutes de vidéo nouvellement décrite par jour ; les vidéos déjà décrites par d’autres utilisateurs de SceneVoice ne comptent pas. Les demandes passent par le relais SceneVoice avec un identifiant d’appareil anonyme, sans compte.',
   welcome_source_own: 'Ma propre clé (Gemini ou Qwen) : illimité, privé',
   welcome_source_own_hint: 'Vous obtenez une clé gratuite auprès de Google AI Studio ou d’Alibaba Cloud Model Studio et vous la collez. Rien ne passe par SceneVoice.',

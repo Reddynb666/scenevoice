@@ -332,11 +332,12 @@
       </label>
       <p id="dailyBudgetHint" class="small muted" data-i18n="set_daily_budget_hint">How much video SceneVoice may describe per day, every model together, counted on this computer. When it is reached, no new descriptions start until tomorrow; questions still work.</p>
       <ul class="small">
-        <li data-i18n="privacy_1">SceneVoice has no server and no account. It does not collect analytics.</li>
+        <li data-i18n="privacy_1">With your own key, SceneVoice has no server and no account, and nothing is sent to the developer. It never collects analytics. SceneVoice Cloud, if you turn it on, is an optional relay run by the project; the next point says what it receives.</li>
+        <li data-i18n="privacy_6">SceneVoice Cloud is off until you press “Start free”. With it on, requests go to api.scenevoice.app with an anonymous device token instead of a key, and the relay passes them to Gemini. Per token it keeps only how many seconds of video were described today, the plan and any licence key, plus the finished text of a video’s descriptions when sharing is on. It never keeps pictures, your questions, the answers or your IP address, and does not log requests. “Stop using Cloud” removes the token.</li>
         <li data-i18n="privacy_2">To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google's terms for the Gemini API apply.</li>
         <li data-i18n="privacy_3">Descriptions are saved on this computer so a video is described only once.</li>
         <li data-i18n="privacy_5">With Qwen, or on Bilibili, pictures taken from the playing video are sent instead of its address.</li>
-        <li data-i18n="privacy_4">The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. There is no feedback server: nothing is sent to the developer. The record is deleted with the saved descriptions.</li>
+        <li data-i18n="privacy_4">The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer, and are stripped before a video’s descriptions are shared. The record is deleted with the saved descriptions.</li>
       </ul>
     </section>
 

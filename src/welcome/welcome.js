@@ -8,7 +8,8 @@ import { MSG, SAMPLE_DESCRIPTIONS } from '../shared/constants.js';
 import { allowanceMinutes, registerDevice } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
 import { bindSettings } from '../shared/form.js';
-import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
+import { cloudRegisterMessage, interfaceLocale, localizeDocument, t } from '../shared/i18n.js';
+import { classifySender } from '../shared/sender.js';
 import { voiceTestMessage } from '../shared/settings.js';
 import { getLocal, getSettings, setLocal, setSettings } from '../shared/storage.js';
 
@@ -16,12 +17,12 @@ const $ = (id) => document.getElementById(id);
 const chinese = () => chrome.i18n.getUILanguage().startsWith('zh');
 
 /**
- * The sample is in the interface language (the locale the strings come in,
- * "zh_CN" or "pt_BR"), as a description language with a sample table; English
- * when that language has none.
+ * The sample is in the interface language (the locale the strings on this
+ * page come in, "zh-CN" or "pt-BR", not the browser's locale), as a
+ * description language with a sample table; English when that language has none.
  */
 function sampleLang() {
-  const ui = t('@@ui_locale').replace('_', '-');
+  const ui = interfaceLocale();
   const candidates = [ui, { 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW', zh: 'zh-CN' }[ui] || '', ui.split('-')[0]];
   return candidates.find((code) => code && SAMPLE_DESCRIPTIONS[code]) || 'en';
 }
@@ -30,23 +31,50 @@ function sampleLang() {
 const SAMPLE_GAP_MS = 4000;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let sampleRun = 0;
+/** The id of the built-in-voice sample now speaking (its TTS events carry it), or '' when none is. */
+let speakingId = '';
+
+/**
+ * End whatever sample is going: the live-region loop stops at its next
+ * sentence, and a built-in voice still reading is silenced. The stop is sent
+ * only while that voice is ours: chrome.tts.stop() is global, and this page
+ * must not cut off a description being read for a video in another tab.
+ */
+function stopSample() {
+  sampleRun += 1;
+  if (!speakingId) return;
+  speakingId = '';
+  $('sample').textContent = t('welcome_sample_button');
+  chrome.runtime.sendMessage({ type: MSG.STOP_SPEAKING }).catch(() => {});
+}
 
 /**
  * Three descriptions, with a sentence between the first two about how they
  * fit the pauses. Through the screen reader they go into the live region one
  * by one, as they would during a video; through the built-in voice they are
- * spoken as one piece and the live region is kept quiet.
+ * spoken as one piece and the live region is kept quiet, and the button stops
+ * the voice until it has finished. Either way the sample before is ended first,
+ * so the screen reader and the built-in voice never speak at once.
  */
 async function playSample() {
-  const run = (sampleRun += 1);
+  if (speakingId) {
+    stopSample();
+    return;
+  }
+  stopSample();
+  const run = sampleRun;
   const lines = SAMPLE_DESCRIPTIONS[sampleLang()];
   const texts = [lines[0], t('welcome_sample_between'), lines[1], lines[2], t('welcome_sample_done')];
   const settings = await getSettings();
+  if (run !== sampleRun) return;
   const out = $('sampleOut');
   if (settings.output === 'tts') {
     out.setAttribute('aria-live', 'off');
     out.textContent = texts.join(' ');
-    chrome.runtime.sendMessage({ ...voiceTestMessage(settings, sampleLang()), text: texts.join(' '), id: 'welcome-sample' }).catch(() => {});
+    // A new id per utterance: the events of one just stopped must not end this one.
+    speakingId = `welcome-sample:${run}`;
+    $('sample').textContent = t('welcome_sample_stop');
+    chrome.runtime.sendMessage({ ...voiceTestMessage(settings, sampleLang()), text: texts.join(' '), id: speakingId }).catch(() => {});
     return;
   }
   out.setAttribute('aria-live', 'polite');
@@ -54,6 +82,26 @@ async function playSample() {
     if (run !== sampleRun) return;
     out.textContent = text;
     if (i < texts.length - 1) await wait(SAMPLE_GAP_MS);
+  }
+}
+
+/**
+ * The built-in voice has finished, was stopped, or could not speak at all (no
+ * voice for the language, no speech engine, as on many Linux installs). The
+ * live region is live again either way; a failure is said through it, on the
+ * next turn, since a region switched on and written in the same tick can be
+ * missed, and points at the screen-reader choice.
+ */
+function onSampleEvent(id, event) {
+  if (!id || id !== speakingId) return;
+  speakingId = '';
+  $('sample').textContent = t('welcome_sample_button');
+  const out = $('sampleOut');
+  out.setAttribute('aria-live', 'polite');
+  if (event === 'error') {
+    setTimeout(() => {
+      out.textContent = t('welcome_sample_voice_failed');
+    }, 0);
   }
 }
 
@@ -87,7 +135,7 @@ async function startFree() {
   } catch (err) {
     button.disabled = false;
     const code = err instanceof ApiError ? err.code : 'unknown';
-    status.textContent = `${errorMessage(code, 'cloud')} ${t('welcome_cloud_failed_next')}`;
+    status.textContent = `${cloudRegisterMessage(code, err?.resetAt)} ${t('welcome_cloud_failed_next')}`;
   }
 }
 
@@ -105,6 +153,14 @@ async function init() {
   await bindSettings(document);
 
   $('sample').addEventListener('click', playSample);
+  // A sample must not go on through the other output, or into the next page.
+  for (const radio of document.querySelectorAll('input[name=output]')) radio.addEventListener('change', stopSample);
+  window.addEventListener('pagehide', stopSample);
+  // The service worker reports how the built-in voice's sample ended.
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (msg?.type !== MSG.TTS_EVENT || classifySender(sender, chrome.runtime.id) !== 'service-worker') return;
+    onSampleEvent(msg.id, msg.event);
+  });
 
   for (const radio of document.querySelectorAll('input[name=source]')) radio.addEventListener('change', showSource);
   showSource();

@@ -8,9 +8,11 @@
 // and the relay's own /v1/*, OpenAI's on /compatible-mode/*) because the
 // extension's classifiers read them.
 //
-// What the relay never does: parse or log a request body (frames go through
+// What the relay never does: log or store a request body (frames go through
 // untouched), store pictures or questions, or put the upstream key anywhere
-// but the request header to the upstream.
+// but the request header to the upstream. The one look inside a model request
+// is the top-level `model` of a free device's DashScope call, because that API
+// names the model in the body; nothing read there is kept.
 
 import * as store from './store.js';
 import {
@@ -33,10 +35,20 @@ export const PROTOCOL_VERSION = 1;
 
 const DEFAULT_GEMINI_API_BASE = 'https://generativelanguage.googleapis.com';
 const DEFAULT_DASHSCOPE_API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-/** Model names a free device may use: the flash and flash-lite families. */
-export const DEFAULT_FREE_MODELS = '^gemini-\\d(\\.\\d)?-flash(-lite)?';
+/**
+ * Model names a free device may use: the flash and flash-lite text/vision
+ * families, with a dated preview or a numbered snapshot. Anchored at both ends
+ * so gemini-2.5-flash-image, -preview-tts, -live and -native-audio stay out.
+ */
+export const DEFAULT_FREE_MODELS = '^gemini-\\d(\\.\\d)?-flash(-lite)?(-preview(-\\d{2}-\\d{2,4})?|-\\d{3})?$';
+/** Whatever FREE_MODELS says, a free device never gets a model that makes pictures or sound. */
+const NEVER_FREE = /(image|tts|audio|live|native|embedding)/i;
+/** DashScope model names a free device may use: the Qwen vision-language plus and flash lines. */
+export const DEFAULT_QWEN_FREE_MODELS = '^qwen\\d(\\.\\d)?-vl-(plus|flash)$';
 /** About this many prompt tokens per second of video at low resolution; pictures and text are charged the same way. */
 const TOKENS_PER_SECOND = 100;
+/** One output or thinking token costs about this many input tokens (the flash output/input price ratio). */
+const DEFAULT_OUTPUT_TOKEN_WEIGHT = 5;
 /** Request bodies carry base64 frames: 6 pictures at 640 px are well under this. */
 const MAX_BODY_BYTES = 20 * 1024 * 1024;
 const MAX_SCRIPT_BYTES = 512 * 1024;
@@ -53,15 +65,18 @@ function positiveInt(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** A regular expression from a var, or the default when the var is missing or does not compile. */
+function patternFrom(value, fallback) {
+  try {
+    return new RegExp(value || fallback);
+  } catch {
+    return new RegExp(fallback);
+  }
+}
+
 /** Settings from wrangler vars, with the defaults the README documents. */
 export function readConfig(env) {
   const plus = positiveInt(env.PLUS_SECONDS_PER_DAY, 21600);
-  let freeModels;
-  try {
-    freeModels = new RegExp(env.FREE_MODELS || DEFAULT_FREE_MODELS);
-  } catch {
-    freeModels = new RegExp(DEFAULT_FREE_MODELS);
-  }
   return {
     geminiBase: String(env.GEMINI_API_BASE || DEFAULT_GEMINI_API_BASE).replace(/\/+$/, ''),
     dashscopeBase: String(env.DASHSCOPE_API_BASE || DEFAULT_DASHSCOPE_API_BASE).replace(/\/+$/, ''),
@@ -70,12 +85,19 @@ export function readConfig(env) {
       plus,
       org: positiveInt(env.ORG_SECONDS_PER_DAY, plus),
     },
-    freeModels,
+    freeModels: patternFrom(env.FREE_MODELS, DEFAULT_FREE_MODELS),
+    qwenFreeModels: patternFrom(env.QWEN_FREE_MODELS, DEFAULT_QWEN_FREE_MODELS),
     allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS),
     devicesPerIpPerDay: positiveInt(env.DEVICES_PER_IP_PER_DAY, 20),
     // Charged when an upstream answer carries no token count (it should always
     // carry one), so a response the relay cannot meter is never free.
     unmeteredSeconds: positiveInt(env.UNMETERED_RESPONSE_SECONDS, 120),
+    outputTokenWeight: positiveInt(env.OUTPUT_TOKEN_WEIGHT, DEFAULT_OUTPUT_TOKEN_WEIGHT),
+    // Model calls one token may start per minute: the allowance is charged after
+    // the answer, so without this a burst of requests would all pass the check.
+    requestsPerMinute: positiveInt(env.REQUESTS_PER_MINUTE, 60),
+    // Shared scripts one token may upload per UTC day.
+    scriptPutsPerDay: positiveInt(env.SCRIPT_PUTS_PER_DAY, 20),
   };
 }
 
@@ -217,8 +239,28 @@ async function authenticate(c) {
     return fail(c, 401, 'Unknown SceneVoice device token. Register again with POST /v1/devices.', { reason: 'SCENEVOICE_DEVICE_UNKNOWN' });
   }
   c.token = token;
-  c.device = device;
+  c.device = await followLicence(c, device);
   return null;
+}
+
+/**
+ * The plan comes from the licence record, not from the copy on the device: a
+ * licence the owner deleted (refund, cancelled subscription) or edited takes
+ * effect on the device's next request. One extra KV read, for licensed devices only.
+ */
+async function followLicence(c, device) {
+  if (typeof device.licence !== 'string' || !device.licence) return device;
+  const licence = await store.getLicence(c.env, device.licence);
+  if (!licence) {
+    const downgraded = { ...device, plan: 'free', licence: null, revoked: new Date(c.now).toISOString() };
+    await store.putDevice(c.env, c.token, downgraded);
+    return downgraded;
+  }
+  const plan = PLANS.includes(licence.plan) ? licence.plan : 'plus';
+  if (plan === device.plan) return device;
+  const changed = { ...device, plan };
+  await store.putDevice(c.env, c.token, changed);
+  return changed;
 }
 
 async function allowanceOf(c) {
@@ -254,10 +296,52 @@ function allowanceExhausted(c, a) {
   );
 }
 
-/** Seconds to charge for an upstream answer, from its prompt token count. */
-function secondsFor(promptTokens, cfg) {
-  if (Number.isFinite(promptTokens) && promptTokens >= 0) return Math.ceil(promptTokens / TOKENS_PER_SECOND);
-  return cfg.unmeteredSeconds;
+/**
+ * Seconds to charge for an upstream answer, from its token counts: the prompt
+ * tokens, plus the output and thinking tokens weighted by their price. An
+ * answer without a prompt count is charged the flat unmetered amount.
+ */
+export function secondsFor({ input, output } = {}, cfg) {
+  if (!Number.isFinite(input) || input < 0) return cfg.unmeteredSeconds;
+  const out = Number.isFinite(output) && output > 0 ? output : 0;
+  return Math.ceil((input + cfg.outputTokenWeight * out) / TOKENS_PER_SECOND);
+}
+
+const tokenCount = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
+
+/** Token counts of a Gemini answer: output includes the thinking tokens, which Google bills as output. */
+function geminiUsage(json) {
+  const u = json?.usageMetadata;
+  if (!u || !Number.isFinite(u.promptTokenCount)) return {};
+  return { input: u.promptTokenCount, output: tokenCount(u.candidatesTokenCount) + tokenCount(u.thoughtsTokenCount) };
+}
+
+/** Token counts of an OpenAI-style answer: DashScope already counts reasoning inside completion_tokens. */
+function openaiUsage(json) {
+  const u = json?.usage;
+  if (!u || !Number.isFinite(u.prompt_tokens)) return {};
+  return { input: u.prompt_tokens, output: tokenCount(u.completion_tokens) };
+}
+
+/** The per-minute 429, with the wait the extension's retry already understands. */
+function rateLimited(c, a) {
+  const message = 'Too many SceneVoice requests this minute. Wait a moment and try again.';
+  const headers = { ...allowanceHeaders(a), 'retry-after': '60' };
+  if (c.style === 'openai') {
+    return jsonResponse({ error: { message, type: 'scenevoice_rate_limit', code: '429' } }, 429, headers);
+  }
+  return jsonResponse(
+    {
+      error: {
+        code: 429,
+        status: 'RESOURCE_EXHAUSTED',
+        message,
+        details: [{ reason: 'SCENEVOICE_RATE_LIMIT' }, { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '60s' }],
+      },
+    },
+    429,
+    headers,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,24 +418,39 @@ function tryJson(text) {
 }
 
 /**
- * The shared part of the two model routes: check the allowance, forward the
- * bytes, charge for the prompt tokens the upstream reports, pass the answer
- * back unchanged. `promptTokens(json)` knows where each API puts the count.
+ * The allowance and per-minute checks every model call goes through first, or
+ * null when the call may proceed. The minute is counted before the body is read.
  */
-async function proxyModelCall(c, { url, headers, promptTokens, allowance }) {
-  const a = allowance;
+async function admitModelCall(c, a) {
   if (a.usedToday >= a.secondsPerDay) return allowanceExhausted(c, a);
-  const body = await readRawBody(c);
-  if (body.error) return body.error;
+  const minute = Math.floor(c.now / 60_000);
+  const calls = await store.countRequest(c.env, c.token, minute);
+  if (calls > c.cfg.requestsPerMinute) return rateLimited(c, a);
+  return null;
+}
+
+/**
+ * The shared part of the two model routes: forward the bytes, charge for the
+ * tokens the upstream reports, pass the answer back unchanged. `usage(json)`
+ * knows where each API puts the counts; `bytes` is the body when the route
+ * already read it.
+ */
+async function proxyModelCall(c, { url, headers, usage, allowance, bytes }) {
+  const a = allowance;
+  if (!bytes) {
+    const body = await readRawBody(c);
+    if (body.error) return body.error;
+    bytes = body.bytes;
+  }
   const r = await upstream(c, url, {
     method: 'POST',
     headers: { 'content-type': c.request.headers.get('content-type') || 'application/json', ...headers },
-    body: body.bytes,
+    body: bytes,
   });
   if (r.error) return upstreamFailure(c, r.error, allowanceHeaders(a));
   const text = await r.res.text();
   if (r.res.ok) {
-    const seconds = secondsFor(promptTokens(tryJson(text)), c.cfg);
+    const seconds = secondsFor(usage(tryJson(text)), c.cfg);
     if (seconds > 0) a.usedToday = await store.addUsedSeconds(c.env, c.token, a.day, seconds);
     c.seconds = seconds;
   }
@@ -419,10 +518,13 @@ async function listModels(c) {
   const body = r.res.ok ? tryJson(text) : null;
   if (!body) return passThrough(r.res, text, allowanceHeaders(a));
   if (a.plan === 'free' && Array.isArray(body.models)) {
-    body.models = body.models.filter((m) => c.cfg.freeModels.test(String(m?.name || '').replace(/^models\//, '')));
+    body.models = body.models.filter((m) => freeGeminiModel(c, String(m?.name || '').replace(/^models\//, '')));
   }
   return jsonResponse(body, 200, allowanceHeaders(a));
 }
+
+/** Whether a free device may call this Gemini model: within FREE_MODELS and never a picture or sound model. */
+const freeGeminiModel = (c, model) => c.cfg.freeModels.test(model) && !NEVER_FREE.test(model);
 
 async function generateGemini(c, model) {
   const denied = await authenticate(c);
@@ -431,14 +533,16 @@ async function generateGemini(c, model) {
   if (missing) return missing;
   if (!MODEL_RE.test(model)) return fail(c, 400, 'Malformed model name');
   const a = await allowanceOf(c);
-  if (a.plan === 'free' && !c.cfg.freeModels.test(model)) {
+  if (a.plan === 'free' && !freeGeminiModel(c, model)) {
     // 404 so the extension's existing handling (pick another model from the list) applies.
     return fail(c, 404, `Model ${model} is not available on the free plan`, { reason: 'SCENEVOICE_MODEL_NOT_ALLOWED', headers: allowanceHeaders(a) });
   }
+  const refused = await admitModelCall(c, a);
+  if (refused) return refused;
   return proxyModelCall(c, {
     url: `${c.cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     headers: { 'x-goog-api-key': c.env.GEMINI_API_KEY },
-    promptTokens: (json) => json?.usageMetadata?.promptTokenCount,
+    usage: geminiUsage,
     allowance: a,
   });
 }
@@ -446,16 +550,45 @@ async function generateGemini(c, model) {
 // ---------------------------------------------------------------------------
 // Qwen-compatible route (mainland China deployments)
 
+/**
+ * The top-level `model` of a chat-completions body, or '' when there is none.
+ * The only field of any model request the relay reads; the bytes themselves
+ * go upstream unchanged and nothing parsed here is kept or logged.
+ */
+function qwenModelOf(bytes) {
+  let body;
+  try {
+    body = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return '';
+  }
+  const model = body && typeof body === 'object' && !Array.isArray(body) ? body.model : '';
+  return typeof model === 'string' && MODEL_RE.test(model) ? model : '';
+}
+
 async function chatQwen(c) {
   const denied = await authenticate(c);
   if (denied) return denied;
   if (!c.env.DASHSCOPE_API_KEY) return fail(c, 501, 'This relay has no DashScope key configured', { reason: 'SCENEVOICE_NOT_CONFIGURED' });
   const a = await allowanceOf(c);
+  const refused = await admitModelCall(c, a);
+  if (refused) return refused;
+  const body = await readRawBody(c);
+  if (body.error) return body.error;
+  if (a.plan === 'free') {
+    // DashScope names the model in the body, so the free-plan gate has to read that one field.
+    const model = qwenModelOf(body.bytes);
+    if (!model) return fail(c, 400, 'Request body must be a JSON object naming a model', { headers: allowanceHeaders(a) });
+    if (!c.cfg.qwenFreeModels.test(model)) {
+      return fail(c, 404, `Model ${model} is not available on the free plan`, { reason: 'SCENEVOICE_MODEL_NOT_ALLOWED', headers: allowanceHeaders(a) });
+    }
+  }
   return proxyModelCall(c, {
     url: `${c.cfg.dashscopeBase}/chat/completions`,
     headers: { authorization: `Bearer ${c.env.DASHSCOPE_API_KEY}` },
-    promptTokens: (json) => json?.usage?.prompt_tokens,
+    usage: openaiUsage,
     allowance: a,
+    bytes: body.bytes,
   });
 }
 
@@ -565,17 +698,35 @@ async function getScript(c, videoId) {
   return jsonResponse({ ...script, source: 'cloud' }, 200, { 'cache-control': 'private, max-age=0' });
 }
 
+/**
+ * Who may fill the shared cache, since every Cloud listener of a video hears
+ * what is stored for it: a device that has actually had something described
+ * through the relay (charged seconds today or yesterday, for a job that crosses
+ * midnight), at most SCRIPT_PUTS_PER_DAY uploads a day, and never over a script
+ * that is already there (first writer wins; the owner removes a bad one by
+ * hand). Nothing about the uploader is stored with the script.
+ */
 async function putScript(c, videoId) {
   const denied = await authenticate(c);
   if (denied) return denied;
   const addr = scriptAddress(c, videoId, { needVersion: false });
   if (addr.error) return addr.error;
+  const day = utcDay(c.now);
+  const earned = (await store.getUsedSeconds(c.env, c.token, day)) + (await store.getUsedSeconds(c.env, c.token, utcDay(c.now - 86_400_000)));
+  if (earned <= 0) {
+    return fail(c, 403, 'Only a device that has had video described through SceneVoice Cloud can share descriptions', { reason: 'SCENEVOICE_SCRIPT_UNEARNED' });
+  }
+  const puts = await store.countScriptPut(c.env, c.token, day);
+  if (puts > c.cfg.scriptPutsPerDay) {
+    return fail(c, 429, 'This device has shared as many descriptions as it may today', { reason: 'SCENEVOICE_SHARE_LIMIT', fields: { resetsAt: nextUtcMidnight(c.now) } });
+  }
   const body = await readJson(c, MAX_SCRIPT_BYTES);
   if (body.error) return body.error;
   const checked = validateScript(body.value, videoId, addr.lang);
   if (checked.error) return fail(c, 400, checked.error, { reason: 'SCENEVOICE_SCRIPT_INVALID' });
-  await store.putScript(c.env, videoId, addr.lang, checked.script.version, checked.script);
-  return new Response(null, { status: 204 });
+  const stored = await store.putScriptIfAbsent(c.env, videoId, addr.lang, checked.script.version, checked.script);
+  // 204 either way: the extension has nothing to do when the cache already had one.
+  return new Response(null, { status: 204, headers: { 'x-scenevoice-stored': stored ? '1' : '0' } });
 }
 
 // ---------------------------------------------------------------------------
@@ -610,7 +761,8 @@ async function activateLicence(c) {
 // (3) show the key after purchase: the success page calls the owner-only
 // GET /admin/licenses/{session_id} (ADMIN_TOKEN) from the owner's own backend
 // and emails or displays the key. Refunds and subscription cancellations are
-// not handled here: revoke by deleting the licence record by hand.
+// not handled here: revoke by deleting the licence record by hand; every device
+// on it drops to free on its next request (see followLicence).
 async function stripeWebhook(c) {
   if (!c.env.STRIPE_WEBHOOK_SECRET) return fail(c, 501, 'Stripe webhook is not configured', { reason: 'SCENEVOICE_NOT_CONFIGURED' });
   const body = await readJson(c, 1024 * 1024);

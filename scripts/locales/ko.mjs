@@ -75,7 +75,7 @@ export default {
   guide_qwen_7: 'SceneVoice 설정으로 돌아와서 “Qwen API 키” 칸에 키를 붙여 넣고 “저장하고 테스트”를 누릅니다.',
   guide_privacy_title: '키는 본인에게만 남습니다',
   guide_privacy:
-    '키는 이 컴퓨터에만 저장되고, 모델의 주소로만 보내집니다. SceneVoice에는 서버가 없어서 키를 볼 수 없습니다. 키를 다른 사람과 공유하지 마세요. 키를 가진 사람은 누구나 여러분의 사용량을 쓸 수 있습니다.',
+    '키는 이 컴퓨터에만 저장되고, 모델의 주소로만 보내집니다. 자기 키를 쓰는 한 그 경로에 SceneVoice 서버는 없으며, SceneVoice는 키를 볼 수 없습니다. 키를 다른 사람과 공유하지 마세요. 키를 가진 사람은 누구나 여러분의 사용량을 쓸 수 있습니다.',
   opt_key_hint: '여기에 Gemini API 키를 붙여 넣으세요. 위 링크의 Google AI Studio에서 무료로 받을 수 있으며, 무료 등급에는 하루 한도가 있습니다.',
   opt_qwen_key_hint:
     '여기에 Qwen API 키를 붙여 넣으세요. 위 링크의 Alibaba Cloud Model Studio 콘솔에서 만들 수 있으며, 새 계정에는 보통 무료 사용량이 있습니다.',
@@ -456,14 +456,17 @@ export default {
   opt_cache_clear: '저장된 해설 모두 지우기',
   opt_cache_info: '이 컴퓨터에 동영상 $1개의 해설이 저장되어 있습니다. $2 KB입니다.',
   opt_cache_confirm: '저장된 해설을 모두 지울까요? 동영상을 다시 해설해야 합니다.',
-  privacy_1: 'SceneVoice에는 서버도 계정도 없습니다. 분석 데이터를 수집하지 않습니다.',
+  privacy_1:
+    '자기 키를 쓰는 한 SceneVoice에는 서버도 계정도 없고, 개발자에게는 아무것도 보내지 않습니다. 분석 데이터도 전혀 수집하지 않습니다. SceneVoice Cloud는 켰을 때만 쓰이는, 프로젝트가 운영하는 선택 사항인 중계 서버입니다. 무엇을 받는지는 다음 항목에 있습니다.',
+  privacy_6:
+    'SceneVoice Cloud는 “무료로 시작”을 누르기 전까지 꺼져 있습니다. 켜면 요청은 키 대신 익명의 기기 토큰과 함께 api.scenevoice.app로 보내지고, 중계 서버가 이를 Gemini에 전달합니다. 중계 서버는 토큰마다 오늘 해설한 동영상의 초 수, 요금제, 있다면 라이선스 키만 보관하고, 공유가 켜져 있으면 완성된 동영상 해설의 텍스트도 보관합니다. 이미지, 여러분의 질문, 그 답변, IP 주소는 보관하지 않으며 요청 기록도 남기지 않습니다. “Cloud 사용 중지”를 누르면 토큰이 삭제됩니다.',
   privacy_2:
     '해설을 만들거나 질문에 답하기 위해, YouTube 동영상의 주소, 제목, 채널, 설명, 여러분의 질문, 최근 해설이 여러분의 키와 함께 Gemini API로 보내집니다. 장면을 다시 설명할 때는 틀렸다고 표시한 해설도 보내집니다. Gemini API에 대한 Google의 약관이 적용됩니다.',
   privacy_5:
     'Qwen을 쓸 때와 Bilibili에서는 모델이 동영상을 주소로 열 수 없습니다. 대신 몇 초마다 재생 중인 동영상의 축소된 화면을 제목, 업로더, 설명과 함께 보냅니다. Qwen에는 Alibaba Cloud Model Studio의 약관이 적용됩니다. 화면은 1분이나 2분쯤 메모리에만 있다가 사라지며 저장되지 않습니다.',
   privacy_3: '해설은 이 컴퓨터에 저장되므로, 한 동영상은 한 번만 해설합니다.',
   privacy_4:
-    '틀렸다고 표시한 해설은 수정된 해설을 간직하기 위해 이 컴퓨터에만 기록됩니다. 피드백 서버는 없으며, 개발자에게는 아무것도 보내지 않습니다. 이 기록은 저장된 해설과 함께 지워집니다.',
+    '틀렸다고 표시한 해설은 수정된 해설을 간직하기 위해 이 컴퓨터에만 기록됩니다. 개발자에게는 보내지 않으며, 동영상 해설을 공유하기 전에 제거됩니다. 이 기록은 저장된 해설과 함께 지워집니다.',
   opt_reset_title: '6. 기본값 복원',
   opt_reset_intro:
     '해설, 음성, 소리 설정을 모두 SceneVoice를 처음 설치했을 때로 되돌립니다. API 키, 모델, 저장된 해설은 그대로 남습니다. 단축키도 그대로이며, Chrome의 단축키 페이지에서 바꿀 수 있습니다.',
@@ -506,7 +509,7 @@ export default {
   welcome_sample_done: '예시는 여기까지입니다. 다음: 음성 해설을 만드는 방법 고르기.',
   welcome_step2_title: '2. 음성 해설을 만드는 방법 고르기',
   welcome_source_legend: '음성 해설을 만드는 곳',
-  welcome_source_cloud: 'SceneVoice Cloud: 무료 사용량, 설정 불필요(추천)',
+  welcome_source_cloud: 'SceneVoice Cloud: 무료 사용량, 설정 불필요',
   welcome_source_cloud_hint: '하루에 동영상 60분을 새로 설명할 수 있습니다. 다른 SceneVoice 사용자가 이미 설명한 동영상은 세지 않습니다. 요청은 익명 기기 토큰으로 SceneVoice 중계 서버를 거치며, 계정은 없습니다.',
   welcome_source_own: '내 키(Gemini 또는 Qwen): 무제한, 비공개',
   welcome_source_own_hint: 'Google AI Studio나 Alibaba Cloud Model Studio에서 무료 키를 받아 붙여 넣습니다. SceneVoice를 거치는 것은 없습니다.',

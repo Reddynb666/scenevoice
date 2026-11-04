@@ -18,7 +18,7 @@ It is built for screen reader users first. Every control works from the keyboard
 - **Your screen reader, or a built-in voice.** By default descriptions go to a live region that NVDA, JAWS and VoiceOver read with your own settings. People without a screen reader can switch to the browser's built-in voices.
 - **Your language.** Descriptions can be written in any language your browser is set to; 24 of them (Simplified and Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic, Hindi, Italian, Dutch, Polish, Turkish, Vietnamese, Thai, Indonesian, Bengali, Urdu, Persian, Ukrainian, Swahili) have their own hedging words and test sentences. The interface is in 14 languages: English and Simplified Chinese are complete and reviewed; Traditional Chinese, Spanish, Portuguese (Brazil), French, German, Japanese, Korean, Russian, Arabic, Hindi, Indonesian and Vietnamese are AI drafts awaiting native screen-reader users' review (see `CONTRIBUTING.md`).
 - **Large-text overlay** for low-vision viewers and for sighted people watching with you.
-- **No account, no server, no tracking.** You use your own free Gemini API key. SceneVoice has no backend and collects nothing.
+- **No account, no tracking.** With your own free Gemini API key SceneVoice has no server and collects nothing; the optional SceneVoice Cloud relay (*Start free*) is described under [Privacy](#privacy).
 - **China site (experimental): Bilibili with Qwen.** On Bilibili video pages, SceneVoice can describe as you watch with Alibaba Cloud's Qwen. See [below](#china-site--bilibili-experimental).
 
 ## Install
@@ -35,7 +35,7 @@ SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116
 After installing, the welcome page opens: hear a sample, then choose SceneVoice Cloud (free allowance, no key) or your own key.
 
 1. **Hear a sample.** Three sample descriptions through your screen reader or the built-in voice. Nothing is sent anywhere.
-2. **Choose how descriptions are made.** *SceneVoice Cloud*: press *Start free* and you get an anonymous device token with 60 minutes of newly described video a day; videos other SceneVoice users already had described do not count, and finished descriptions are shared back as text (switch it off in settings). *My own key*: the settings page opens at the key field (the Qwen key field in a Chinese browser), with a step-by-step guide written for screen reader users. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are.
+2. **Choose how descriptions are made.** *My own key* (the working path today): the settings page opens at the key field (the Qwen key field in a Chinese browser), with a step-by-step guide written for screen reader users. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are. *SceneVoice Cloud* is not open yet: the relay is not deployed, and *Start free* says so and points you back to your own key. Once it is live, *Start free* gives you an anonymous device token with 60 minutes of newly described video a day; videos other SceneVoice users already had described do not count, and finished descriptions are shared back as text (switch it off in settings).
 3. **Try it.** The page says your shortcut and links to a short video. The first time you play a video without descriptions, SceneVoice says once how to start. The popup lists every shortcut under *All keyboard shortcuts*, with a button to change them.
 
 ### Getting a Gemini API key
@@ -167,6 +167,7 @@ YouTube page ──(video link, title)──▶ Gemini API (your key) ──(tim
 ```
 
 - The video itself is never downloaded or uploaded. Gemini reads public YouTube videos by URL, in sections of five minutes. Requests are made from a worker in the extension's own hidden page (an offscreen document), not from the YouTube tab: your key never enters the page, YouTube's page policies cannot block the requests, and the job carries on if you leave the video. Progress is saved after every section, so an interruption costs at most one section. Two tabs showing the same video share one run.
+- With SceneVoice Cloud, the same request goes to the project's relay (`api.scenevoice.app`) with the anonymous device token instead of a key, and the relay calls Gemini with the project's key; everything else is the same.
 - If the chosen model is overloaded or no longer available for your key, the extension retries with increasing pauses and then continues with the next best model.
 - For every moment the model writes three versions of the description, how long the following pause is, whether it is on-screen text or action, and how important it is. On-screen text also comes as an exact transcription, written before the spoken versions so that they quote it rather than paraphrase it; the transcript page shows it when a description translates or shortens it.
 - If the video has captions, the extension reads them (from YouTube, in the page itself; nothing is sent elsewhere). Their timing corrects the pauses the model estimated: a description that starts just before someone stops talking is moved to the end of their sentence. Their words leave out on-screen text that is also spoken within a few seconds.
@@ -177,12 +178,14 @@ Descriptions are generated by a language model and can be wrong. SceneVoice asks
 
 ## Privacy
 
-- SceneVoice has no server and no account, and sends no analytics.
+- With your own key, SceneVoice has no server and no account, and sends no analytics. The optional SceneVoice Cloud relay, below, is the one exception.
 - To create descriptions, the YouTube video's address, title and description are sent to the Gemini API together with your API key. To describe a moment again, the description you marked as wrong is sent too. Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) apply.
 - Your API key is stored only on your computer (`chrome.storage.local`) and is sent only to the Gemini API address shown in settings. It is never placed in a URL.
 - Descriptions are saved on your computer so a video is described only once. You can delete them all from the settings page.
 - The descriptions you mark as wrong are recorded on your computer only, with the saved descriptions, and are deleted with them. There is no feedback server.
 - Settings (not the key) are synced through your browser profile if sync is on.
+- **SceneVoice Cloud** (optional; off until you press *Start free*): requests go to the project's relay at `api.scenevoice.app` with an anonymous device token instead of a key, and the relay calls Gemini with the project's key. Per token it keeps only the seconds of video described today, the plan and any licence key; it never keeps pictures, questions, answers or your IP address, and does not log requests. *Start free* also turns on *Share finished descriptions*: once a video's descriptions are complete, their text (never pictures, questions or your key) is sent to the relay so the next listener of that video gets it at once; switch it off in settings. *Stop using Cloud* removes the token.
+- A usage counter (today's requests, tokens and a rough cost per model, and each video's token count) and the daily limit you set are kept on this computer only and never sent anywhere.
 
 Full policy: [PRIVACY.md](./PRIVACY.md) (中文版：[PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)).
 

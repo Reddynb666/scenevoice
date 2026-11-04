@@ -15,6 +15,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 /** Languages that must have every string: the build fails on a missing one. */
 export const CORE_LOCALES = ['en', 'zh_CN'];
 
+/**
+ * Strings spoken into the live region during playback, in front of or between
+ * descriptions. Every shipped language must have them: a partial language may
+ * fall back to English on a settings page, but not in the middle of a video.
+ */
+export const SPOKEN_KEYS = ['late_prefix', 'status_skipped_no_pause', 'status_skipped_no_pause_setting'];
+
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'locales');
 const rank = (l) => (CORE_LOCALES.includes(l) ? CORE_LOCALES.indexOf(l) : CORE_LOCALES.length);
 const files = readdirSync(dir)

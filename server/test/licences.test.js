@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseStripeSignature, signForStripe, verifyStripeSignature } from '../src/stripe.js';
 import { normaliseLicenceKey, randomLicenceKey } from '../src/util.js';
-import { call, makeEnv, register } from './helpers.js';
+import { call, geminiAnswer, makeEnv, makeFetch, register } from './helpers.js';
 
 const SECRET = 'whsec_test_secret_for_the_relay';
 const NOW = Date.parse('2026-11-04T10:00:00Z');
@@ -70,6 +70,32 @@ describe('POST /v1/licenses/activate', () => {
       expect((await res.json()).error.details[0].reason).toBe('SCENEVOICE_LICENCE_NOT_FOUND');
     }
     expect((await call(env, { method: 'POST', path: '/v1/licenses/activate', body: { licenseKey: 'svl-AAAA-BBBB-CCCC' } })).status).toBe(401);
+  });
+
+  it('drops a device to free on its next request once its licence record is deleted, and follows an edited plan', async () => {
+    const env = makeEnv();
+    await env.LICENSES.put('svl-AAAA-BBBB-CCCC', JSON.stringify({ plan: 'org', seats: 2, used: 0, created: '' }));
+    const token = await register(env);
+    await call(env, { method: 'POST', path: '/v1/licenses/activate', headers: { 'x-goog-api-key': token }, body: { licenseKey: 'svl-AAAA-BBBB-CCCC' } });
+    const fetch = makeFetch(() => ({ status: 200, body: geminiAnswer(100) }));
+    const pro = { method: 'POST', path: '/v1beta/models/gemini-2.5-pro:generateContent', headers: { 'x-goog-api-key': token }, body: {}, fetch };
+    expect((await call(env, pro)).status).toBe(200);
+    // The owner edits the record (org -> plus): the device follows.
+    await env.LICENSES.put('svl-AAAA-BBBB-CCCC', JSON.stringify({ plan: 'plus', seats: 2, used: 1, created: '' }));
+    expect((await (await call(env, { path: '/v1/me', headers: { 'x-goog-api-key': token } })).json()).plan).toBe('plus');
+    expect((await env.DEVICES.get(token, 'json')).plan).toBe('plus');
+    // The owner revokes the licence as the README says, by deleting the record.
+    await env.LICENSES.delete('svl-AAAA-BBBB-CCCC');
+    const me = await call(env, { path: '/v1/me', headers: { 'x-goog-api-key': token }, now: Date.parse('2026-11-04T10:01:00Z') });
+    // usedToday 2: the pro call's 100 prompt and 10 output tokens, ceil(150 / 100).
+    expect(await me.json()).toEqual({ plan: 'free', allowance: { secondsPerDay: 3600, usedToday: 2, resetsAt: '2026-11-05T00:00:00.000Z' }, cacheHits: 0 });
+    const device = await env.DEVICES.get(token, 'json');
+    expect(device).toMatchObject({ plan: 'free', licence: null, revoked: '2026-11-04T10:01:00.000Z' });
+    // The free model gate applies from then on.
+    const refused = await call(env, pro);
+    expect(refused.status).toBe(404);
+    expect((await refused.json()).error.details[0].reason).toBe('SCENEVOICE_MODEL_NOT_ALLOWED');
+    expect(fetch.calls).toHaveLength(1);
   });
 
   it('uses ORG_SECONDS_PER_DAY for org devices when set', async () => {

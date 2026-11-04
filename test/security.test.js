@@ -127,14 +127,15 @@ describe('background message authorization', () => {
   });
 
   it('accepts tab actions that spend quota or read the cache only from YouTube', () => {
-    for (const type of [MSG.GEN_START, MSG.GEN_STOP, MSG.GEN_STATUS, MSG.ASK, MSG.REVISE, MSG.GET_SCRIPT, MSG.DELETE_SCRIPT, MSG.OPEN_OPTIONS, MSG.STOP_SPEAKING]) {
+    for (const type of [MSG.GEN_START, MSG.GEN_STOP, MSG.GEN_STATUS, MSG.ASK, MSG.REVISE, MSG.GET_SCRIPT, MSG.DELETE_SCRIPT, MSG.OPEN_OPTIONS]) {
       allowed(authorizeBackgroundMessage, type, 'youtube', 'mobile', 'embed');
     }
   });
 
-  it('accepts status and speech from the tab and from extension pages', () => {
+  it('accepts status and speech, and stopping it, from the tab and from extension pages (the welcome page stops its own sample)', () => {
     allowed(authorizeBackgroundMessage, MSG.GET_STATUS, 'youtube', 'mobile', 'embed', 'popup', 'optionsTab', 'transcript');
     allowed(authorizeBackgroundMessage, MSG.SPEAK, 'youtube', 'mobile', 'embed', 'popup', 'optionsTab', 'transcript');
+    allowed(authorizeBackgroundMessage, MSG.STOP_SPEAKING, 'youtube', 'mobile', 'embed', 'popup', 'optionsTab', 'transcript');
   });
 
   it('accepts voices and cache changes only from extension pages', () => {

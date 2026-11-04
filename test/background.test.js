@@ -421,7 +421,8 @@ describe('usage counted on this computer, and the daily limit', () => {
       if (data.cmd === 'frames') return { chunk: { cues: [chop], characters: [], videoType: '' }, model: 'qwen3-vl-plus', usage: qwenUsage };
       if (data.cmd === 'ask') return { text: 'At 0:12: a plate.', time: 12, confidence: 'high', usage: geminiUsage, model: 'gemini-2.5-flash' };
       if (data.cmd === 'revise') return { cue: null, usage: geminiUsage, model: 'gemini-2.5-flash' };
-      if (data.cmd === 'start') return { started: true, done: 0, total: 1, chunkStartedAt: 1, chunkMs: [] };
+      // The worker refuses a new job past the limit, as the real one does (worker.test.js).
+      if (data.cmd === 'start') return data.newJobsAllowed === false ? { error: 'budget' } : { started: true, done: 0, total: 1, chunkStartedAt: 1, chunkMs: [] };
       return { status: 'idle' };
     };
   });
@@ -450,16 +451,41 @@ describe('usage counted on this computer, and the daily limit', () => {
     const fixed = await deliver({ type: MSG.REVISE, videoId: 'abcdefghijk', lang: 'en', cue: { start: 6, kind: 'visual', standard: chop.standard }, meta: {}, duration: 60 }, youtube);
     expect(fixed).toEqual({ status: 'removed' });
     expect(today().gemini.requests).toBe(3);
+
+    // A job that failed after a billed reply it could not read: counted too, on the row of the model that answered.
+    await deliver({ type: MSG.JOB_EVENT, event: 'error', key: 'abcdefghijk:en', videoId: 'abcdefghijk', lang: 'en', provider: 'gemini', code: 'truncated', detail: '', usage: geminiUsage, model: 'gemini-2.5-flash' }, offscreenPage);
+    expect(today().gemini).toMatchObject({ requests: 4, input: 4 * 90000 });
+    expect(chrome.tabs.sendMessage.mock.calls.at(-1)[1]).not.toHaveProperty('usage');
+    // A stretch whose reply was billed but unreadable: the cost comes back with the error and is counted.
+    worker = () => ({ error: 'truncated', detail: '', usage: qwenUsage });
+    expect(await deliver(stretch(12, 24), bilibili)).toMatchObject({ error: 'truncated' });
+    expect(today().qwen).toMatchObject({ requests: 2, input: 6600 });
   });
 
   it('refuses new jobs and stretches once the daily limit is reached, and still answers questions', async () => {
+    const usual = worker;
     synced.settings = { dailyBudgetSeconds: 1800 };
     store.usage = { day: new Date().toISOString().slice(0, 10), gemini: { input: 1, output: 1, requests: 2, seconds: 1500, cost: 0 }, qwen: { input: 1, output: 1, requests: 1, seconds: 288, cost: 0 }, cloud: { input: 0, output: 0, requests: 0, seconds: 0, cost: 0 } };
     // 1788 seconds so far: one more stretch is allowed and takes it over the limit.
     expect(await deliver(stretch(0, 12), bilibili)).toMatchObject({ status: 'ok' });
     expect(await deliver(stretch(12, 24), bilibili)).toEqual({ error: 'budget' });
-    expect(await deliver({ type: MSG.GEN_START, videoId: 'abcdefghijk', duration: 600, meta: {}, lang: 'en' }, youtube)).toEqual({ error: 'budget' });
-    expect(workerCalls.filter((c) => c.cmd === 'start')).toEqual([]);
+    const startVideo = (extra = {}) => deliver({ type: MSG.GEN_START, videoId: 'abcdefghijk', duration: 600, meta: {}, lang: 'en', ...extra }, youtube);
+    expect(await startVideo()).toEqual({ error: 'budget' });
+    // The worker is asked, told that no new job may start: only it knows whether this video's job is still running.
+    expect(workerCalls.filter((c) => c.cmd === 'start').map((c) => c.newJobsAllowed)).toEqual([false]);
+    // No offscreen document, no running job: refused without opening one.
+    workerCalls.length = 0;
+    chrome.offscreen.hasDocument = async () => false;
+    expect(await startVideo()).toEqual({ error: 'budget' });
+    expect(workerCalls).toEqual([]);
+    chrome.offscreen.hasDocument = async () => true;
+    // A job for this video still running past the limit: the tab follows it instead of hearing the limit stopped it.
+    const running = { already: true, done: 6, total: 12, chunkStartedAt: 1, chunkMs: [300], provider: 'gemini' };
+    worker = (data) => (data.cmd === 'start' ? (data.newJobsAllowed === false && !data.force ? running : { error: 'budget' }) : { status: 'idle' });
+    expect(await startVideo()).toEqual({ status: 'generating', already: true, done: 6, total: 12, chunkStartedAt: 1, chunkMs: [300] });
+    // Starting over would be a new job: refused.
+    expect(await startVideo({ force: true })).toEqual({ error: 'budget' });
+    worker = usual;
     expect((await deliver({ type: MSG.ASK, params: { videoId: 'abcdefghijk', meta: {}, time: 12, duration: 60, question: 'What?', nearbyText: '', lang: 'en' } }, youtube)).text).toBe('At 0:12: a plate.');
     // No limit, or a higher one: on it goes.
     synced.settings = { dailyBudgetSeconds: 3600 };
@@ -566,14 +592,20 @@ describe('SceneVoice Cloud: the token where the key goes, and the shared cache',
     const finished = { ...shared(), cues: [cue(1, 'A door opens.', { revised: true }), cue(20, 'A dog runs.')], usage, createdAt: 5 };
     delete finished.source;
     const done = (provider) => deliver({ type: MSG.JOB_EVENT, event: 'done', key: `${VIDEO}:en`, videoId: VIDEO, lang: 'en', provider, script: finished, model: 'gemini-2.5-flash', usage, seconds: 300, done: 2, total: 2 }, offscreenPage);
+    // While the job ran, the listener marked the dog as wrong and had the door described again (PRIVACY.md: neither wrong description is shared).
+    store[`feedback:${VIDEO}:en`] = [
+      { at: 1, start: 20, kind: 'visual', standard: 'A dog runs.', status: 'removed', replacement: null },
+      { at: 2, start: 1, kind: 'visual', standard: 'A door opens.', status: 'revised', replacement: cue(1, 'A door closes.', { revised: true }) },
+    ];
 
     await done('cloud');
     await vi.waitFor(() => expect(calls('cloud-put')).toHaveLength(1));
     const put = calls('cloud-put')[0];
     expect(put).toMatchObject({ config: { apiKey: TOKEN, apiBase: CLOUD }, params: { videoId: VIDEO, lang: 'en' } });
     expect(Object.keys(put.params.script).sort()).toEqual(['characters', 'complete', 'completedUntil', 'cues', 'duration', 'lang', 'model', 'usage', 'version', 'videoId', 'videoType']);
-    expect(put.params.script.cues).toEqual([cue(1, 'A door opens.'), cue(20, 'A dog runs.')]);
-    expect(JSON.stringify(put.params.script)).not.toMatch(/revised|createdAt|provider/);
+    // The corrected script goes out: the removed cue gone, the correction in place of the wrong one, without the local mark.
+    expect(put.params.script.cues).toEqual([cue(1, 'A door closes.')]);
+    expect(JSON.stringify(put.params.script)).not.toMatch(/revised|createdAt|provider|updatedAt|A door opens|A dog runs/);
     // Saved here as Cloud's, and counted on Cloud's row, not Gemini's.
     expect(store[KEY]).toMatchObject({ provider: 'cloud', complete: true });
     expect(store.usage.cloud).toMatchObject({ requests: 1, seconds: 300, input: 60000, cost: 0 });

@@ -3,7 +3,7 @@ import { COUNTED_PROVIDERS, costText, formatTokens, todaysUsage } from '../share
 import { activateLicense, allowanceMinutes, cleanPlan, fetchMe, registerDevice, validLicenseKey } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
 import { bindSettings } from '../shared/form.js';
-import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
+import { cloudRegisterMessage, errorMessage, localizeDocument, resetTimeText, t } from '../shared/i18n.js';
 import { typeChosenText } from '../shared/labels.js';
 import { CHOICES, voiceFor, voicePatch, voiceTestMessage } from '../shared/settings.js';
 import { getLocal, getSettings, resetSettings, resolveLanguage, setLocal, setSettings } from '../shared/storage.js';
@@ -275,12 +275,6 @@ async function cloudMe(token) {
 
 const planName = (plan) => t(`plan_${cleanPlan(plan)}`);
 
-/** When the allowance comes back, as a clock time, or "midnight UTC" when the relay did not say. */
-function resetText(resetsAt) {
-  const at = Date.parse(resetsAt || '');
-  return Number.isFinite(at) ? new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : t('time_midnight_utc');
-}
-
 /**
  * The Cloud block as it stands: not set up, or the plan with today's use.
  * Written to a plain paragraph, not the live region: opening the settings page
@@ -298,10 +292,22 @@ async function renderCloud() {
   try {
     const me = await cloudMe(local.cloudToken);
     if (me.plan !== local.cloudPlan) await setLocal({ cloudPlan: me.plan });
-    $('cloudInfo').textContent = t('opt_cloud_status', planName(me.plan), allowanceMinutes(me.allowance.usedToday), allowanceMinutes(me.allowance.secondsPerDay), resetText(me.allowance.resetsAt));
+    $('cloudInfo').textContent = t('opt_cloud_status', planName(me.plan), allowanceMinutes(me.allowance.usedToday), allowanceMinutes(me.allowance.secondsPerDay), resetTimeText(me.allowance.resetsAt));
   } catch (err) {
     const code = err instanceof ApiError ? err.code : 'unknown';
-    $('cloudInfo').textContent = code === 'bad-key' ? errorMessage('bad-key', 'cloud') : t('opt_cloud_status_offline', planName(local.cloudPlan));
+    if (code === 'bad-key') {
+      // The relay no longer knows this token (revoked, or the relay was reset):
+      // it is gone, and Start free gets a new one. The sites keep pointing at
+      // Cloud and sharing stays as it was, unlike Stop using Cloud, so nothing
+      // else has to be set again.
+      await setLocal({ cloudToken: '', cloudPlan: '' });
+      meCache = { token: '', at: 0, data: null };
+      $('cloudStart').hidden = false;
+      $('cloudStop').hidden = true;
+      $('cloudInfo').textContent = t('opt_cloud_token_lost');
+      return;
+    }
+    $('cloudInfo').textContent = t('opt_cloud_status_offline', planName(local.cloudPlan));
   }
 }
 
@@ -333,7 +339,7 @@ async function startCloud() {
     $('cloudStop').focus();
   } catch (err) {
     const code = err instanceof ApiError ? err.code : 'unknown';
-    setStatus(statusEl, `${errorMessage(code, 'cloud')} ${t('opt_cloud_use_own')}`, 'bad');
+    setStatus(statusEl, `${cloudRegisterMessage(code, err?.resetAt)} ${t('opt_cloud_use_own')}`, 'bad');
   }
 }
 
@@ -615,10 +621,11 @@ async function init() {
   });
 
   // Sent here for a particular key (options.html#qwen) or for SceneVoice Cloud
-  // (#cloud): start on that control. Otherwise, with nothing set up yet, start
-  // where a key goes: in Chinese, at the Qwen key, since Gemini needs Google,
-  // which mainland China cannot reach.
-  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey', '#cloud': local.cloudToken ? 'cloudStop' : 'cloudStart' }[location.hash];
+  // (#cloud): start on that control, the Cloud button as rendered (a token the
+  // relay no longer knew is gone by now, and Start free is the one shown).
+  // Otherwise, with nothing set up yet, start where a key goes: in Chinese, at
+  // the Qwen key, since Gemini needs Google, which mainland China cannot reach.
+  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey', '#cloud': $('cloudStart').hidden ? 'cloudStop' : 'cloudStart' }[location.hash];
   if (wanted) $(wanted).focus();
   else if (!local.apiKey && !local.qwenApiKey && !local.cloudToken) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
 }

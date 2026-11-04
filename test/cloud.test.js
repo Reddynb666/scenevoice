@@ -78,6 +78,10 @@ describe('the relay’s own requests', () => {
     expect(init.headers).not.toHaveProperty('x-goog-api-key');
 
     await expect(registerDevice(fakeFetch(200, { token: '<script>alert(1)</script>' }))).rejects.toMatchObject({ code: 'request-failed' });
+    // The relay's daily limit on new devices per network is its own error, with the time it opens again; any other 429 is a rate limit.
+    const limited = { error: { code: 429, message: 'Too many new SceneVoice devices from this network today. Try again tomorrow.', status: 'RESOURCE_EXHAUSTED', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT', resetsAt: '2026-11-05T00:00:00Z' }] } };
+    await expect(registerDevice(fakeFetch(429, limited))).rejects.toMatchObject({ code: 'device-limit', resetAt: '2026-11-05T00:00:00Z' });
+    await expect(registerDevice(fakeFetch(429, { error: { message: 'limit', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT', resetsAt: 'soon' }] } }))).rejects.toMatchObject({ code: 'device-limit', resetAt: '' });
     await expect(registerDevice(fakeFetch(429, { error: { message: 'too many devices' } }))).rejects.toMatchObject({ code: 'rate-limited' });
     await expect(registerDevice(vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))).rejects.toMatchObject({ code: 'network' });
     expect(validToken(TOKEN)).toBe(true);
@@ -219,7 +223,7 @@ describe('the worker’s cache commands', () => {
 
 describe('what the listener hears', () => {
   it('has Cloud’s own words where Gemini’s would name a key, in both languages', () => {
-    for (const code of ['no-key', 'bad-key', 'forbidden', 'model-not-found', 'no-model', 'quota', 'server', 'request-failed', 'network', 'blocked', 'empty-response', 'truncated', 'bad-json', 'rate-limited', 'quota-daily']) {
+    for (const code of ['no-key', 'bad-key', 'forbidden', 'model-not-found', 'no-model', 'quota', 'server', 'request-failed', 'network', 'blocked', 'empty-response', 'truncated', 'bad-json', 'rate-limited', 'quota-daily', 'device-limit']) {
       const key = `error_cloud_${code.replace(/-/g, '_')}`;
       expect(STRINGS[key]?.en, key).toBeTruthy();
       expect(STRINGS[key]?.zh_CN, key).toBeTruthy();

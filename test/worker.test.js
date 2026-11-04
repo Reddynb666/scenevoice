@@ -110,4 +110,44 @@ describe('requests wait their turn', () => {
     await settle();
     expect(reply(id)).toEqual({ id, error: 'allowance', detail: 'used up', resetAt: '2026-11-05T00:00:00Z' });
   });
+
+  it('passes on what a failed request cost when its reply was billed anyway', async () => {
+    const { ApiError } = await import('../src/shared/errors.js');
+    const id = send(frames('qwen', 0));
+    await settle();
+    const err = new ApiError('truncated');
+    err.usage = usage;
+    calls[0].reject(err);
+    await settle();
+    expect(reply(id)).toEqual({ id, error: 'truncated', detail: 'truncated', usage });
+
+    // A job too: what it was billed before failing goes on the error event, with the model that answered.
+    const { runGeneration } = await import('../src/shared/generation.js');
+    const failed = new ApiError('bad-json');
+    failed.usage = usage;
+    runGeneration.mockRejectedValueOnce(failed);
+    send({ cmd: 'start', key: 'v:en', provider: 'gemini', config: { apiKey: 'k', model: 'gemini-2.5-flash' }, params: { videoId: 'v', lang: 'en', duration: 60 } });
+    await settle();
+    expect(posted.find((m) => m.event === 'error')).toMatchObject({ key: 'v:en', code: 'bad-json', provider: 'gemini', usage, model: 'gemini-2.5-flash' });
+  });
+});
+
+describe('starting a job past the daily limit', () => {
+  const job = (videoId, extra = {}) => ({ cmd: 'start', key: `${videoId}:en`, provider: 'gemini', config: { apiKey: 'k', model: 'gemini-2.5-flash' }, params: { videoId, lang: 'en', duration: 600 }, ...extra });
+
+  it('refuses a new job, and a restart, but tells a tab about the job already running', async () => {
+    expect(reply(send(job('limit1')))).toMatchObject({ started: true, done: 0, total: 2 });
+    // The same video again once the limit is reached: the tab follows the running job, no refusal.
+    expect(reply(send(job('limit1', { newJobsAllowed: false })))).toMatchObject({ already: true, done: 0, total: 2, provider: 'gemini' });
+    // Another video, or starting this one over: a new job, refused; the running one is untouched.
+    expect(reply(send(job('limit2', { newJobsAllowed: false })))).toEqual({ id: seq, error: 'budget' });
+    expect(reply(send(job('limit1', { force: true, newJobsAllowed: false })))).toEqual({ id: seq, error: 'budget' });
+    expect(reply(send({ cmd: 'status', key: 'limit1:en' }))).toMatchObject({ status: 'generating' });
+    expect(reply(send({ cmd: 'status', key: 'limit2:en' }))).toEqual({ id: seq, status: 'idle' });
+    expect(posted.filter((m) => m.event === 'started').map((m) => m.key)).toEqual(['limit1:en']);
+    // Only an explicit "no" refuses: an older service worker that does not say is allowed through.
+    expect(reply(send(job('limit3')))).toMatchObject({ started: true });
+    send({ cmd: 'abort', key: 'limit1:en' });
+    send({ cmd: 'abort', key: 'limit3:en' });
+  });
 });

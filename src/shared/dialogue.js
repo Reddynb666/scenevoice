@@ -134,7 +134,12 @@ function fitOne(cue, intervals, maxShift, margin) {
   }
   let gap = cue.gap;
   if (blocked) gap = 0;
-  else if (i < intervals.length) gap = Math.min(gap, Math.max(0, intervals[i].start - start - margin));
+  else if (i < intervals.length) {
+    // A gap of 0 is "no pause known" (frames mode: the model cannot hear), so
+    // the captions decide; any other estimate stays the upper bound.
+    const measured = Math.max(0, intervals[i].start - start - margin);
+    gap = cue.gap > 0 ? Math.min(gap, measured) : measured;
+  }
   return { start, gap };
 }
 
@@ -165,6 +170,9 @@ export const VISUAL_WAIT = 5;
  * - The gap is the time until the next speech starts, minus a safety margin.
  *   It never grows beyond what the model reported: captions can miss speech
  *   (untranscribed voices, singing), the model's estimate is the upper bound.
+ *   The exception is a gap of 0, which means "no pause known" (frames mode,
+ *   where the model cannot hear): the measured room stands, whatever the
+ *   cue's kind and priority. After the last caption it stays 0.
  * - On-screen text matters more than a passing visual detail, and is still
  *   worth hearing a few seconds after it appeared: a text cue without `textRoom`
  *   seconds of room waits up to `textWait` seconds for the first pause that has it.

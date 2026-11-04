@@ -76,7 +76,7 @@ export default {
   guide_qwen_7: 'Kembali ke pengaturan SceneVoice, tempel kunci itu ke “Kunci API Qwen”, lalu tekan “Simpan dan uji”.',
   guide_privacy_title: 'Kunci Anda tetap di tangan Anda',
   guide_privacy:
-    'Kunci hanya disimpan di komputer ini dan hanya dikirim ke alamat model itu sendiri. SceneVoice tidak punya server dan tidak pernah melihatnya. Jangan bagikan kunci ke orang lain: siapa pun yang memegangnya bisa memakai kuota Anda.',
+    'Kunci hanya disimpan di komputer ini dan hanya dikirim ke alamat model itu sendiri. Dengan kunci Anda sendiri, SceneVoice tidak punya server di jalur itu dan tidak pernah melihatnya. Jangan bagikan kunci ke orang lain: siapa pun yang memegangnya bisa memakai kuota Anda.',
   opt_key_hint: 'Tempel kunci API Gemini Anda di sini. Dapatkan gratis di Google AI Studio lewat tautan di atas; paket gratis punya batas harian.',
   opt_qwen_key_hint:
     'Tempel kunci API Qwen Anda di sini. Buat di konsol Alibaba Cloud Model Studio lewat tautan di atas; akun baru biasanya mendapat kuota gratis.',
@@ -457,14 +457,17 @@ export default {
   opt_cache_clear: 'Hapus semua deskripsi tersimpan',
   opt_cache_info: '$1 video sudah dideskripsikan dan disimpan di komputer ini, $2 KB.',
   opt_cache_confirm: 'Hapus semua deskripsi tersimpan? Video perlu dideskripsikan lagi.',
-  privacy_1: 'SceneVoice tidak punya server dan tidak punya akun. SceneVoice tidak mengumpulkan data analitik.',
+  privacy_1:
+    'Dengan kunci Anda sendiri, SceneVoice tidak punya server dan tidak punya akun, dan tidak ada yang dikirim ke pengembang. SceneVoice tidak pernah mengumpulkan data analitik. SceneVoice Cloud, jika Anda menyalakannya, adalah relai opsional yang dijalankan proyek ini; poin berikutnya menjelaskan apa yang diterimanya.',
+  privacy_6:
+    'SceneVoice Cloud mati sampai Anda menekan “Mulai gratis”. Saat menyala, permintaan dikirim ke api.scenevoice.app dengan token perangkat anonim sebagai ganti kunci, dan relai meneruskannya ke Gemini. Per token, relai hanya menyimpan berapa detik video yang dideskripsikan hari ini, paketnya, dan kunci lisensi bila ada, ditambah teks akhir deskripsi sebuah video saat berbagi dinyalakan. Relai tidak pernah menyimpan gambar, pertanyaan Anda, jawabannya, atau alamat IP Anda, dan tidak mencatat permintaan. “Berhenti memakai Cloud” menghapus token itu.',
   privacy_2:
     'Untuk membuat deskripsi atau menjawab pertanyaan, alamat video YouTube, judul, kanal, dan keterangannya, pertanyaan Anda, serta deskripsi terbaru dikirim ke API Gemini dengan kunci Anda. Untuk mendeskripsikan sebuah momen lagi, deskripsi yang Anda tandai salah juga dikirim. Ketentuan Google untuk API Gemini berlaku.',
   privacy_5:
     'Dengan Qwen, dan di Bilibili, model tidak bisa membuka video lewat alamatnya: setiap beberapa detik, gambar video yang sedang diputar dikirim dalam ukuran diperkecil, bersama judul, pengunggah, dan keterangannya. Ketentuan Alibaba Cloud Model Studio berlaku untuk Qwen. Gambar hanya ditahan di memori satu atau dua menit dan tidak pernah disimpan.',
   privacy_3: 'Deskripsi disimpan di komputer ini agar sebuah video hanya dideskripsikan sekali.',
   privacy_4:
-    'Deskripsi yang Anda tandai salah dicatat hanya di komputer ini, agar versi koreksinya tetap tersimpan. Tidak ada server umpan balik: tidak ada yang dikirim ke pengembang. Catatan itu terhapus bersama deskripsi tersimpan.',
+    'Deskripsi yang Anda tandai salah dicatat hanya di komputer ini, agar versi koreksinya tetap tersimpan. Deskripsi itu tidak pernah dikirim ke pengembang dan dibuang sebelum deskripsi sebuah video dibagikan. Catatan itu terhapus bersama deskripsi tersimpan.',
   opt_reset_title: '6. Kembalikan bawaan',
   opt_reset_intro:
     'Kembalikan semua pengaturan deskripsi, suara, dan bunyi seperti saat SceneVoice pertama dipasang. Kunci API, model, dan deskripsi tersimpan Anda tidak berubah. Pintasan keyboard juga tidak berubah; ubah di halaman pintasan Chrome.',
@@ -507,7 +510,7 @@ export default {
   welcome_sample_done: 'Itu tadi contohnya. Berikutnya: pilih cara deskripsi dibuat.',
   welcome_step2_title: '2. Pilih cara deskripsi dibuat',
   welcome_source_legend: 'Deskripsi dibuat oleh',
-  welcome_source_cloud: 'SceneVoice Cloud: jatah gratis, tidak perlu menyiapkan apa pun (disarankan)',
+  welcome_source_cloud: 'SceneVoice Cloud: jatah gratis, tidak perlu menyiapkan apa pun',
   welcome_source_cloud_hint: '60 menit video yang baru dideskripsikan per hari; video yang sudah dideskripsikan pengguna SceneVoice lain tidak dihitung. Permintaan lewat relai SceneVoice dengan token perangkat anonim, tanpa akun.',
   welcome_source_own: 'Kunci saya sendiri (Gemini atau Qwen): tanpa batas, pribadi',
   welcome_source_own_hint: 'Anda mengambil kunci gratis dari Google AI Studio atau Alibaba Cloud Model Studio lalu menempelkannya. Tidak ada yang lewat SceneVoice.',

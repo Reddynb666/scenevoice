@@ -132,8 +132,9 @@ const BACKGROUND_ALLOW = Object.freeze({
   [MSG.REVISE]: VIDEO_PAGE,
   [MSG.GEN_FRAMES]: VIDEO_PAGE,
   [MSG.OPEN_OPTIONS]: VIDEO_PAGE,
-  [MSG.STOP_SPEAKING]: VIDEO_PAGE,
-  // Spoken descriptions from the video tab, and the options-page voice test.
+  // Spoken descriptions from the video tab, and the options-page voice test;
+  // the welcome page stops its own sample.
+  [MSG.STOP_SPEAKING]: [...VIDEO_PAGE, 'extension-page'],
   [MSG.SPEAK]: [...VIDEO_PAGE, 'extension-page'],
   [MSG.GET_VOICES]: ['extension-page'],
   [MSG.CACHE_INFO]: ['extension-page'],

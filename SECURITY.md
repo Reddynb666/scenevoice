@@ -84,4 +84,8 @@ Examples of what counts:
   and test tools, locked by `package-lock.json` and updated by Dependabot.
 - GitHub Actions are pinned to commit SHAs; the CI and release jobs run with
   `contents: read` (the release job alone may write a GitHub Release).
+- The store credentials (Chrome Web Store refresh token, Edge API key) are
+  step-scoped in the release workflow: only the two upload steps and the step
+  that checks they are set see them, never `npm ci`, `pip`, the end-to-end
+  suite or a third-party action.
 - Every release carries `SHA256SUMS`; see `docs/release.md`.

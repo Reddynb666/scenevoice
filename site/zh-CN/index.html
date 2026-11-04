@@ -158,12 +158,12 @@
       <a class="button" href="https://github.com/reddynb666/scenevoice/releases" data-store="github">GitHub Releases</a>
       <a class="button" href="#" data-store="gitee" aria-disabled="true">Gitee 镜像，中国大陆（即将上线）</a>
     </div>
-    <p>用发布包安装：下载 zip 并解压，打开 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>），开启开发者模式，点“加载已解压的扩展程序”，选中解压后的文件夹。之后设置页会自动打开，焦点就在 Key 输入框上。完整步骤和申请免费 Key 的方法见<a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md#安装">中文说明</a>。</p>
+    <p>用发布包安装：下载 zip 并解压，打开 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>），开启开发者模式，点“加载已解压的扩展程序”，选中解压后的文件夹。之后会打开欢迎页：先听一段示例，再选“自己的密钥”，设置页就会在 Key 输入框打开（SceneVoice 云端开放后也会在那里提供）。完整步骤和申请免费 Key 的方法见<a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md#安装">中文说明</a>。</p>
   </section>
 
   <section id="cost" aria-labelledby="cost-heading">
     <h2 id="cost-heading">适合谁、要花多少钱</h2>
-    <p>给看 YouTube 和哔哩哔哩的盲人和低视力朋友，给陪他们一起看的人，也给需要口述影像的盲校、图书馆和用人单位。扩展本身免费、开源（MIT 协议），没有账号，也没有自己的服务器。</p>
+    <p>给看 YouTube 和哔哩哔哩的盲人和低视力朋友，给陪他们一起看的人，也给需要口述影像的盲校、图书馆和用人单位。扩展本身免费、开源（MIT 协议），没有账号；用自己的 Key 时也没有自己的服务器，SceneVoice 云端开放后是一个可选的中转（见“隐私”）。</p>
     <dl class="plans">
       <dt>自带 Key —— 永久免费</dt>
       <dd>用你自己申请的通义千问 Key（哔哩哔哩）或 Gemini Key（YouTube）。全部功能，我们不设任何限制；除了发给模型的请求，什么都不离开你的电脑。今天的 SceneVoice 就是这一档。</dd>
@@ -180,10 +180,10 @@
   <section id="privacy" aria-labelledby="privacy-heading">
     <h2 id="privacy-heading">隐私</h2>
     <ul>
-      <li><strong>没有服务器、没有账号、不追踪。</strong> SceneVoice 没有后端，你做的任何事都不会发给开发者；没有统计、没有使用数据、没有崩溃报告、没有标识符。这个网站同样没有，也不设 Cookie。</li>
+      <li><strong>没有账号、不追踪。</strong> 用自己的 Key 时，SceneVoice 没有后端，你做的任何事都不会发给开发者；没有统计、没有使用数据、没有崩溃报告、没有标识符。SceneVoice 云端（可选，尚未开放）会把请求经由项目的中转 api.scenevoice.app 发送，携带匿名的设备凭证；下面的隐私政策写明中转保存什么、绝不保存什么。这个网站同样没有统计，也不设 Cookie。</li>
       <li><strong>从不录制、不上传视频。</strong> 在哔哩哔哩上，或者用通义千问时，发出去的是画面的小尺寸截图（最宽 640 像素），只在标签页内存里保留一两分钟；在 YouTube 上用 Gemini 时，发出去的是视频地址、标题和要描述的时间段，由模型自己去读公开视频。</li>
       <li><strong>Key 是你自己的。</strong> 只存在浏览器本机的扩展存储里，只走请求头，绝不放进网址，也绝不进入哔哩哔哩或 YouTube 的网页。</li>
-      <li><strong>只有你选的模型能看到请求。</strong> 请求只发给阿里云百炼（通义千问）或谷歌的 Gemini API，按它们各自的条款处理，不经过任何第三方。用通义千问的中国大陆地址，数据不出境。</li>
+      <li><strong>只有你选的模型能看到请求。</strong> 用自己的 Key 时，请求只发给阿里云百炼（通义千问）或谷歌的 Gemini API，按它们各自的条款处理，不经过任何第三方；用 SceneVoice 云端时，请求先到中转，再由中转转发给模型，不做记录。用通义千问的中国大陆地址，数据不出境。</li>
       <li><strong>一切都在你的电脑上，随时可以删。</strong> 口述、纠错记录和设置都存在本地，设置页能看到存了什么，一键全部删除。</li>
     </ul>
     <p>完整的<a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" hreflang="en">隐私政策</a>（英文）列出了每一个请求和每一项权限，以及为什么需要。</p>
@@ -202,7 +202,7 @@
     <h3>一句话</h3>
     <p>任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。</p>
     <h3>简介</h3>
-    <p>SceneVoice（声景）是一个免费、开源的浏览器扩展，为盲人和低视力观众给哔哩哔哩和 YouTube 视频加上 AI 口述影像。在任何视频上按一个键，大约半分钟后，画面的简短描述就会在对白空隙里读出来——用观众自己的读屏软件，或者浏览器内置语音。描述遵循口述影像规范：只说看得见的，屏幕文字逐字读，看不清就说看不清。观众可以就任何一刻提问，也可以纠正说错的描述。SceneVoice 没有服务器、没有账号，用观众自己的模型 Key 在浏览器里运行。源代码在 GitHub 上，MIT 协议。</p>
+    <p>SceneVoice（声景）是一个免费、开源的浏览器扩展，为盲人和低视力观众给哔哩哔哩和 YouTube 视频加上 AI 口述影像。在任何视频上按一个键，大约半分钟后，画面的简短描述就会在对白空隙里读出来——用观众自己的读屏软件，或者浏览器内置语音。描述遵循口述影像规范：只说看得见的，屏幕文字逐字读，看不清就说看不清。观众可以就任何一刻提问，也可以纠正说错的描述。SceneVoice 没有账号；用观众自己的模型 Key 时，它完全在浏览器里运行，没有自己的服务器（可选的 SceneVoice 云端中转在计划中）。源代码在 GitHub 上，MIT 协议。</p>
     <h3>链接</h3>
     <ul>
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md">中文说明（README）</a></li>

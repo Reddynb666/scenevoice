@@ -29,6 +29,8 @@ jobs:
       - run: npm test
       - name: Build, with bundle sizes
         # build:meta writes dist-meta.json, prints a size table and exits 1 when content.js is over 120 KB.
+        # `shell: bash` runs the script with `-o pipefail`, so that exit status survives the pipe into tee.
+        shell: bash
         run: |
           npm run build:meta | tee build.log
           { echo "### Bundle sizes (minified)"; echo; grep '^|' build.log; } >> "$GITHUB_STEP_SUMMARY"

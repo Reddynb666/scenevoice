@@ -38,9 +38,13 @@ const jobInfo = (job) => ({ done: job.done, total: job.total, chunkStartedAt: jo
  */
 const MAX_JOBS = 2;
 
-function start({ key, provider, config, params, script, force }) {
+function start({ key, provider, config, params, script, force, newJobsAllowed }) {
   const existing = jobs.get(key);
   if (existing && !force) return { already: true, ...jobInfo(existing) };
+  // The day's limit (the service worker checks it) stops new jobs, not one already
+  // running; answered here, after the check above, so a tab cannot be refused for
+  // a job that is in fact going on.
+  if (newJobsAllowed === false) return { error: 'budget' };
   if (!existing && jobs.size >= MAX_JOBS) return { error: 'busy' };
   if (existing) existing.controller.abort();
 
@@ -95,8 +99,10 @@ function start({ key, provider, config, params, script, force }) {
     .catch((err) => {
       if (!mine()) return;
       const code = err instanceof ApiError ? err.code : 'unknown';
-      if (code === 'aborted') self.postMessage({ event: 'stopped', key, videoId: job.videoId, lang: job.lang, provider: job.provider });
-      else self.postMessage({ event: 'error', key, videoId: job.videoId, lang: job.lang, provider: job.provider, code, detail: err?.detail || String(err?.message || ''), ...(err?.resetAt ? { resetAt: err.resetAt } : {}) });
+      // What was billed before the job ended (a reply that could not be read, a section cut short) goes with the event, to be counted.
+      const spent = err?.usage ? { usage: err.usage, model: client.model || '' } : {};
+      if (code === 'aborted') self.postMessage({ event: 'stopped', key, videoId: job.videoId, lang: job.lang, provider: job.provider, ...spent });
+      else self.postMessage({ event: 'error', key, videoId: job.videoId, lang: job.lang, provider: job.provider, code, detail: err?.detail || String(err?.message || ''), ...(err?.resetAt ? { resetAt: err.resetAt } : {}), ...spent });
     })
     .finally(() => {
       if (mine()) jobs.delete(key);
@@ -168,7 +174,8 @@ function status({ key }) {
   return { jobs: [...jobs.entries()].map(([k, job]) => ({ key: k, videoId: job.videoId, lang: job.lang, ...jobInfo(job) })), ...requestCounts() };
 }
 
-const failure = (err) => ({ error: err instanceof ApiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || ''), ...(err?.resetAt ? { resetAt: err.resetAt } : {}) });
+/** A failed request as a reply: the error, when the allowance resets, and what the request cost when it was billed anyway. */
+const failure = (err) => ({ error: err instanceof ApiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || ''), ...(err?.resetAt ? { resetAt: err.resetAt } : {}), ...(err?.usage ? { usage: err.usage } : {}) });
 
 /** Answer a question. Replies { text, time, confidence, usage, model }. */
 function ask({ mode, provider, config, params }) {

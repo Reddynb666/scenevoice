@@ -76,7 +76,7 @@ export default {
   guide_qwen_7: 'Kehren Sie zu den SceneVoice-Einstellungen zurück, fügen Sie den Schlüssel in „Qwen-API-Schlüssel“ ein und drücken Sie „Speichern und testen“.',
   guide_privacy_title: 'Ihr Schlüssel bleibt bei Ihnen',
   guide_privacy:
-    'Der Schlüssel wird nur auf diesem Computer gespeichert und nur an die Adresse des Modells selbst gesendet. SceneVoice hat keinen Server und sieht ihn nie. Geben Sie den Schlüssel nicht weiter: Wer ihn hat, kann Ihr Kontingent verbrauchen.',
+    'Der Schlüssel wird nur auf diesem Computer gespeichert und nur an die Adresse des Modells selbst gesendet. Mit Ihrem eigenen Schlüssel hat SceneVoice keinen Server auf diesem Weg und sieht ihn nie. Geben Sie den Schlüssel nicht weiter: Wer ihn hat, kann Ihr Kontingent verbrauchen.',
   opt_key_hint: 'Fügen Sie hier Ihren Gemini-API-Schlüssel ein. Kostenlos bei Google AI Studio erhältlich, Link oben; das kostenlose Kontingent hat ein Tageslimit.',
   opt_qwen_key_hint:
     'Fügen Sie hier Ihren Qwen-API-Schlüssel ein. Erstellen Sie ihn in der Konsole von Alibaba Cloud Model Studio, Link oben; neue Konten bekommen meist ein kostenloses Guthaben.',
@@ -457,14 +457,17 @@ export default {
   opt_cache_clear: 'Alle gespeicherten Beschreibungen löschen',
   opt_cache_info: '$1 Videos beschrieben und auf diesem Computer gespeichert, $2 KB.',
   opt_cache_confirm: 'Alle gespeicherten Beschreibungen löschen? Die Videos müssen dann neu beschrieben werden.',
-  privacy_1: 'SceneVoice hat keinen Server und kein Konto. Es sammelt keine Nutzungsdaten.',
+  privacy_1:
+    'Mit Ihrem eigenen Schlüssel hat SceneVoice keinen Server und kein Konto, und nichts wird an den Entwickler gesendet. Es sammelt nie Nutzungsdaten. SceneVoice Cloud ist, wenn Sie es einschalten, ein optionaler Relay-Dienst des Projekts; der nächste Punkt sagt, was er erhält.',
+  privacy_6:
+    'SceneVoice Cloud ist aus, bis Sie „Kostenlos starten“ drücken. Ist es an, gehen die Anfragen mit einem anonymen Gerätetoken statt eines Schlüssels an api.scenevoice.app, und der Relay-Dienst reicht sie an Gemini weiter. Pro Token speichert er nur, wie viele Sekunden Video heute beschrieben wurden, den Tarif und einen etwaigen Lizenzschlüssel, dazu den fertigen Text der Beschreibungen eines Videos, wenn das Teilen eingeschaltet ist. Bilder, Ihre Fragen, die Antworten oder Ihre IP-Adresse speichert er nie, und Anfragen protokolliert er nicht. „Cloud nicht mehr verwenden“ entfernt das Token.',
   privacy_2:
     'Um Beschreibungen zu erstellen oder eine Frage zu beantworten, werden Adresse, Titel, Kanal und Beschreibungstext des YouTube-Videos, Ihre Frage und die letzten Beschreibungen mit Ihrem Schlüssel an die Gemini-API gesendet. Um einen Moment neu zu beschreiben, wird auch die Beschreibung gesendet, die Sie als falsch markiert haben. Es gelten die Bedingungen von Google für die Gemini-API.',
   privacy_5:
     'Mit Qwen, und auf Bilibili, kann das Modell das Video nicht über seine Adresse öffnen: Stattdessen wird alle paar Sekunden ein verkleinertes Bild des laufenden Videos gesendet, mit Titel, Uploader und Beschreibungstext. Für Qwen gelten die Bedingungen von Alibaba Cloud Model Studio. Die Bilder bleiben ein oder zwei Minuten im Arbeitsspeicher und werden nie gespeichert.',
   privacy_3: 'Beschreibungen werden auf diesem Computer gespeichert, damit ein Video nur einmal beschrieben wird.',
   privacy_4:
-    'Die Beschreibungen, die Sie als falsch markieren, werden nur auf diesem Computer festgehalten, damit die korrigierten Fassungen erhalten bleiben. Es gibt keinen Feedback-Server: Nichts wird an den Entwickler gesendet. Die Aufzeichnung wird zusammen mit den gespeicherten Beschreibungen gelöscht.',
+    'Die Beschreibungen, die Sie als falsch markieren, werden nur auf diesem Computer festgehalten, damit die korrigierten Fassungen erhalten bleiben. Sie werden nie an den Entwickler gesendet und vor dem Teilen der Beschreibungen eines Videos entfernt. Die Aufzeichnung wird zusammen mit den gespeicherten Beschreibungen gelöscht.',
   opt_reset_title: '6. Standardeinstellungen wiederherstellen',
   opt_reset_intro:
     'Setzt alle Einstellungen zu Beschreibungen, Stimme und Ton so zurück, wie sie bei der Installation von SceneVoice waren. Ihr API-Schlüssel, das Modell und die gespeicherten Beschreibungen bleiben. Tastenkürzel bleiben auch; ändern Sie sie auf der Tastenkürzel-Seite von Chrome.',
@@ -507,7 +510,7 @@ export default {
   welcome_sample_done: 'Das war das Beispiel. Als Nächstes: wählen, wie Beschreibungen entstehen.',
   welcome_step2_title: '2. Wählen, wie Beschreibungen entstehen',
   welcome_source_legend: 'Beschreibungen kommen von',
-  welcome_source_cloud: 'SceneVoice Cloud: kostenloses Kontingent, nichts einzurichten (empfohlen)',
+  welcome_source_cloud: 'SceneVoice Cloud: kostenloses Kontingent, nichts einzurichten',
   welcome_source_cloud_hint: '60 Minuten neu beschriebenes Video pro Tag; Videos, die andere SceneVoice-Nutzer schon beschrieben haben, zählen nicht. Die Anfragen laufen mit einer anonymen Gerätekennung über den SceneVoice-Relay, ohne Konto.',
   welcome_source_own: 'Mein eigener Schlüssel (Gemini oder Qwen): unbegrenzt, privat',
   welcome_source_own_hint: 'Sie holen sich einen kostenlosen Schlüssel bei Google AI Studio oder Alibaba Cloud Model Studio und fügen ihn ein. Nichts läuft über SceneVoice.',

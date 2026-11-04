@@ -22,7 +22,7 @@ import {
   revisionClip,
   usageOf,
 } from './gemini.js';
-import { addUsage } from './usage.js';
+import { EMPTY_USAGE, addUsage } from './usage.js';
 
 /** Make sure the client has a model; pick one from the key's list when it has none. */
 export async function ensureModel(client) {
@@ -59,22 +59,47 @@ export async function switchModel(client, tried, { otherFamily = false } = {}) {
   return next;
 }
 
+/**
+ * Attach what was spent before `err` ended a request to the error, on top of
+ * what it already carries, so the caller can still count it: a reply that was
+ * cut off or unreadable is billed like any other. Nothing is attached when
+ * nothing was billed (the request never got an answer).
+ */
+function withUsage(err, usage) {
+  const total = addUsage(usage, err?.usage);
+  if (total.requests && err && typeof err === 'object') err.usage = total;
+  return err;
+}
+
 /** One section's descriptions, with what the request(s) cost: { cues, characters, videoType, usage }. */
 async function generateChunk(client, req, chunk, signal, depth = 0) {
+  let usage = EMPTY_USAGE;
   try {
     const body = await client.generate(buildScriptRequest({ ...req, chunk, model: client.model }), signal);
-    const usage = usageOf(body);
+    usage = usageOf(body);
     const raw = parseScriptResponse(body);
     return { ...normalizeChunk(raw, { duration: req.duration, chunkStart: chunk.start, chunkEnd: chunk.end, lang: req.lang }), usage };
   } catch (err) {
+    // What the failed reply cost goes with the halves, or with the error.
+    const spent = addUsage(usage, err?.usage);
     // Output cut off or malformed: split the section in two and try again.
     if (err instanceof GeminiError && ['truncated', 'bad-json', 'too-long'].includes(err.code) && depth < 2 && chunk.end - chunk.start > 90) {
       const mid = Math.round((chunk.start + chunk.end) / 2);
-      const a = await generateChunk(client, req, { start: chunk.start, end: mid }, signal, depth + 1);
-      const b = await generateChunk(client, { ...req, characters: [...req.characters, ...a.characters] }, { start: mid, end: chunk.end }, signal, depth + 1);
-      return { cues: [...a.cues, ...b.cues], characters: [...a.characters, ...b.characters], videoType: a.videoType || b.videoType, usage: addUsage(a.usage, b.usage) };
+      let a;
+      try {
+        a = await generateChunk(client, req, { start: chunk.start, end: mid }, signal, depth + 1);
+      } catch (e) {
+        throw withUsage(e, spent);
+      }
+      let b;
+      try {
+        b = await generateChunk(client, { ...req, characters: [...req.characters, ...a.characters] }, { start: mid, end: chunk.end }, signal, depth + 1);
+      } catch (e) {
+        throw withUsage(e, addUsage(spent, a.usage));
+      }
+      return { cues: [...a.cues, ...b.cues], characters: [...a.characters, ...b.characters], videoType: a.videoType || b.videoType, usage: addUsage(addUsage(spent, a.usage), b.usage) };
     }
-    throw err;
+    throw withUsage(err, usage);
   }
 }
 
@@ -114,6 +139,8 @@ export async function runGeneration({ client, videoId, duration, meta, lang, scr
   const tried = new Set([client.model]);
   // A used-up daily quota moves to another model family once; a second one is where it stops.
   let quotaSwitched = false;
+  // What a failed attempt at a section cost (a model switched away from): counted with the next section, or with the error.
+  let pending = EMPTY_USAGE;
   for (let i = 0; i < chunks.length; i += 1) {
     const chunk = chunks[i];
     let part;
@@ -130,14 +157,17 @@ export async function runGeneration({ client, videoId, duration, meta, lang, scr
           if (daily) quotaSwitched = true;
           tried.add(next);
           onModel?.(next, err.code);
+          pending = addUsage(pending, err.usage);
           i -= 1;
           continue;
         }
       }
-      throw err;
+      throw withUsage(err, pending);
     }
-    if (signal?.aborted) throw new GeminiError('aborted');
-    const { usage, ...descriptions } = part;
+    if (signal?.aborted) throw withUsage(new GeminiError('aborted'), addUsage(pending, part.usage));
+    const { usage: own, ...descriptions } = part;
+    const usage = addUsage(pending, own);
+    pending = EMPTY_USAGE;
     current = mergeScript(current, descriptions, chunk.end);
     current.usage = addUsage(current.usage, usage);
     current.model = client.model;
@@ -170,6 +200,12 @@ export async function runRevision(client, params, signal) {
   const { cue, duration, lang } = params;
   const body = await client.generate(buildRevisionRequest({ ...params, model: client.model }), signal, { retries: 2 });
   const span = revisionClip(cue.start, duration);
-  const { cues } = normalizeChunk(parseScriptResponse(body), { duration, chunkStart: span.start, chunkEnd: span.end, lang });
+  let raw;
+  try {
+    raw = parseScriptResponse(body);
+  } catch (err) {
+    throw withUsage(err, usageOf(body));
+  }
+  const { cues } = normalizeChunk(raw, { duration, chunkStart: span.start, chunkEnd: span.end, lang });
   return { cue: correctedCue(cue, cues, lang), usage: usageOf(body) };
 }

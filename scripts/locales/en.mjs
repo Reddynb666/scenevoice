@@ -70,7 +70,7 @@ export default {
   guide_qwen_7: 'Come back to SceneVoice settings, paste the key into “Qwen API key” and press “Save and test”.',
   guide_privacy_title: 'Your key stays with you',
   guide_privacy:
-    'The key is stored only on this computer and sent only to the model\'s own address. SceneVoice has no server and never sees it. Do not share the key with others: whoever has it can use your quota.',
+    'The key is stored only on this computer and sent only to the model\'s own address. With your own key, SceneVoice has no server in that path and never sees it. Do not share the key with others: whoever has it can use your quota.',
   opt_key_hint: 'Paste your Gemini API key here. Get one free at Google AI Studio (link above); the free tier has a daily limit.',
   opt_qwen_key_hint:
     'Paste your Qwen API key here. Create one in the Alibaba Cloud Model Studio console (link above); new accounts usually get a free allowance.',
@@ -245,6 +245,7 @@ export default {
   error_cloud_truncated: 'The answer from SceneVoice Cloud was cut off. Try again.',
   error_cloud_bad_json: 'SceneVoice Cloud returned an answer SceneVoice could not read. Try again.',
   error_cloud_rate_limited: 'Too many requests to SceneVoice Cloud in a short time. Wait a minute and try again; descriptions made so far are saved.',
+  error_cloud_device_limit: 'Too many computers on this network have started SceneVoice Cloud today. Try again after $1.',
   error_cloud_quota_daily: 'The model behind SceneVoice Cloud has no quota left today. Try again tomorrow, or use a key of your own in settings.',
   // ----- popup -----
   popup_setup_title: 'Set up SceneVoice',
@@ -480,14 +481,17 @@ export default {
   opt_cache_clear: 'Delete all saved descriptions',
   opt_cache_info: '$1 videos described and saved on this computer ($2 KB).',
   opt_cache_confirm: 'Delete all saved descriptions? Videos will need to be described again.',
-  privacy_1: 'SceneVoice has no server and no account. It does not collect analytics.',
+  privacy_1:
+    'With your own key, SceneVoice has no server and no account, and nothing is sent to the developer. It never collects analytics. SceneVoice Cloud, if you turn it on, is an optional relay run by the project; the next point says what it receives.',
+  privacy_6:
+    'SceneVoice Cloud is off until you press “Start free”. With it on, requests go to api.scenevoice.app with an anonymous device token instead of a key, and the relay passes them to Gemini. Per token it keeps only how many seconds of video were described today, the plan and any licence key, plus the finished text of a video’s descriptions when sharing is on. It never keeps pictures, your questions, the answers or your IP address, and does not log requests. “Stop using Cloud” removes the token.',
   privacy_2:
     'To create descriptions or answer a question, the YouTube video\'s address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google\'s terms for the Gemini API apply.',
   privacy_5:
     'With Qwen, and on Bilibili, the model cannot open the video by its address: every few seconds a scaled-down picture of the playing video is sent instead, with the title, uploader and description. Alibaba Cloud Model Studio’s terms apply to Qwen. The pictures are kept in memory for a minute or two and never saved.',
   privacy_3: 'Descriptions are saved on this computer so a video is described only once.',
   privacy_4:
-    'The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. There is no feedback server: nothing is sent to the developer. The record is deleted with the saved descriptions.',
+    'The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer, and are stripped before a video’s descriptions are shared. The record is deleted with the saved descriptions.',
   opt_reset_title: '6. Restore defaults',
   opt_reset_intro:
     'Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. Keyboard shortcuts stay too; change them on Chrome’s shortcuts page.',
@@ -514,6 +518,10 @@ export default {
   opt_cloud_starting: 'Getting your free allowance…',
   opt_cloud_started: 'SceneVoice Cloud is ready. You have $1 minutes of newly described video a day; videos already described by others do not count.',
   opt_cloud_use_own: 'You can use a key of your own instead: Gemini or Qwen, below.',
+  opt_cloud_token_lost: 'SceneVoice Cloud no longer recognises this computer’s device token, so it has been removed. Press Start free to get a new one; your other settings are kept.',
+  // Start free could not get a device token. Nothing has been described yet, so the generation-time messages do not fit.
+  cloud_register_network: 'SceneVoice Cloud could not be reached.',
+  cloud_register_busy: 'SceneVoice Cloud is busy right now. Try Start free again in a minute.',
   opt_cloud_stop: 'Stop using Cloud',
   opt_cloud_stopped: 'SceneVoice Cloud is no longer used on this computer; the device token was removed.',
   set_share_descriptions: 'Share finished descriptions with other SceneVoice users',
@@ -539,11 +547,13 @@ export default {
   welcome_step1_body: 'Three sample descriptions, the way they come during a video. Nothing is sent anywhere and no key is needed.',
   welcome_output_legend: 'Hear them through',
   welcome_sample_button: 'Hear a sample',
+  welcome_sample_stop: 'Stop the sample',
+  welcome_sample_voice_failed: 'The built-in voice could not speak on this computer. Choose “My screen reader” above and press Hear a sample again.',
   welcome_sample_between: 'The video keeps playing; descriptions fit the pauses.',
   welcome_sample_done: 'That was the sample. Next: choose how descriptions are made.',
   welcome_step2_title: '2. Choose how descriptions are made',
   welcome_source_legend: 'Descriptions are made by',
-  welcome_source_cloud: 'SceneVoice Cloud: free allowance, nothing to set up (recommended)',
+  welcome_source_cloud: 'SceneVoice Cloud: free allowance, nothing to set up',
   welcome_source_cloud_hint: '60 minutes of newly described video a day; videos already described by other SceneVoice users do not count. Requests go through the SceneVoice relay with an anonymous device token, no account.',
   welcome_source_own: 'My own key (Gemini or Qwen): unlimited, private',
   welcome_source_own_hint: 'You get a free key from Google AI Studio or Alibaba Cloud Model Studio and paste it in. Nothing goes through SceneVoice.',
