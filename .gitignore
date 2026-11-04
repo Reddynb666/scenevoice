@@ -1,6 +1,9 @@
 node_modules/
 dist/
+dist-maps/
+dist-meta.json
 *.zip
+SHA256SUMS
 test/e2e/output/
 __pycache__/
 .DS_Store

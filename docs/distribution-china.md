@@ -24,7 +24,7 @@ Desktop browsers in China, July 2026 (StatCounter): Chrome 48%, Edge 29%,
 
 1. Create an empty public repository `scenevoice` on https://gitee.com (Gitee requires a verified phone number).
 2. Mirror the GitHub repository: in Gitee, *Import from GitHub*, or `git remote add gitee git@gitee.com:<user>/scenevoice.git && git push gitee main --tags`.
-3. For each release, create a Gitee *Release* with the same tag and attach `scenevoice-<version>.zip`.
+3. For each release, create a Gitee *Release* with the same tag and attach `scenevoice-<version>.zip` and `SHA256SUMS` from the GitHub Release (both are built by `.github/workflows/release.yml`; see `docs/release.md`).
 4. Install instructions for that page (Chinese), for browsers without store access:
    1. 下载 `scenevoice-<version>.zip` 并解压到一个固定的文件夹（以后不要删除或移动它）。
    2. 在 Chrome 打开 `chrome://extensions`（Edge 为 `edge://extensions`，360 浏览器为“扩展中心”），打开“开发者模式”。

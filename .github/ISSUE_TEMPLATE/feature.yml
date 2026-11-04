@@ -1,0 +1,32 @@
+# Plain text boxes only, one required, so the form can be filled in with a
+# screen reader without hunting through dropdowns.
+name: Idea or request (功能建议)
+description: Something SceneVoice should do, or do differently. 希望增加或改变的功能。
+title: "Request: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Every field below is a plain text box; only the first is required. English or Chinese (可以用中文).
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like SceneVoice to do
+      description: Describe it as you would hear it. For example "After a description, say how long until the next one".
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What you do today instead, and what is hard about it
+  - type: textarea
+    id: where
+    attributes:
+      label: Where it matters
+      description: Which site (YouTube, Bilibili, another), which kind of video, which screen reader or voice, which language.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Links, other tools that do this well, how you would want it announced.
