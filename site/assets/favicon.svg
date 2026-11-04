@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="SceneVoice">
+  <!-- A speech wave on a dark square: the same idea as the extension icon, legible at 16 pixels. -->
+  <rect width="64" height="64" rx="12" fill="#0b4a8f"/>
+  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round">
+    <path d="M18 32h0"/>
+    <path d="M26 22v20"/>
+    <path d="M34 14v36"/>
+    <path d="M42 24v16"/>
+    <path d="M50 30v4"/>
+  </g>
+</svg>

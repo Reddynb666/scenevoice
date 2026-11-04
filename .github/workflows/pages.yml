@@ -1,0 +1,62 @@
+# GitHub Pages deployment for the website in site/.
+#
+# To turn it on: in the repository settings under Pages set "Source" to
+# "GitHub Actions". The site is then served at
+# https://reddynb666.github.io/scenevoice/ (and /zh-CN/ for Chinese).
+#
+# Nothing is built: site/ is uploaded as it is. The only step before the upload is
+# site/check.mjs, so a page that fails axe or loses a link never goes live.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Accessibility check (axe-core, WCAG 2.2 AA, links, names, contrast)
+        run: node site/check.mjs
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

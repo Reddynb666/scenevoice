@@ -1,0 +1,233 @@
+<!doctype html>
+<!--
+  SceneVoice 官网，简体中文页。英文页是 ../index.html；两页结构相同（同样的 section、同样的 id、同样的顺序），
+  site/check.mjs 会比对。文字是为中文读屏用户单独写的，不是英文页的逐句翻译。
+
+  需要所有者填写的地方（搜索“FILL IN”）：
+    1. 商店链接，在“安装”一节：data-store="chrome"、data-store="edge"、data-store="gitee" 的三个 <a>。
+       把 href="#" 换成真实地址，删掉 aria-disabled="true"，并把“……（即将上线）”改成商店名。
+    2. 联系邮箱，在“面向机构与创作者”一节：带 data-contact 的 mailto: 链接。
+    3. 盲人测试者名单，在页脚（data-testers）。
+    4. 站点地址：如果从 GitHub Pages 搬到自己的域名，要同时改 <link rel="canonical">、hreflang、og:url、og:image 和 JSON-LD 里的 url。
+-->
+<html lang="zh-CN" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SceneVoice 声景 — YouTube 和哔哩哔哩的口述影像</title>
+<meta name="description" content="任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。">
+<link rel="canonical" href="https://reddynb666.github.io/scenevoice/zh-CN/">
+<link rel="alternate" hreflang="zh-Hans" href="https://reddynb666.github.io/scenevoice/zh-CN/">
+<link rel="alternate" hreflang="en" href="https://reddynb666.github.io/scenevoice/">
+<link rel="alternate" hreflang="x-default" href="https://reddynb666.github.io/scenevoice/">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../assets/logo.png" type="image/png" sizes="128x128">
+<link rel="apple-touch-icon" href="../assets/logo.png">
+<link rel="stylesheet" href="../styles.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SceneVoice 声景">
+<meta property="og:title" content="SceneVoice 声景 — YouTube 和哔哩哔哩的口述影像">
+<meta property="og:description" content="任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。">
+<meta property="og:url" content="https://reddynb666.github.io/scenevoice/zh-CN/">
+<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.svg">
+<meta property="og:image:alt" content="SceneVoice：任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0b4a8f">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SceneVoice 声景",
+  "alternateName": "SceneVoice",
+  "url": "https://reddynb666.github.io/scenevoice/zh-CN/",
+  "description": "任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。",
+  "applicationCategory": "Accessibility",
+  "applicationSubCategory": "BrowserExtension",
+  "operatingSystem": "Chrome、Edge 及其他 Chromium 内核浏览器（116 及以上）",
+  "inLanguage": ["zh-Hans", "en"],
+  "accessibilityFeature": ["audioDescription", "readingOrder", "structuralNavigation"],
+  "accessibilityControl": ["fullKeyboardControl"],
+  "accessibilityHazard": "none",
+  "license": "https://github.com/reddynb666/scenevoice/blob/main/LICENSE",
+  "codeRepository": "https://github.com/reddynb666/scenevoice",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "CNY",
+    "availability": "https://schema.org/InStock"
+  }
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到正文</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="./">
+      <img src="../assets/logo.png" alt="" width="40" height="40">
+      SceneVoice 声景
+    </a>
+    <nav class="lang-switch" aria-label="语言">
+      <a href="../" hreflang="en" lang="en" data-lang-switch="en">English</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap" tabindex="-1">
+
+  <section id="hook" aria-labelledby="hook-heading">
+    <h1 id="hook-heading">YouTube 和哔哩哔哩的口述影像，用你自己的读屏来听</h1>
+    <p class="lead">任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。</p>
+    <p>SceneVoice（声景）是一个 Chrome / Edge 浏览器扩展，为盲人和低视力观众而做。它让 AI 模型看视频，写出画面的简短描述，然后趁对白之间的空隙读出来——用的是你读屏软件自己的声音、你习惯的语速，盲文显示器上也能看。</p>
+    <nav aria-label="本页目录">
+      <ul>
+        <li><a href="#hear">先听听看</a></li>
+        <li><a href="#how">怎么用</a></li>
+        <li><a href="#install">安装</a></li>
+        <li><a href="#cost">适合谁、要花多少钱</a></li>
+        <li><a href="#privacy">隐私</a></li>
+        <li><a href="#organisations">面向机构与创作者</a></li>
+        <li><a href="#press">媒体与社群资料</a></li>
+      </ul>
+    </nav>
+  </section>
+
+  <section id="hear" aria-labelledby="hear-heading">
+    <h2 id="hear-heading">先听听看</h2>
+    <p>下面是三条示例口述，按 SceneVoice 实际的放法：先是一句对白，空隙里跟一条描述。你平时用什么听，就按哪个按钮；读到的文字也会同步显示在下面。</p>
+    <div class="button-row">
+      <button type="button" class="button" id="hear-sr" aria-describedby="hear-sr-help">用我的读屏听</button>
+      <button type="button" class="button secondary" id="hear-tts" aria-describedby="hear-tts-help">用浏览器的语音听</button>
+    </div>
+    <p id="hear-sr-help">每出现一行，读屏就读一行。SceneVoice 默认就是这样工作的。</p>
+    <p id="hear-tts-help">改用浏览器自带的语音朗读。它朗读期间，下面的文字不会再交给读屏播报，两个声音不会抢着说。需要 JavaScript，并且浏览器要支持语音合成。</p>
+    <p id="sample-status" class="status" role="status" aria-live="polite"></p>
+    <div id="sample" class="sample" role="region" aria-live="polite" aria-atomic="false" aria-label="示例口述">
+      <p class="dialogue">对白。</p>
+      <p>一个穿红色大衣的女人把报纸顶在头上挡雨，跑过湿漉漉的街道。</p>
+      <p class="dialogue">对白。</p>
+      <p>屏幕文字：“第二章 码头”。天刚亮，一艘渔船绕过防波堤。</p>
+      <p class="dialogue">对白。</p>
+      <p>他从口袋里掏出一封折好的信，犹豫了一下，没拆开又放了回去。</p>
+    </div>
+    <script type="application/json" id="sample-data">
+    {
+      "dialogue": "对白。",
+      "lines": [
+        "一个穿红色大衣的女人把报纸顶在头上挡雨，跑过湿漉漉的街道。",
+        "屏幕文字：“第二章 码头”。天刚亮，一艘渔船绕过防波堤。",
+        "他从口袋里掏出一封折好的信，犹豫了一下，没拆开又放了回去。"
+      ],
+      "labels": {
+        "sr": "用我的读屏听",
+        "tts": "用浏览器的语音听",
+        "stop": "停止示例"
+      },
+      "status": {
+        "sr": "开始播放三条示例口述，每出现一行读一行。",
+        "tts": "开始用浏览器的语音播放三条示例口述。",
+        "done": "示例播放完了。",
+        "stopped": "示例已停止。",
+        "unavailable": "这个浏览器没有语音合成功能，浏览器语音放不出来。示例文字就在下面，可以用读屏来读。"
+      }
+    }
+    </script>
+  </section>
+
+  <section id="how" aria-labelledby="how-heading">
+    <h2 id="how-heading">怎么用</h2>
+    <ol class="steps">
+      <li><strong>安装扩展</strong>，在 Chrome 或 Edge 里装好后，照着专为读屏用户写的分步指南添加一个模型 Key：哔哩哔哩用阿里云的通义千问，YouTube 用谷歌的 Gemini（有免费额度）。</li>
+      <li><strong>打开一个视频，按 <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>。</strong> SceneVoice 每一步都会播报自己在做什么。前面一段大约半分钟就绪，你会听到“可以开始看了”。</li>
+      <li><strong>口述放在对白空隙里。</strong> 每个时刻都有简洁、标准、详细三种长度，SceneVoice 挑能放进空隙的最长那条；放不下就不说，不压对白。屏幕上的文字按原文逐字读。你也可以让它暂停视频、把整条描述读完。</li>
+      <li><strong>随时提问。</strong> 按 <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Q</kbd>，输入“谁在说话？”“牌子上写的什么？”，就能得到针对这一刻的回答。描述说错了，告诉它一声，这一段会重新描述。</li>
+    </ol>
+  </section>
+
+  <section id="install" aria-labelledby="install-heading">
+    <h2 id="install-heading">安装</h2>
+    <p>支持 Chrome、Edge、Brave 等 Chromium 内核浏览器，116 及以上版本。商店版本正在审核；在此之前，GitHub 或 Gitee 上的发布包在这些浏览器里都能用。中国大陆用户建议走 Edge 加载项或 Gitee。</p>
+    <div class="button-row">
+      <!-- FILL IN: 商店链接，见文件顶部说明。 -->
+      <a class="button" href="#" data-store="chrome" aria-disabled="true">Chrome 应用商店（即将上线）</a>
+      <a class="button" href="#" data-store="edge" aria-disabled="true">Edge 加载项（即将上线）</a>
+      <a class="button" href="https://github.com/reddynb666/scenevoice/releases" data-store="github">GitHub Releases</a>
+      <a class="button" href="#" data-store="gitee" aria-disabled="true">Gitee 镜像，中国大陆（即将上线）</a>
+    </div>
+    <p>用发布包安装：下载 zip 并解压，打开 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>），开启开发者模式，点“加载已解压的扩展程序”，选中解压后的文件夹。之后设置页会自动打开，焦点就在 Key 输入框上。完整步骤和申请免费 Key 的方法见<a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md#安装">中文说明</a>。</p>
+  </section>
+
+  <section id="cost" aria-labelledby="cost-heading">
+    <h2 id="cost-heading">适合谁、要花多少钱</h2>
+    <p>给看 YouTube 和哔哩哔哩的盲人和低视力朋友，给陪他们一起看的人，也给需要口述影像的盲校、图书馆和用人单位。扩展本身免费、开源（MIT 协议），没有账号，也没有自己的服务器。</p>
+    <dl class="plans">
+      <dt>自带 Key —— 永久免费</dt>
+      <dd>用你自己申请的通义千问 Key（哔哩哔哩）或 Gemini Key（YouTube）。全部功能，我们不设任何限制；除了发给模型的请求，什么都不离开你的电脑。今天的 SceneVoice 就是这一档。</dd>
+      <dt>SceneVoice 云端免费额度 —— 筹备中</dt>
+      <dd>给不想碰 API 控制台的人：每天一份新口述额度（计划每天 60 分钟视频），加上不限量地收听别人已经生成过的同一个视频的口述。不用注册，扩展会自动领一个匿名凭证。目前还没开放。</dd>
+      <dt>SceneVoice 云端 Plus —— 筹备中</dt>
+      <dd>给重度用户：更多时长、优先生成、长视频的详细档。计划价格：中国大陆每月 9.9 元或每年 88 元（微信、支付宝）；海外每月 4 美元或每年 36 美元。经济困难的朋友免费，不用出示任何证明。</dd>
+      <dt>机构许可 —— 筹备中</dt>
+      <dd>盲校、残联、图书馆、高校残障服务办公室、视障康复机构、用人单位：托管 Key、预算上限、用量报表和无障碍符合性报告（VPAT）。计划价格：中国大陆按校、按馆商议；海外每人每年 3 到 5 美元。</dd>
+    </dl>
+    <p class="note"><strong>凡是和无障碍有关的，永远不收费。</strong> 读屏输出、键盘操作、暂停模式、提问对话框和所有设置都免费；自带 Key 这条路永远不降速、不缩水。</p>
+  </section>
+
+  <section id="privacy" aria-labelledby="privacy-heading">
+    <h2 id="privacy-heading">隐私</h2>
+    <ul>
+      <li><strong>没有服务器、没有账号、不追踪。</strong> SceneVoice 没有后端，你做的任何事都不会发给开发者；没有统计、没有使用数据、没有崩溃报告、没有标识符。这个网站同样没有，也不设 Cookie。</li>
+      <li><strong>从不录制、不上传视频。</strong> 在哔哩哔哩上，或者用通义千问时，发出去的是画面的小尺寸截图（最宽 640 像素），只在标签页内存里保留一两分钟；在 YouTube 上用 Gemini 时，发出去的是视频地址、标题和要描述的时间段，由模型自己去读公开视频。</li>
+      <li><strong>Key 是你自己的。</strong> 只存在浏览器本机的扩展存储里，只走请求头，绝不放进网址，也绝不进入哔哩哔哩或 YouTube 的网页。</li>
+      <li><strong>只有你选的模型能看到请求。</strong> 请求只发给阿里云百炼（通义千问）或谷歌的 Gemini API，按它们各自的条款处理，不经过任何第三方。用通义千问的中国大陆地址，数据不出境。</li>
+      <li><strong>一切都在你的电脑上，随时可以删。</strong> 口述、纠错记录和设置都存在本地，设置页能看到存了什么，一键全部删除。</li>
+    </ul>
+    <p>完整的<a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" hreflang="en">隐私政策</a>（英文）列出了每一个请求和每一项权限，以及为什么需要。</p>
+  </section>
+
+  <section id="organisations" aria-labelledby="organisations-heading">
+    <h2 id="organisations-heading">面向机构与创作者</h2>
+    <p>盲校、公共图书馆、高校残障服务办公室和用人单位可以一次给所有人装上：一个托管 Key、一个预算上限、一份用量报表，不涉及任何观众的个人信息。视频平台和读屏软件厂商可以授权使用口述引擎和共享缓存，热门视频只生成一次，所有人都能听。</p>
+    <p>UP 主和老师们：你的视障观众今天就能自己给你的视频加口述，不需要你做任何事。如果你想把口述音轨随视频一起发布，这在路线图上。</p>
+    <!-- FILL IN: 联系邮箱。 -->
+    <p><a href="mailto:your-address@example.com" data-contact>来信洽谈机构或平台授权</a>（邮箱待填），或者<a href="https://github.com/reddynb666/scenevoice/issues">在 GitHub 上提 issue</a>。</p>
+  </section>
+
+  <section id="press" aria-labelledby="press-heading">
+    <h2 id="press-heading">媒体与社群资料</h2>
+    <h3>一句话</h3>
+    <p>任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。</p>
+    <h3>简介</h3>
+    <p>SceneVoice（声景）是一个免费、开源的浏览器扩展，为盲人和低视力观众给哔哩哔哩和 YouTube 视频加上 AI 口述影像。在任何视频上按一个键，大约半分钟后，画面的简短描述就会在对白空隙里读出来——用观众自己的读屏软件，或者浏览器内置语音。描述遵循口述影像规范：只说看得见的，屏幕文字逐字读，看不清就说看不清。观众可以就任何一刻提问，也可以纠正说错的描述。SceneVoice 没有服务器、没有账号，用观众自己的模型 Key 在浏览器里运行。源代码在 GitHub 上，MIT 协议。</p>
+    <h3>链接</h3>
+    <ul>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md">中文说明（README）</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice#readme" hreflang="en">英文说明（README）</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CHANGELOG.md" hreflang="en">更新日志</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CONTRIBUTING.md" hreflang="en">参与贡献，含读屏测试清单</a></li>
+      <li><a href="../assets/logo.png">图标，128×128 像素</a>，以及<a href="../assets/og.svg">社交分享图</a></li>
+    </ul>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul>
+      <li><a href="https://github.com/reddynb666/scenevoice">GitHub</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/LICENSE">MIT 协议</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" hreflang="en">隐私政策</a></li>
+      <li><a href="../" hreflang="en" lang="en">English</a></li>
+    </ul>
+    <!-- FILL IN: 测试者名单，须经本人同意。 -->
+    <p data-testers>和盲人、低视力测试者一起做出来的。经他们同意后，名字会出现在这里。</p>
+  </div>
+</footer>
+
+<script src="../script.js" defer></script>
+</body>
+</html>
