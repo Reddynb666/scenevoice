@@ -1,0 +1,17 @@
+{
+  "name": "scenevoice-cloud",
+  "version": "1.0.0",
+  "description": "SceneVoice Cloud relay: a metered Gemini/DashScope proxy for the SceneVoice extension, as a Cloudflare Worker",
+  "private": true,
+  "type": "module",
+  "main": "src/worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "cd .. && npx vitest run server/test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.48.0"
+  },
+  "license": "MIT"
+}
