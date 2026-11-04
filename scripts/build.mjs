@@ -1,18 +1,28 @@
 // Build the extension into dist/ and (with --zip) package it.
-//   node scripts/build.mjs          production build
-//   node scripts/build.mjs --zip    build + scenevoice-<version>.zip
-//   node scripts/build.mjs --watch  rebuild on change
+//   node scripts/build.mjs             production build; source maps go to dist-maps/
+//   node scripts/build.mjs --zip       build + scenevoice-<version>.zip and scenevoice-<version>-sourcemaps.zip
+//   node scripts/build.mjs --metafile  build + dist-meta.json and a size table; fails when a bundle is over its limit
+//   node scripts/build.mjs --watch     rebuild on change (inline source maps, no minify)
 
 import { build, context } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { join, dirname } from 'node:path';
+import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import { CORE_LOCALES, LOCALES, STRINGS, coverage, strayKeys } from './locales.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
+// Source maps live outside dist/ so they are never in the store package, but
+// are kept with each release (the -sourcemaps zip) to read a stack trace.
+const maps = join(root, 'dist-maps');
 const args = new Set(process.argv.slice(2));
+
+/** Minified bundle sizes CI refuses to exceed; the content script loads on every YouTube page. */
+const SIZE_LIMITS = { 'content.js': 120 * 1024 };
+
+/** What may go into the store package, by extension; dotfiles and .map never do. */
+const PACKAGED = new Set(['.js', '.html', '.css', '.json', '.png']);
 
 function walk(dir) {
   return readdirSync(dir).flatMap((f) => {
@@ -80,7 +90,7 @@ function writeLocales() {
 
 function copyStatic() {
   cpSync(join(root, 'static'), dist, { recursive: true });
-  for (const page of ['popup', 'options', 'transcript', 'guide']) {
+  for (const page of ['popup', 'options', 'transcript', 'guide', 'welcome']) {
     cpSync(join(root, 'src', page, `${page}.html`), join(dist, `${page}.html`));
     cpSync(join(root, 'src', page, `${page}.css`), join(dist, `${page}.css`));
   }
@@ -92,13 +102,108 @@ function copyStatic() {
   return pkg.version;
 }
 
+/**
+ * A zip in plain Node (no dependency): local headers, central directory, end
+ * record, deflate from zlib. Entries are sorted so the same files give the
+ * same listing. Chrome, Edge and `unzip` all read it.
+ */
+function writeZip(file, entries) {
+  const crc32 = zlib.crc32 || ((buf) => {
+    // Node before 22.2 has no zlib.crc32.
+    let c = ~0;
+    for (const b of buf) {
+      c ^= b;
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return ~c >>> 0;
+  });
+  const now = new Date();
+  const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const date = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const { name, data } of [...entries].sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const nameBuf = Buffer.from(name, 'utf8');
+    const deflated = zlib.deflateRawSync(data, { level: 9 });
+    const method = deflated.length < data.length ? 8 : 0;
+    const body = method ? deflated : data;
+    const fields = [[20, 2], [0x800, 2], [method, 2], [time, 2], [date, 2], [crc32(data), 4], [body.length, 4], [data.length, 4], [nameBuf.length, 2], [0, 2]];
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    let at = 4;
+    for (const [v, w] of fields) at = w === 2 ? local.writeUInt16LE(v, at) : local.writeUInt32LE(v, at);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4); // version made by
+    at = 6;
+    for (const [v, w] of fields) at = w === 2 ? central.writeUInt16LE(v, at) : central.writeUInt32LE(v, at);
+    // comment length, disk number, internal and external attributes stay 0
+    central.writeUInt32LE(offset, 42);
+    locals.push(local, nameBuf, body);
+    centrals.push(central, nameBuf);
+    offset += local.length + nameBuf.length + body.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  writeFileSync(file, Buffer.concat([...locals, directory, end]));
+}
+
+/** Files of a folder as zip entries with forward-slash names relative to it. */
+function entriesOf(dir, keep) {
+  return walk(dir)
+    .map((p) => relative(dir, p).split(/[\\/]/).join('/'))
+    .filter((name) => !name.split('/').some((part) => part.startsWith('.')))
+    .filter(keep)
+    .map((name) => ({ name, data: readFileSync(join(dir, name)) }));
+}
+
+/** esbuild writes maps next to the bundles; keep dist/ free of them. */
+function moveSourceMaps() {
+  rmSync(maps, { recursive: true, force: true });
+  mkdirSync(maps, { recursive: true });
+  for (const f of readdirSync(dist)) if (f.endsWith('.map')) renameSync(join(dist, f), join(maps, f));
+}
+
+/**
+ * dist-meta.json (esbuild's metafile, merged over the bundles) and a size
+ * table for the CI summary. Exits 1 when a bundle is over its limit.
+ */
+function reportSizes(results) {
+  const metafile = { inputs: {}, outputs: {} };
+  for (const r of results) {
+    Object.assign(metafile.inputs, r.metafile.inputs);
+    Object.assign(metafile.outputs, r.metafile.outputs);
+  }
+  writeFileSync(join(root, 'dist-meta.json'), `${JSON.stringify(metafile, null, 2)}\n`);
+  const rows = Object.keys(metafile.outputs)
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => ({ name: relative(dist, join(root, f)), bytes: statSync(join(root, f)).size }))
+    .sort((a, b) => b.bytes - a.bytes);
+  const over = rows.filter((r) => SIZE_LIMITS[r.name] && r.bytes > SIZE_LIMITS[r.name]);
+  const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
+  console.log('| Bundle | Minified | Limit |\n| --- | ---: | ---: |');
+  for (const r of rows) console.log(`| ${r.name} | ${kb(r.bytes)} | ${SIZE_LIMITS[r.name] ? kb(SIZE_LIMITS[r.name]) : ''} |`);
+  if (over.length) {
+    console.error(`Bundle over its size limit: ${over.map((r) => `${r.name} (${kb(r.bytes)})`).join(', ')}`);
+    process.exit(1);
+  }
+}
+
 const common = {
   bundle: true,
   target: ['chrome116'],
   legalComments: 'none',
   logLevel: 'warning',
   minify: !args.has('--watch'),
-  sourcemap: args.has('--watch') ? 'inline' : false,
+  sourcemap: args.has('--watch') ? 'inline' : 'external',
+  sourcesContent: true,
+  metafile: args.has('--metafile'),
 };
 
 const entries = [
@@ -108,6 +213,7 @@ const entries = [
   { entryPoints: [join(root, 'src/options/options.js')], outfile: join(dist, 'options.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/transcript/transcript.js')], outfile: join(dist, 'transcript.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/guide/guide.js')], outfile: join(dist, 'guide.js'), format: 'iife' },
+  { entryPoints: [join(root, 'src/welcome/welcome.js')], outfile: join(dist, 'welcome.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/offscreen/offscreen.js')], outfile: join(dist, 'offscreen.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/offscreen/worker.js')], outfile: join(dist, 'offscreen-worker.js'), format: 'iife' },
 ];
@@ -122,12 +228,20 @@ if (args.has('--watch')) {
   for (const e of entries) await (await context({ ...common, ...e })).watch();
   console.log('Watching for changes…');
 } else {
-  await Promise.all(entries.map((e) => build({ ...common, ...e })));
-  console.log(`Built SceneVoice ${version} into dist/`);
+  const results = await Promise.all(entries.map((e) => build({ ...common, ...e })));
+  moveSourceMaps();
+  console.log(`Built SceneVoice ${version} into dist/ (source maps in dist-maps/)`);
+  if (args.has('--metafile')) reportSizes(results);
   if (args.has('--zip')) {
+    const stray = entriesOf(dist, (name) => !PACKAGED.has(name.slice(name.lastIndexOf('.'))));
+    if (stray.length) {
+      console.error(`dist/ holds files the package does not allow: ${stray.map((e) => e.name).join(', ')}`);
+      process.exit(1);
+    }
     const zip = join(root, `scenevoice-${version}.zip`);
-    if (existsSync(zip)) rmSync(zip);
-    execFileSync('zip', ['-qr', zip, '.'], { cwd: dist });
-    console.log(`Packaged ${zip}`);
+    writeZip(zip, entriesOf(dist, (name) => PACKAGED.has(name.slice(name.lastIndexOf('.')))));
+    const mapZip = join(root, `scenevoice-${version}-sourcemaps.zip`);
+    writeZip(mapZip, entriesOf(maps, (name) => name.endsWith('.map')));
+    console.log(`Packaged ${zip} and ${mapZip}`);
   }
 }

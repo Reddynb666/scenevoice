@@ -139,7 +139,8 @@ describe('on-screen text during playback', () => {
     await vi.waitFor(() => expect(said().at(-1)).toBe('How much to describe: moderate.'));
     await vi.waitFor(() => expect(stored()).toMatchObject({ density: 'standard', densityChosen: true }));
     await playThrough(DINER.wipe.start);
-    await vi.waitFor(() => expect(said()).toContain(DINER.wipe.brief));
+    // The man at the door may still be being described: the wipe (less important) waits for that to end rather than cut it off.
+    await vi.waitFor(() => expect(said()).toContain(DINER.wipe.brief), { timeout: 3000 });
   });
 
   it('reads no on-screen text when that is turned off', async () => {
@@ -162,13 +163,13 @@ describe('on-screen text during playback', () => {
 
     await playThrough(SLIDES.slide.start);
     await vi.waitFor(() => expect(said()).toContain(SLIDES.slide.brief));
-    // The nod comes due while the slide is still being read: it is dropped.
+    // The nod comes due while the slide is still being read: it waits.
     video.currentTime = SLIDES.nod.start + 0.3;
     await sleep(300);
     expect(said()).not.toContain(SLIDES.nod.brief);
 
-    // Once the slide has been read, descriptions carry on as usual.
-    await sleep(1800);
+    // Once the slide has been read, the nod is said in the pause that follows, and descriptions carry on as usual.
+    await vi.waitFor(() => expect(said()).toContain(SLIDES.nod.brief), { timeout: 3000 });
     await playThrough(SLIDES.chart.start);
     await vi.waitFor(() => expect(said()).toContain(SLIDES.chart.brief));
   });

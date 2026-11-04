@@ -54,9 +54,73 @@ const LOOSE_CATEGORY_TYPES = {
   人物和博客: 'entertainment',
 };
 
+/**
+ * The same categories by YouTube's numeric id (the Data API's videoCategories
+ * list), which a watch page may carry next to the name. The id is the same in
+ * every page language, so it is preferred when present. 30–44 are film genres.
+ * Left out, like their names: Autos & Vehicles (2), Nonprofits (29),
+ * Documentary (35); the title decides for those.
+ */
+const CATEGORY_ID_TYPES = {
+  1: 'entertainment', // Film & Animation
+  10: 'entertainment', // Music
+  15: 'entertainment', // Pets & Animals
+  17: 'entertainment', // Sports
+  18: 'entertainment', // Short Movies
+  19: 'entertainment', // Travel & Events
+  20: 'entertainment', // Gaming
+  23: 'entertainment', // Comedy
+  24: 'entertainment', // Entertainment
+  25: 'tutorial', // News & Politics
+  26: 'tutorial', // Howto & Style
+  27: 'tutorial', // Education
+  28: 'tutorial', // Science & Technology
+  30: 'entertainment', // Movies
+  31: 'entertainment', // Anime/Animation
+  32: 'entertainment', // Action/Adventure
+  33: 'entertainment', // Classics
+  34: 'entertainment', // Comedy (film)
+  36: 'entertainment', // Drama
+  37: 'entertainment', // Family
+  38: 'entertainment', // Foreign
+  39: 'entertainment', // Horror
+  40: 'entertainment', // Sci-Fi/Fantasy
+  41: 'entertainment', // Thriller
+  42: 'entertainment', // Shorts
+  43: 'entertainment', // Shows
+  44: 'entertainment', // Trailers
+};
+
+/** Videoblogging (21) and People & Blogs (22): the title gets a say first. */
+const LOOSE_CATEGORY_ID_TYPES = { 21: 'entertainment', 22: 'entertainment' };
+
+/**
+ * Words in a title that mark a lesson or a demonstration. One pattern per
+ * script: \b only works between ASCII letters, so the Latin-script languages
+ * share one and the others match bare, as phrases long enough not to be found
+ * inside unrelated words.
+ */
 const TUTORIAL_TITLE = [
+  // English
   /\b(tutorials?|how[ -]to|step[ -]by[ -]step|lessons?|lectures?|courses?|explained|explainer|for beginners|recipes?|diy)\b/i,
+  // Spanish, Portuguese, French, German
+  /\b(tutoriales|tutoriais|tutoriels?|tutos?|c[oó]mo (hacer|usar|instalar|preparar)|como (fazer|usar|instalar|preparar)|comment (faire|utiliser|installer|pr[ée]parer)|paso a paso|passo a passo|pas [àa] pas|schritt f[üu]r schritt|lecci[oó]n(es)?|li[çc][ãa]o|li[çc][õo]es|aulas?|le[çc]ons?|lektion(en)?|cursos?|cours|kurs(e|us)?|explicad[oa]|explicaci[oó]n|explica[çc][ãa]o|expliqu[ée]e?s?|explication|erkl[äa]rt|erkl[äa]rung|anleitung|so geht'?s|para (principiantes|iniciantes)|pour d[ée]butants|f[üu]r anf[äa]nger|recetas?|receitas?|recettes?|rezepte?)\b/i,
+  // Indonesian
+  /\b(cara (membuat|menggunakan|memasang|mengatasi|belajar|install|setting)|langkah demi langkah|belajar|pelajaran|kursus|penjelasan|untuk pemula|resep)\b/i,
+  // Vietnamese
+  /(hướng dẫn|cách làm|cách sử dụng|cách cài|từng bước|bài học|bài giảng|khóa học|giải thích|cho người mới|công thức)/i,
+  // Chinese
   /(教程|教学|讲解|入门|课程|详解|如何|手把手|演示|科普|做法|怎么做)/,
+  // Japanese
+  /(講座|解説|入門|やり方|作り方|使い方|初心者向け|初心者|チュートリアル|レシピ)/,
+  // Korean
+  /(강의|강좌|입문|하는 법|하는법|만드는 법|만들기|초보자|초보|튜토리얼|레시피|설명)/,
+  // Russian
+  /(урок|обучени|инструкци|как сделать|как настроить|как установить|пошагов|объясн|для начинающих|рецепт|разбор|гайд|туториал)/i,
+  // Arabic
+  /(شرح|درس|دروس|دورة|تعليم|تعلم|كيف|خطوة بخطوة|للمبتدئين|وصفة|طريقة)/,
+  // Hindi
+  /(ट्यूटोरियल|सीखें|सीखो|सीखिए|कैसे बनाएं|कैसे बनाये|कैसे करें|तरीका|पाठ|कोर्स|शुरुआती|रेसिपी|समझाया)/,
 ];
 
 /**
@@ -79,17 +143,28 @@ function normalizeCategory(category) {
   return category.replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/** A YouTube category id as the table's key ("27", from 27 or "27"), or '' for anything else. */
+function normalizeCategoryId(id) {
+  const s = typeof id === 'number' ? String(id) : typeof id === 'string' ? id.trim() : '';
+  return /^\d{1,3}$/.test(s) ? String(Number(s)) : '';
+}
+
 export function titleLooksLikeTutorial(title) {
   return typeof title === 'string' && TUTORIAL_TITLE.some((re) => re.test(title));
 }
 
-/** The type the watch page suggests, from its category and title. '' when it does not say. */
-export function pageVideoType({ category, title, platform = 'youtube' } = {}) {
+/**
+ * The type the watch page suggests, from its category (by id when the page
+ * gives one, else by name) and title. '' when it does not say.
+ */
+export function pageVideoType({ category, categoryId, title, platform = 'youtube' } = {}) {
   if (platform === 'bilibili') return bilibiliCategoryType(category) || (titleLooksLikeTutorial(title) ? 'tutorial' : '');
+  const id = normalizeCategoryId(categoryId);
+  if (CATEGORY_ID_TYPES[id]) return CATEGORY_ID_TYPES[id];
   const c = normalizeCategory(category);
   if (CATEGORY_TYPES[c]) return CATEGORY_TYPES[c];
   if (titleLooksLikeTutorial(title)) return 'tutorial';
-  return LOOSE_CATEGORY_TYPES[c] || '';
+  return LOOSE_CATEGORY_ID_TYPES[id] || LOOSE_CATEGORY_TYPES[c] || '';
 }
 
 /** A type SceneVoice has settings for, or ''. */

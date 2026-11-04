@@ -37,6 +37,15 @@ describe('interface strings', () => {
     }
   });
 
+  it('keeps the store name and summary within the manifest limits, naming both sites', () => {
+    // Chrome: name 45 characters, description 132. Both stores show these.
+    for (const l of LOCALES) {
+      expect(TABLES[l].ext_name.length, `${l} ext_name`).toBeLessThanOrEqual(45);
+      expect(TABLES[l].ext_description.length, `${l} ext_description`).toBeLessThanOrEqual(132);
+      expect(TABLES[l].ext_description, `${l} names Bilibili`).toMatch(/Bilibili|哔哩哔哩/);
+    }
+  });
+
   it('translates every string into Chinese', () => {
     const same = Object.entries(STRINGS).filter(([, v]) => v.en === v.zh_CN).map(([k]) => k);
     expect(same).toEqual(['value_percent']);

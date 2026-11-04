@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../src/shared/constants.js';
-import { fitCuesToDialogue, isNonSpeech, parseTimedText, speechIntervals } from '../src/shared/dialogue.js';
+import { VISUAL_WAIT, fitCuesToDialogue, isNonSpeech, parseTimedText, speechIntervals } from '../src/shared/dialogue.js';
 import { chooseUtterance } from '../src/shared/script.js';
 import { extractCaptionTracks, pickCaptionTrack, timedTextUrl } from '../src/content/youtube.js';
 
@@ -114,6 +114,53 @@ describe('fitCuesToDialogue', () => {
     const [c] = fitCuesToDialogue([cue(9, 8)], speech);
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true })).toBeNull();
     expect(chooseUtterance(c, { mode: 'pause', detail: 'standard', rate: 1, onScreenText: true }).needsPause).toBe(true);
+  });
+
+  describe('a priority-1 visual cue that lands on speech', () => {
+    // A talking head: speech from 10 to 14, a 1.5 s pause, speech from 15.5 to 20, then a long pause.
+    // A cue at 11 is 3 s from the end of the speech: too far to be moved there by fitOne alone.
+    const talk = [
+      { start: 10, end: 14 },
+      { start: 15.5, end: 20 },
+    ];
+    /** About 0.6 s at rate 1; "A door opens." takes about 1.3 s. */
+    const short = (start, gap, extra = {}) => cue(start, gap, { priority: 1, brief: 'Nods.', ...extra });
+    const gaps = { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true };
+    const pause = { ...gaps, mode: 'pause' };
+
+    it('waits for the first pause within VISUAL_WAIT seconds that fits its brief version', () => {
+      expect(VISUAL_WAIT).toBe(5);
+      const [c] = fitCuesToDialogue([short(11, 6)], talk);
+      expect(c).toMatchObject({ start: 14, gap: 1.2, gapMeasured: true });
+      expect(chooseUtterance(c, gaps)).toEqual({ text: 'Nods.', needsPause: false });
+    });
+    it('is left with no room (skipped, or paused for) when no pause in reach is long enough', () => {
+      // The pause at 14 has 1.2 s after the margin, too short for "A door opens."; the one after 20 is 9 s away.
+      const [c] = fitCuesToDialogue([cue(11, 6, { priority: 1 })], talk);
+      expect(c).toMatchObject({ start: 11, gap: 0 });
+      expect(chooseUtterance(c, gaps)).toBeNull();
+      expect(chooseUtterance(c, pause).needsPause).toBe(true);
+      // Allowed to wait longer, it reaches the pause after 20 (the captions end there: the model's estimate stands).
+      expect(fitCuesToDialogue([cue(11, 6, { priority: 1 })], talk, { visualWait: 10 })[0]).toMatchObject({ start: 20, gap: 6 });
+    });
+    it("measures the room at the listener's reading speed and the playback rate", () => {
+      // A fast reader (2.5x) says "A door opens." in about 0.7 s: the pause at 14 will do.
+      expect(fitCuesToDialogue([cue(11, 6, { priority: 1 })], talk, { rate: 2.5 })[0]).toMatchObject({ start: 14, gap: 1.2 });
+      // At 2x playback the same pause lasts half as long in real time.
+      expect(fitCuesToDialogue([cue(11, 6, { priority: 1 })], talk, { rate: 2.5, playbackRate: 2 })[0]).toMatchObject({ start: 11, gap: 0 });
+    });
+    it('leaves less important visual cues where they are: they are skipped, not moved', () => {
+      expect(fitCuesToDialogue([short(11, 6, { priority: 2 })], talk)[0]).toMatchObject({ start: 11, gap: 0 });
+    });
+    it('frames mode: a cue with gap 0 (no pause known) is still said in a measured pause', () => {
+      // The model could not tell whether anyone speaks; the captions can.
+      const [c] = fitCuesToDialogue([short(11, 0)], talk);
+      expect(c).toMatchObject({ start: 14, gap: 1.2, gapMeasured: true });
+      // Without captions there is nothing to measure: skipped in "keep playing" mode, a pause in pause mode.
+      const raw = cue(11, 0, { priority: 1 });
+      expect(chooseUtterance(raw, { mode: 'gaps', detail: 'brief', rate: 3, onScreenText: true })).toBeNull();
+      expect(chooseUtterance(raw, { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
+    });
   });
 });
 

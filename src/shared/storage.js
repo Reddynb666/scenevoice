@@ -11,6 +11,9 @@
 // and cached scripts (`script:*`) here, so nothing is moved or rewritten.
 
 import { DEFAULT_LOCAL } from './constants.js';
+import { TABLE_LANGUAGES, canonicalTag, isRealLanguage } from './language.js';
+
+export { isDescriptionLanguage } from './language.js';
 import { markChoices, normalizeSettings } from './settings.js';
 
 /**
@@ -94,15 +97,18 @@ export function watchSettings(fn) {
  * Resolve 'auto' to a concrete description language from the browser UI
  * language. On Bilibili, a Chinese site whose videos and subtitles are in
  * Chinese, 'auto' means Chinese even in a browser set to another language.
+ * Any real language is returned, not only those with their own tables: a
+ * Swedish browser gets Swedish descriptions. Only a tag that names no language
+ * ("und", "xx") falls back to English.
  */
 export function resolveLanguage(setting, uiLanguage, platform = '') {
   if (setting && setting !== 'auto') return setting;
-  const ui = (uiLanguage || 'en').toLowerCase();
+  const ui = canonicalTag(uiLanguage || 'en');
   if (ui.startsWith('zh')) {
     return /(tw|hk|mo|hant)/.test(ui) ? 'zh-TW' : 'zh-CN';
   }
   if (platform === 'bilibili') return 'zh-CN';
-  const base = ui.split(/[-_]/)[0];
-  const known = ['en', 'es', 'fr', 'de', 'pt', 'ja', 'ko', 'ru', 'ar', 'hi'];
-  return known.includes(base) ? base : 'en';
+  const base = ui.split('-')[0];
+  if (TABLE_LANGUAGES.has(base)) return base;
+  return isRealLanguage(base) ? base : 'en';
 }

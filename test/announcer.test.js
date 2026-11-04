@@ -48,3 +48,42 @@ describe('live region writes', () => {
     expect(regionTexts()).toEqual([]);
   });
 });
+
+describe('built-in voice in a hidden tab', () => {
+  const hide = () => Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+  let sent;
+  const spoken = () => sent.filter((m) => m.type === 'sv:speak');
+
+  beforeEach(() => {
+    const fake = fakeChrome();
+    globalThis.chrome = fake.chrome;
+    sent = fake.sent;
+    settings = { ...settings, output: 'tts' };
+  });
+
+  it('waits silently when its video is paused or muted, so it does not talk over the tab being watched', () => {
+    hide();
+    const a = new Announcer(() => settings, { isAudible: () => false });
+    const done = vi.fn();
+    a.say('A woman enters.').then(done);
+    expect(spoken()).toHaveLength(0);
+    expect(a.speaking).toBe(false);
+    // The wait stands in for the speech, so the scheduler is not thrown off.
+    return vi.advanceTimersByTimeAsync(5000).then(() => expect(done).toHaveBeenCalled());
+  });
+
+  it('speaks when its video is playing with sound, hidden or not', () => {
+    hide();
+    const a = new Announcer(() => settings, { isAudible: () => true });
+    a.say('A woman enters.');
+    expect(spoken()).toHaveLength(1);
+    expect(spoken()[0]).toMatchObject({ text: 'A woman enters.', rate: 1.2 });
+  });
+
+  it('speaks in a visible tab whatever the video is doing', () => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    const a = new Announcer(() => settings, { isAudible: () => false });
+    a.say('A woman enters.');
+    expect(spoken()).toHaveLength(1);
+  });
+});

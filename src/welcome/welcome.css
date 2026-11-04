@@ -1,0 +1,7 @@
+body { padding: 0 16px 40px; }
+main { max-width: 720px; margin: 0 auto; padding-top: 24px; }
+h1 { font-size: 24px; }
+h2 { font-size: 19px; }
+.sample { font-size: 17px; min-height: 1.6em; }
+ul.plain { margin: 0; padding-inline-start: 1.2em; display: grid; gap: 6px; }
+.row .button { min-height: 38px; }

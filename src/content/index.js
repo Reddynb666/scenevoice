@@ -24,6 +24,7 @@ import { resolveVideoType, typeAdjustments } from '../shared/videotype.js';
 import { effectiveProvider, inputModeFor, providerFor } from '../shared/providers.js';
 import { progressMilestone } from '../shared/progress.js';
 import { ASK_HISTORY_MAX } from '../shared/ask.js';
+import { budgetLabelKey, estimateCost, localDay } from '../shared/usage.js';
 import { Announcer } from './announcer.js';
 import { PageUI } from './ui.js';
 import { FrameSampler, canvasLooksBlank, captureFrame } from './frames.js';
@@ -35,15 +36,41 @@ if (!window.__sceneVoiceLoaded) {
   main();
 }
 
-/** How long after its moment a description that came back late may still be said, and how long it may wait for a pause. */
-const LATE_LIMIT = 25;
+/**
+ * How long after its moment a description that came back late may still be said
+ * (on-screen text stays on screen, a passing action does not), how long it may
+ * wait for a pause, and after how long it is led by "Earlier:" so the listener
+ * does not take it for what is on screen now.
+ */
+const LATE_LIMIT = { visual: 15, text: 25 };
 const LATE_WAIT = 10;
+const LATE_PREFIX_AFTER = 6;
+/** How long a cue that came due during another description may wait for the next pause before it is dropped. */
+const DEFER_WAIT = 5;
+/** A jump of more than this many seconds is the user seeking, not playback (the scheduler uses the same bound). */
+const SEEK_JUMP = 2.5;
+/**
+ * In pause mode with screen-reader output, the video is held this much longer
+ * than the estimated reading time: the screen reader gives no "finished" signal,
+ * the estimate is only an estimate, and the video resuming over the last words
+ * of a description is exactly what pause mode is for avoiding.
+ */
+const SCREENREADER_RESUME_HOLD_MS = 1500;
+/** In "keep playing" mode, say once per video how to hear the skipped descriptions after more than this many were skipped. */
+const SKIPPED_NOTICE_AFTER = 3;
 /** Errors after which taking frames carries on (the stretch is skipped); any other stops it. */
 /** Pressing the shortcut again within this time after it reported progress stops generation and turns descriptions off. */
 const PRESS_AGAIN_MS = 3000;
-/** Errors after which pressing the shortcut again may well work: said with how to carry on. */
-const RESUMABLE_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
-const PASSING_FRAME_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable', 'busy']);
+/**
+ * Errors after which pressing the shortcut again may well work: said with how to
+ * carry on. Not among them: the day's quota, the day's limit set here, and the
+ * Cloud allowance, which come back tomorrow, not on the next press.
+ */
+const RESUMABLE_ERRORS = new Set(['quota', 'rate-limited', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
+/** Errors after which taking frames carries on (the stretch is skipped); any other stops it. */
+const PASSING_FRAME_ERRORS = new Set(['quota', 'rate-limited', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable', 'busy']);
+/** After these, frames wait a minute rather than 15 seconds before the next try. */
+const SLOW_RETRY_ERRORS = new Set(['quota', 'rate-limited']);
 
 function main() {
   const platform = platformFor(location.href);
@@ -95,9 +122,16 @@ function main() {
   let lastSpoken = null;
   /** Video id while a description marked as wrong is being made again. */
   let revisingFor = null;
-  /** The cue being spoken during playback ({kind, priority}), or null. */
+  /** The cue being spoken during playback ({kind, priority}; priority 0 = what the user asked for), or null. */
   let speakingCue = null;
   let speechToken = 0;
+  /** { cue, at }: a cue that came due while another was being said, waiting for the next pause (at = video time). */
+  let deferred = null;
+  /** Descriptions skipped for want of a pause in this video, and the video for which that has been said. */
+  let skipped = 0;
+  let skippedSaidFor = null;
+  /** The video's position at the last tick, to tell a seek from playback; NaN until known. */
+  let lastPosition = NaN;
   /** Token of the utterance that paused the video, or 0 when the video is not paused by us. */
   let pausedByUs = 0;
   let duckState = null;
@@ -132,7 +166,13 @@ function main() {
   const sampler = new FrameSampler(FRAME_SAMPLING);
 
   const scheduler = new CueScheduler([]);
-  const announcer = new Announcer(() => settings);
+  const announcer = new Announcer(() => settings, {
+    // Whether this tab's video is playing with sound: a hidden tab then still describes (see Announcer.speakTts).
+    isAudible: () => {
+      const v = getVideo();
+      return Boolean(v && !v.paused && !v.muted && v.volume > 0);
+    },
+  });
   const ui = new PageUI({ onToggle: () => toggle(), platform });
 
   /** The model that describes videos on this site (the one whose key is set), and whether it is sent frames. */
@@ -140,8 +180,20 @@ function main() {
   /** Whether that is not the chosen model, because only the other key is set. */
   const providerFellBack = () => provider() !== providerFor(settings, platform.id);
   const framesMode = () => inputModeFor(provider(), platform.id) === 'frames';
-  /** An error in words, in the terms of the provider in use. */
-  const errorText = (code) => errorMessage(code, provider());
+  /** The day (localDay) the daily limit was reached: nothing more starts by itself until tomorrow; the shortcut still asks and is told. */
+  let budgetDay = '';
+  const budgetHit = () => budgetDay === localDay();
+  /** When the Cloud allowance comes back, as a clock time, or "midnight UTC" when the relay did not say. */
+  const resetTimeText = (resetAt) => {
+    const at = Date.parse(resetAt || '');
+    return Number.isFinite(at) ? new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : t('time_midnight_utc');
+  };
+  /** An error in words, in the terms of the provider in use. `extra` is the reply or event it came in, for the details some need. */
+  const errorText = (code, extra = {}) => {
+    if (code === 'budget') return t('error_budget', t(budgetLabelKey(settings.dailyBudgetSeconds)));
+    if (code === 'allowance') return t('error_allowance', resetTimeText(extra?.resetAt));
+    return errorMessage(code, provider());
+  };
 
   /** Message the service worker; never throws, even after the extension was reloaded. */
   const send = (msg) => {
@@ -206,7 +258,7 @@ function main() {
    * never in an embedded player that has not been played, or a page full of
    * hidden players could have this key describe them all.
    */
-  const canAutoStart = () => !isFrame || shouldHandle();
+  const canAutoStart = () => (!isFrame || shouldHandle()) && !budgetHit();
 
   /**
    * One cached description script. The cache lives in chrome.storage.local,
@@ -228,11 +280,15 @@ function main() {
   // page reads them directly. Shortcuts come from the service worker.
   watchSettings((s) => {
     const prevLang = lang;
+    const prev = settings;
     const wasEnabled = settings.enabled;
     settings = s;
     updateType();
+    // The pauses a cue waits for are measured against the reading speed: fit them again when it changes.
+    if (script && dialogue && (prev.readerSpeed !== s.readerSpeed || prev.ttsRate !== s.ttsRate || prev.output !== s.output)) scheduleCues();
     lang = resolveLanguage(s.language, chrome.i18n.getUILanguage(), platform.id);
     announcer.lang = lang;
+    ui.lang = lang;
     ui.setButtonState(s.enabled, shortcut('toggle-descriptions'));
     if (!s.showText) ui.hideText();
     if (wasEnabled && !s.enabled) {
@@ -251,7 +307,7 @@ function main() {
       });
       // Generation stopped because the connection dropped: carry on once it is back.
       window.addEventListener('online', () => {
-        if (dead || !videoId || errorCode !== 'network' || !settings.enabled || framesMode()) return;
+        if (dead || !videoId || errorCode !== 'network' || !settings.enabled || framesMode() || budgetHit()) return;
         announcer.status(t('status_back_online'));
         generate({ quiet: true });
       });
@@ -287,6 +343,8 @@ function main() {
     ui.hideProgress();
     lastSpoken = null;
     pendingLate = null;
+    deferred = null;
+    skipped = 0;
     scheduler.setCues([]);
     ui.hideText();
     updateType();
@@ -303,6 +361,7 @@ function main() {
     captionLines = [];
     captionUrlsTried = new Set();
     pageType = '';
+    lastPosition = NaN;
     sampler.clear();
     framesErrorsSaid = new Set();
     resetVideoState();
@@ -325,7 +384,7 @@ function main() {
       console.info('[SceneVoice] could not read the watch page', String(err));
     }
     if (dead || id !== videoId) return;
-    pageType = platform.videoType({ category: page.category, title: getMeta().title });
+    pageType = platform.videoType({ category: page.category, categoryId: page.categoryId, title: getMeta().title });
     updateType();
     announceType();
     if (page.captionUrls?.length) loadDialogue(id, page.captionUrls);
@@ -495,14 +554,19 @@ function main() {
   function scheduleCues() {
     // Playback may move a cue; `source` is the saved one, which "Description is wrong" points at.
     let cues = (script?.cues || []).map((c) => ({ ...c, source: c }));
+    const v = getVideo();
     if (dialogue) {
       const { cues: kept, dropped } = dropTextHeardInCaptions(cues, captionLines);
       if (dropped.length) console.info(`[SceneVoice] ${dropped.length} on-screen texts left out: already in the captions`, dropped.map((c) => `${formatTime(c.start)} ${c.onScreenText || c.standard}`));
-      cues = fitCuesToDialogue(kept, dialogue);
+      cues = fitCuesToDialogue(kept, dialogue, fitOptions(v));
     }
     scheduler.setCues(cues);
-    const v = getVideo();
     scheduler.reset(v && !isAdShowing() ? v.currentTime : null);
+  }
+
+  /** How fast the pauses pass for this listener: their reading speed, and the video's playback rate. */
+  function fitOptions(video) {
+    return { rate: readerRate(), playbackRate: video?.playbackRate || 1 };
   }
 
   /**
@@ -655,11 +719,12 @@ function main() {
 
     const res = await startGeneration(send, { videoId: id, duration: v.duration, meta: getMeta(), lang: l, force });
     if (id !== videoId || l !== lang || seq !== beginSeq) return undefined;
-    if (!res || res.error) return onGenerationError(res?.error || 'unknown', res?.detail);
+    if (!res || res.error) return onGenerationError(res?.error || 'unknown', res?.detail, res);
     if (res.status === 'ready') {
       const sc = await fetchScript(id, l);
       if (dead || id !== videoId || l !== lang) return undefined;
-      if (sc) onGenerationDone(sc);
+      // fromCloud: another SceneVoice user had this video described already; the shared cache gave it to us.
+      if (sc) onGenerationDone(sc, { fromCloud: Boolean(res.fromCloud) });
       else onGenerationError('unknown', 'no script after ready');
       return undefined;
     }
@@ -693,7 +758,7 @@ function main() {
     announceType();
   }
 
-  function onGenerationDone(sc) {
+  function onGenerationDone(sc, { fromCloud = false } = {}) {
     following = false;
     announcedPartial = false;
     ui.hideProgress();
@@ -701,11 +766,14 @@ function main() {
     status = 'ready';
     const n = sc.cues.length;
     console.info(`[SceneVoice] done: ${n} descriptions, model ${sc.model}`, sc.cues.slice(0, 5));
-    announcer.status(n ? t('status_ready', String(n), shortcut('describe-now') || t('status_the_describe_button')) : t('status_ready_empty'));
+    const ready = n ? t('status_ready', String(n), shortcut('describe-now') || t('status_the_describe_button')) : t('status_ready_empty');
+    // Said where "creating descriptions" would have been: nothing was created, and it took no time.
+    announcer.status(fromCloud ? `${t('status_loaded_cloud')} ${ready}` : ready);
     announceType();
   }
 
-  function onGenerationError(code, detail) {
+  /** `extra`: the reply or event the error came in (a Cloud allowance error says when it resets). */
+  function onGenerationError(code, detail, extra = {}) {
     following = false;
     announcedPartial = false;
     ui.hideProgress();
@@ -713,7 +781,9 @@ function main() {
     errorCode = code;
     if (code === 'extension-reloaded' || !chrome.runtime?.id) return die();
     console.warn('[SceneVoice] generation failed', code, detail || '');
-    feedback(errorWithNextStep(code));
+    // The day's limit: said now, and nothing more starts by itself today (see canAutoStart). A press of the shortcut is always answered.
+    if (code === 'budget') budgetDay = localDay();
+    feedback(errorWithNextStep(code, extra));
     if (code === 'no-key' || code === 'bad-key') openSettingsForKey();
     return undefined;
   }
@@ -723,8 +793,8 @@ function main() {
    * (the shortcut resumes where it stopped), and that a lost connection is
    * resumed by itself once the computer is back online.
    */
-  function errorWithNextStep(code) {
-    const parts = [errorText(code)];
+  function errorWithNextStep(code, extra = {}) {
+    const parts = [errorText(code, extra)];
     if (RESUMABLE_ERRORS.has(code)) {
       if (code === 'network' && !framesMode()) parts.push(t('error_network_auto_resume'));
       const key = shortcut('toggle-descriptions');
@@ -761,7 +831,7 @@ function main() {
         break;
       }
       case 'error':
-        if (following || status === 'generating') onGenerationError(ev.code, ev.detail);
+        if (following || status === 'generating') onGenerationError(ev.code, ev.detail, ev);
         break;
       case 'stopped':
         if (following || status === 'generating') {
@@ -943,7 +1013,7 @@ function main() {
     }
     if (res?.error === 'extension-reloaded') return die();
     if (dead || id !== videoId || l !== lang || seq !== liveSeq) return undefined;
-    if (!res || res.error) return onLiveError(res?.error || 'unknown', res?.detail);
+    if (!res || res.error) return onLiveError(res?.error || 'unknown', res?.detail, res);
     console.info(`[SceneVoice] ${stretch.frames.length} frames ${formatTime(stretch.start)}–${formatTime(stretch.end)}: ${res.cues?.length || 0} descriptions`);
     const sc = await fetchScript(id, l);
     if (dead || id !== videoId || l !== lang || seq !== liveSeq) return undefined;
@@ -972,10 +1042,10 @@ function main() {
    * unreadable answer) skips it, says so once, and waits a little; anything
    * else (no key, a player that cannot be captured) stops and says why.
    */
-  function onLiveError(code, detail) {
+  function onLiveError(code, detail, extra = {}) {
     console.warn('[SceneVoice] describing frames failed', code, detail || '');
     if (PASSING_FRAME_ERRORS.has(code)) {
-      framesPausedUntil = Date.now() + (code === 'quota' ? 60000 : 15000);
+      framesPausedUntil = Date.now() + (SLOW_RETRY_ERRORS.has(code) ? 60000 : 15000);
       if (!framesErrorsSaid.has(code)) {
         framesErrorsSaid.add(code);
         announcer.status(t('live_skipped', errorText(code)));
@@ -983,7 +1053,7 @@ function main() {
       return undefined;
     }
     stopLive();
-    return onGenerationError(code, detail);
+    return onGenerationError(code, detail, extra);
   }
 
   /**
@@ -996,30 +1066,87 @@ function main() {
     if (!video || video.paused || !settings.enabled || setting('mode') === 'manual') return;
     const now = video.currentTime;
     let due = cues
-      .filter((c) => c.start <= now && now - c.start <= LATE_LIMIT)
+      .filter((c) => c.start <= now && now - c.start <= (LATE_LIMIT[c.kind] || LATE_LIMIT.visual))
       .filter((c) => (settings.onScreenText || c.kind !== 'text') && passesDensity(c, setting('density')));
     if (dialogue) due = dropTextHeardInCaptions(due, captionLines).cues;
     const cue = pickOne(due);
     if (cue && (!pendingLate || pickOne([pendingLate.cue, cue]) === cue)) pendingLate = { cue, at: now };
   }
 
-  /** Say a late description once no other description is being said and it fits the pause (or the mode allows pausing). */
-  function tryLate(video) {
-    const late = pendingLate;
-    if (!late || speakingCue) return;
+  /**
+   * Say a description that is waiting for a pause (one held back during another
+   * description, then one that came back late), once nothing else is being said.
+   * The held one goes first: it was due at its moment; the late one is extra.
+   */
+  function tryHeld(video) {
+    if (speakingCue) return;
     const now = video.currentTime;
+    if (deferred) {
+      const { cue, at } = deferred;
+      if (now < at - 1) {
+        deferred = null; // seeked away
+      } else if (now - at > DEFER_WAIT) {
+        deferred = null;
+        console.info(`[SceneVoice] ${formatTime(cue.start)} dropped: no pause came within ${DEFER_WAIT} s`);
+        noteSkipped();
+      } else {
+        // The pause the model estimated began at the cue's own moment; part of it has passed.
+        const left = cue.gapMeasured ? cue : { ...cue, gap: Math.max(0, cue.gap - (now - cue.start)) };
+        if (sayHeld(left, video)) deferred = null;
+        return;
+      }
+    }
+    const late = pendingLate;
+    if (!late) return;
     if (now < late.at - 1 || now - late.at > LATE_WAIT) {
+      if (now - late.at > LATE_WAIT) noteSkipped();
       pendingLate = null; // seeked away, or no pause came
       return;
     }
-    let cue = { ...late.cue, start: now, source: late.cue };
-    if (dialogue) cue = { ...fitCuesToDialogue([cue], dialogue)[0], source: late.cue };
-    if (cue.start > now + 0.15) return; // speech ends in a moment: wait for it
-    const fits = chooseUtterance(cue, { mode: setting('mode'), detail: setting('detail'), rate: readerRate(), onScreenText: settings.onScreenText, playbackRate: video.playbackRate || 1 });
-    if (!fits) return;
+    const prefix = now - late.cue.start > LATE_PREFIX_AFTER ? t('late_prefix') : '';
+    if (!sayHeld(late.cue, video, { prefix })) return;
     pendingLate = null;
     console.info(`[SceneVoice] ${formatTime(late.cue.start)} said late, at ${formatTime(now)}`);
-    deliver(cue);
+  }
+
+  /**
+   * Say a waiting cue now if it fits the pause we are in (or the mode allows
+   * pausing): its moment becomes now, and the captions, when known, say how much
+   * room there is from here. Returns whether it was said.
+   */
+  function sayHeld(held, video, { prefix = '' } = {}) {
+    const now = video.currentTime;
+    const source = held.source || held;
+    let cue = { ...held, start: now, source };
+    if (dialogue) cue = { ...fitCuesToDialogue([cue], dialogue, fitOptions(video))[0], source };
+    if (cue.start > now + 0.15) return false; // speech ends in a moment: wait for it
+    if (!utteranceFor(cue, video)) return false;
+    deliver(cue, { prefix });
+    return true;
+  }
+
+  /** Keep a cue that came due during another description for the next pause: the more important of it and one already waiting. */
+  function hold(cue, now) {
+    if (deferred) {
+      if (pickOne([deferred.cue, cue]) !== cue) return;
+      noteSkipped();
+    }
+    console.info(`[SceneVoice] ${formatTime(cue.start)} waits: a description at least as important is being said`);
+    deferred = { cue, at: now };
+  }
+
+  /**
+   * A description found no pause and was skipped. In "keep playing" mode that is
+   * by design, but a listener who loses more than a few should hear, once per
+   * video, that pause mode would keep them.
+   */
+  function noteSkipped() {
+    if (setting('mode') !== 'gaps') return;
+    skipped += 1;
+    if (skipped <= SKIPPED_NOTICE_AFTER || skippedSaidFor === videoId) return;
+    skippedSaidFor = videoId;
+    const key = shortcut('cycle-mode');
+    announcer.status(key ? t('status_skipped_no_pause', String(skipped), key) : t('status_skipped_no_pause_setting', String(skipped)));
   }
 
   /**
@@ -1069,11 +1196,14 @@ function main() {
     if (v && v.paused && !v.ended) v.play().catch(() => {});
   }
 
-  /** @param {object} [o.cue]  the cue being spoken during playback, so a less important one does not cut it off */
+  /**
+   * @param {object} [o.cue]  the cue being spoken during playback, so a cue no more important does not cut it off.
+   *   Without one the text is what the user asked for (describe now, repeat, an answer): nothing scheduled cuts it off.
+   */
   async function speakText(text, { pause = false, kind = 'visual', urgent = false, cue = null } = {}) {
     const video = getVideo();
     const token = (speechToken += 1);
-    speakingCue = cue && { kind: cue.kind, priority: cue.priority };
+    speakingCue = cue ? { kind: cue.kind, priority: cue.priority } : { kind: 'manual', priority: 0 };
     // If an earlier utterance paused the video, this one inherits the duty to resume it.
     if (pausedByUs) pausedByUs = token;
     if (settings.showText) ui.showText(text, kind, estimateSeconds(text, readerRate()));
@@ -1087,34 +1217,68 @@ function main() {
     if (token !== speechToken) return; // a newer utterance took over
     speakingCue = null;
     unduck();
-    if (pausedByUs === token) resumeIfPausedByUs(video);
+    if (pausedByUs !== token) return;
+    if (pause && settings.output !== 'tts') {
+      // The screen reader's end is only estimated: hold the video a little longer (see SCREENREADER_RESUME_HOLD_MS).
+      await new Promise((r) => setTimeout(r, SCREENREADER_RESUME_HOLD_MS));
+      if (token !== speechToken) return;
+    }
+    resumeIfPausedByUs(video);
   }
 
-  function deliver(cue, { manual = false } = {}) {
-    const video = getVideo();
-    const u = chooseUtterance(cue, {
+  /** What to say for a cue now, or null when it does not fit and the mode says skip. */
+  function utteranceFor(cue, video, manual = false) {
+    return chooseUtterance(cue, {
       mode: manual ? 'manual' : setting('mode'),
       detail: setting('detail'),
       rate: readerRate(),
       onScreenText: manual ? true : settings.onScreenText,
       playbackRate: video?.playbackRate || 1,
     });
+  }
+
+  /** @param {string} [o.prefix]  said before the description ("Earlier:" for one well after its moment) */
+  function deliver(cue, { manual = false, prefix = '' } = {}) {
+    const video = getVideo();
+    const u = utteranceFor(cue, video, manual);
     if (!u) {
       console.info(`[SceneVoice] ${formatTime(cue.start)} skipped: does not fit (gap ${cue.gap}s${cue.gapMeasured ? ' from captions' : ''})`);
+      noteSkipped();
       return;
     }
-    console.info(`[SceneVoice] ${formatTime(cue.start)} ${cue.kind}${u.needsPause ? ' (pause)' : ''}: ${u.text}`);
-    lastSpoken = { text: u.text, kind: cue.kind, cue: cue.source || cue };
-    speakText(u.text, { pause: u.needsPause, kind: cue.kind, urgent: manual, cue: manual ? null : cue });
+    const text = prefix ? `${prefix}${u.text}` : u.text;
+    console.info(`[SceneVoice] ${formatTime(cue.start)} ${cue.kind}${u.needsPause ? ' (pause)' : ''}: ${text}`);
+    lastSpoken = { text, kind: cue.kind, cue: cue.source || cue };
+    speakText(text, { pause: u.needsPause, kind: cue.kind, urgent: manual, cue: manual ? null : cue });
   }
 
   function stopSpeaking() {
     speechToken += 1;
     speakingCue = null;
+    deferred = null;
     announcer.stop();
     unduck();
     ui.hideText();
     resumeIfPausedByUs();
+  }
+
+  /**
+   * The user moved to another moment (a jump of more than SEEK_JUMP seconds):
+   * the description of the old one stops, and so does anything waiting for a
+   * pause there. Small corrections and the player's own adjustments pass.
+   */
+  function onSeeked(video) {
+    const from = lastPosition;
+    const now = video.currentTime;
+    lastPosition = now;
+    scheduler.reset(now);
+    if (!Number.isFinite(from) || Math.abs(now - from) <= SEEK_JUMP) return;
+    pendingLate = null;
+    deferred = null;
+    if (!announcer.speaking) return;
+    console.info(`[SceneVoice] seek from ${formatTime(from)} to ${formatTime(now)}: speech stopped`);
+    // Ends the utterance like a finished one: the video is unducked and, if we paused it, resumed.
+    announcer.stop();
   }
 
   // ---------- playback loop ----------
@@ -1122,13 +1286,20 @@ function main() {
   function watchVideo(video) {
     if (watchedVideos.has(video)) return;
     watchedVideos.add(video);
+    // The player swaps <video> elements (ads, the miniplayer, a reload): an old one's events say nothing about the video being watched.
+    const current = () => !dead && getVideo() === video;
     video.addEventListener('play', () => {
+      if (!current()) return;
       // The user resumed during a pause we made: leave the video playing.
       pausedByUs = 0;
       maybeHint();
     });
-    video.addEventListener('seeked', () => scheduler.reset(video.currentTime));
-    video.addEventListener('ended', () => finishLive(video));
+    video.addEventListener('seeked', () => {
+      if (current()) onSeeked(video);
+    });
+    video.addEventListener('ended', () => {
+      if (current()) finishLive(video);
+    });
   }
 
   function tick() {
@@ -1142,6 +1313,8 @@ function main() {
     const video = getVideo();
     if (!video) return;
     watchVideo(video);
+    // Not while seeking: the position is already the new one, and the seek must be seen as a jump from the old.
+    if (!video.seeking) lastPosition = video.currentTime;
     if (!video.paused) maybeHint();
     if (isAdShowing()) {
       scheduler.reset(null);
@@ -1158,11 +1331,12 @@ function main() {
       .filter((c) => (settings.onScreenText || c.kind !== 'text') && passesDensity(c, setting('density')));
     const cue = pickOne(fired);
     if (!cue) {
-      tryLate(video);
+      tryHeld(video);
       return;
     }
     if (!mayInterrupt(speakingCue, cue)) {
-      console.info(`[SceneVoice] ${formatTime(cue.start)} skipped: on-screen text is being read`);
+      // Never cut off a description at least as important: wait for the next pause instead (see tryHeld).
+      hold(cue, video.currentTime);
       return;
     }
     deliver(cue);
@@ -1314,7 +1488,8 @@ function main() {
       onSubmit: async (q) => {
         const answer = await askAI(q);
         // Screen reader users hear the answer from the dialog itself (a live region inside it).
-        if (settings.output === 'tts') announcer.say(answer.text);
+        // By voice it goes through speakText, so a scheduled description does not cut it off.
+        if (settings.output === 'tts') speakText(answer.text, { urgent: true });
         return answer;
       },
       onClose: ({ jumpTo } = {}) => {
@@ -1507,6 +1682,8 @@ function main() {
       completedUntil: script?.completedUntil || 0,
       complete: Boolean(script?.complete),
       model: script?.model || '',
+      // What this video's descriptions cost at list price ({ amount, currency }), or null when unknown or not charged.
+      cost: script?.usage && script.provider !== 'cloud' ? estimateCost(script.model, script.usage) : null,
       lang,
       videoType,
     };

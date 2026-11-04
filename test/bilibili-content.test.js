@@ -195,8 +195,8 @@ describe('a Bilibili video page', () => {
     expect(msg.frames.length).toBeLessThanOrEqual(6);
     for (const f of msg.frames) expect(f).toEqual({ time: expect.any(Number), data: '/9j/AAAA' });
 
-    // Its moment (0:06) has passed: it is said now, in the pause before the speech at 0:30.
-    await vi.waitFor(() => expect(said()).toContain(CHOP.standard));
+    // Its moment (0:06) has passed by more than 6 s: it is said now, in the pause before the speech at 0:30, led by "Earlier:".
+    await vi.waitFor(() => expect(said()).toContain(`Earlier: ${CHOP.standard}`));
     expect(await tabState()).toMatchObject({ status: 'live', cueCount: 1 });
 
     // The box on the player, and the popup's state, say how far the part being watched is described.

@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, DENSITIES, DETAILS, MODES, VIDEO_TYPES } from '../src
 import { typeAdjustedText, typeChosenText } from '../src/shared/labels.js';
 import { normalizeSettings } from '../src/shared/settings.js';
 import { knownType, pageVideoType, resolveVideoType, titleLooksLikeTutorial, typeAdjustments, typeSettingKey } from '../src/shared/videotype.js';
-import { extractCategory } from '../src/content/youtube.js';
+import { extractCategory, extractCategoryId } from '../src/content/youtube.js';
 import { STRINGS } from '../scripts/locales.mjs';
 import { fakeChrome } from './fake-chrome.js';
 
@@ -51,6 +51,46 @@ describe('video type from the watch page', () => {
     }
   });
 
+  it('recognises tutorial titles in other languages', () => {
+    const titles = {
+      es: ['Cómo hacer pan casero', 'Tutorial de Excel paso a paso', 'Lección 3 de guitarra', 'Curso de fotografía para principiantes', 'Receta de paella'],
+      pt: ['Como fazer bolo de cenoura', 'Aula 1: introdução ao Python', 'Receita de brigadeiro', 'Curso de inglês para iniciantes', 'Fotossíntese explicada'],
+      fr: ['Tuto maquillage', 'Comment faire une tarte aux pommes', 'Leçon de piano pour débutants', 'La relativité expliquée', 'Recette de crêpes'],
+      de: ['Anleitung: Fahrradreifen wechseln', 'Excel Tutorial für Anfänger', 'Schritt für Schritt zum Sauerteig', 'Photosynthese erklärt', 'Rezept: Apfelstrudel'],
+      ja: ['Excel 入門講座', 'カレーの作り方', '相対性理論を解説', 'ギターの使い方 初心者', '肉じゃがのレシピ'],
+      ko: ['엑셀 기초 강의', '김치찌개 만들기', '초보자를 위한 기타 강좌', '양자역학 설명', '파스타 레시피'],
+      ru: ['Урок 3: Python для начинающих', 'Как сделать стол своими руками', 'Пошаговая инструкция', 'Рецепт борща', 'Объяснение теории относительности'],
+      ar: ['شرح برنامج إكسل', 'طريقة عمل الكعك', 'درس في العربية للمبتدئين', 'تعلم البرمجة خطوة بخطوة', 'وصفة الحمص'],
+      hi: ['एक्सेल सीखें', 'समोसा कैसे बनाएं', 'गिटार का पाठ', 'शुरुआती के लिए कोर्स', 'पनीर की रेसिपी'],
+      id: ['Cara membuat nasi goreng', 'Belajar Excel untuk pemula', 'Tutorial gitar', 'Resep rendang', 'Penjelasan fotosintesis'],
+      vi: ['Hướng dẫn làm phở', 'Cách làm bánh mì', 'Bài giảng vật lý', 'Khóa học tiếng Anh cho người mới', 'Công thức nấu ăn'],
+    };
+    for (const [lang, list] of Object.entries(titles)) {
+      for (const title of list) expect(titleLooksLikeTutorial(title), `${lang}: ${title}`).toBe(true);
+    }
+    for (const title of ['Concierto en vivo', 'Clipe oficial', 'Bande-annonce officielle', 'Offizieller Trailer', 'ライブ映像', '뮤직비디오', 'Официальный клип', 'أغنية جديدة', 'नया गाना', 'Video klip resmi', 'MV chính thức']) {
+      expect(titleLooksLikeTutorial(title), title).toBe(false);
+    }
+  });
+
+  it('prefers the numeric category id, which is the same in every page language', () => {
+    expect(pageVideoType({ categoryId: '27', category: 'Bildung' })).toBe('tutorial');
+    expect(pageVideoType({ categoryId: 10, category: 'Musik', title: 'Guitar lesson 3' })).toBe('entertainment');
+    expect(pageVideoType({ categoryId: '28' })).toBe('tutorial');
+    expect(pageVideoType({ categoryId: '44' })).toBe('entertainment');
+    // An id the table does not know: the name, then the title, decide as before.
+    expect(pageVideoType({ categoryId: '2', category: 'Autos & Vehicles', title: 'How to change a tyre' })).toBe('tutorial');
+    expect(pageVideoType({ categoryId: '2', category: 'Autos & Vehicles', title: 'Sunday drive' })).toBe('');
+    expect(pageVideoType({ categoryId: '2', category: 'Education' })).toBe('tutorial');
+    // People & Blogs by id: the title first, then vlogs.
+    expect(pageVideoType({ categoryId: '22', title: 'Sourdough for beginners' })).toBe('tutorial');
+    expect(pageVideoType({ categoryId: '22', title: 'A week in Lisbon' })).toBe('entertainment');
+    // Not an id at all.
+    expect(pageVideoType({ categoryId: 'constructor' })).toBe('');
+    expect(pageVideoType({ categoryId: '__proto__', title: 'Sunday drive' })).toBe('');
+    expect(pageVideoType({ categoryId: '', category: 'Music' })).toBe('entertainment');
+  });
+
   it('reads the category from the player response, or from the genre meta tag', () => {
     const response = '<script>var ytInitialPlayerResponse = {"microformat":{"playerMicroformatRenderer":{"title":{"simpleText":"Knots"},"description":{"simpleText":"Say \\"hi\\" \\u0026 tie"},"category":"Howto \\u0026 Style","publishDate":"2024-01-01"}}};</script>';
     expect(extractCategory(response)).toBe('Howto & Style');
@@ -59,6 +99,20 @@ describe('video type from the watch page', () => {
     expect(extractCategory('{"chip":{"category":"Music"}}')).toBe('');
     expect(extractCategory('<html>nothing</html>')).toBe('');
     expect(extractCategory(null)).toBe('');
+  });
+
+  it('reads the numeric category id when the player response has one', () => {
+    const withId = '<script>var ytInitialPlayerResponse = {"microformat":{"playerMicroformatRenderer":{"title":{"simpleText":"Knots"},"category":"Howto \\u0026 Style","categoryId":"26","publishDate":"2024-01-01"}}};</script>';
+    expect(extractCategoryId(withId)).toBe('26');
+    expect(extractCategoryId(withId.replace('"categoryId":"26"', '"categoryId":26'))).toBe('26');
+    // The name is still read from the same page.
+    expect(extractCategory(withId)).toBe('Howto & Style');
+    // Most pages carry only the name.
+    const nameOnly = '<script>var ytInitialPlayerResponse = {"microformat":{"playerMicroformatRenderer":{"category":"Education"}}};</script>';
+    expect(extractCategoryId(nameOnly)).toBe('');
+    // A "categoryId" elsewhere on the page is not the video's.
+    expect(extractCategoryId('{"chip":{"categoryId":"10"}}')).toBe('');
+    expect(extractCategoryId(null)).toBe('');
   });
 });
 

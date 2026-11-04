@@ -157,8 +157,11 @@ describe('on-screen text comes first', () => {
     expect(mayInterrupt({ kind: 'text', priority: 1 }, visual(5, { priority: 1 }))).toBe(false);
     expect(mayInterrupt({ kind: 'text', priority: 2 }, visual(5, { priority: 3 }))).toBe(false);
     expect(mayInterrupt({ kind: 'text', priority: 2 }, visual(5, { priority: 1 }))).toBe(true);
-    expect(mayInterrupt({ kind: 'text', priority: 1 }, text(5, 'Next slide'))).toBe(true);
-    expect(mayInterrupt({ kind: 'visual', priority: 1 }, visual(5, { priority: 3 }))).toBe(true);
+    // Nothing of equal or lower importance cuts off a description any more (it waits for the next pause): not even text over text.
+    expect(mayInterrupt({ kind: 'text', priority: 1 }, text(5, 'Next slide'))).toBe(false);
+    expect(mayInterrupt({ kind: 'text', priority: 2 }, text(5, 'Next slide'))).toBe(true);
+    expect(mayInterrupt({ kind: 'visual', priority: 1 }, visual(5, { priority: 3 }))).toBe(false);
+    expect(mayInterrupt({ kind: 'visual', priority: 3 }, visual(5, { priority: 1 }))).toBe(true);
     expect(mayInterrupt(null, visual(5))).toBe(true);
   });
 });

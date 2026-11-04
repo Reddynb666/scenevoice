@@ -10,7 +10,6 @@ import {
   DEFAULT_SETTINGS,
   DENSITIES,
   DETAILS,
-  LANGUAGES,
   MODES,
   MSG,
   OUTPUTS,
@@ -20,8 +19,9 @@ import {
   TTS_RATE,
   VOICE_SAMPLES,
 } from './constants.js';
+import { cleanBudget } from './usage.js';
+import { isDescriptionLanguage } from './language.js';
 
-const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
 const MAX_VOICE_NAME = 200;
 
 const round = (n, places = 2) => Math.round(n * 10 ** places) / 10 ** places;
@@ -43,7 +43,7 @@ function voiceMap(value) {
   const out = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
   for (const [lang, name] of Object.entries(value)) {
-    if (LANGUAGE_CODES.has(lang) && typeof name === 'string' && name.length <= MAX_VOICE_NAME) out[lang] = name;
+    if (isDescriptionLanguage(lang) && typeof name === 'string' && name.length <= MAX_VOICE_NAME) out[lang] = name;
   }
   return out;
 }
@@ -71,7 +71,7 @@ const CLEAN = {
   tutorialDensity: oneOf(DENSITIES),
   density: oneOf(DENSITIES),
   onScreenText: bool,
-  language: (v, d) => (v === 'auto' || LANGUAGE_CODES.has(v) ? v : d),
+  language: (v, d) => (v === 'auto' || isDescriptionLanguage(v) ? v : d),
   output: oneOf(OUTPUTS),
   interrupt: bool,
   readerSpeed: (v, d) => (v == null || v === '' ? d : nearestReaderSpeed(v)),
@@ -90,6 +90,8 @@ const CLEAN = {
   pauseOnAsk: bool,
   youtubeProvider: oneOf(PROVIDERS),
   bilibiliProvider: oneOf(PROVIDERS),
+  dailyBudgetSeconds: cleanBudget,
+  shareDescriptions: bool,
 };
 
 /** Settings the user can pick for themselves instead of leaving them to the video type. */

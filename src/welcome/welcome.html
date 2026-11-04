@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="welcome_title">Welcome to SceneVoice</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <main class="stack">
+    <header class="brand">
+      <img src="icons/icon48.png" alt="">
+      <h1 id="title" tabindex="-1" data-i18n="welcome_title">Welcome to SceneVoice</h1>
+    </header>
+    <p data-i18n="welcome_intro">SceneVoice says what is on screen in YouTube and Bilibili videos, in the pauses between speech, through your screen reader or a built-in voice. Three steps, about two minutes.</p>
+
+    <!-- 1. A sample, with no model and no key -->
+    <section class="card stack" aria-labelledby="step1">
+      <h2 id="step1" data-i18n="welcome_step1_title">1. Hear what SceneVoice does</h2>
+      <p data-i18n="welcome_step1_body">Three sample descriptions, the way they come during a video. Nothing is sent anywhere and no key is needed.</p>
+      <fieldset>
+        <legend data-i18n="welcome_output_legend">Hear them through</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
+          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listeners without a screen reader.</span></label>
+        </div>
+      </fieldset>
+      <div class="row"><button type="button" id="sample" data-i18n="welcome_sample_button">Hear a sample</button></div>
+      <p id="sampleOut" class="sample" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- 2. Cloud or own key -->
+    <section class="card stack" aria-labelledby="step2">
+      <h2 id="step2" data-i18n="welcome_step2_title">2. Choose how descriptions are made</h2>
+      <fieldset>
+        <legend data-i18n="welcome_source_legend">Descriptions are made by</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="source" value="cloud" checked><span data-i18n="welcome_source_cloud">SceneVoice Cloud: free allowance, nothing to set up (recommended)</span><span class="hint" data-i18n="welcome_source_cloud_hint">60 minutes of newly described video a day; videos already described by other SceneVoice users do not count.</span></label>
+          <label class="choice"><input type="radio" name="source" value="own"><span data-i18n="welcome_source_own">My own key (Gemini or Qwen): unlimited, private</span><span class="hint" data-i18n="welcome_source_own_hint">You get a free key from Google AI Studio or Alibaba Cloud Model Studio and paste it in. Nothing goes through SceneVoice.</span></label>
+        </div>
+      </fieldset>
+      <div id="cloudBox" class="stack">
+        <p id="shareNote" class="small muted" data-i18n="welcome_cloud_share_note">Start free also turns on sharing.</p>
+        <p><a id="privacyLink" href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md#scenevoice-cloud-optional" target="_blank" rel="noopener" data-i18n="welcome_privacy_link">Privacy note: what SceneVoice Cloud receives and keeps (opens in a new tab)</a></p>
+        <div class="row"><button type="button" id="startFree" aria-describedby="shareNote" data-i18n="welcome_start_free">Start free</button></div>
+        <p id="cloudStatus" role="status" aria-live="polite"></p>
+      </div>
+      <div id="ownBox" class="stack" hidden>
+        <p><a id="ownKey" class="button" href="options.html#gemini" data-i18n="welcome_own_key_link">Add my key in settings</a></p>
+      </div>
+    </section>
+
+    <!-- 3. Try it -->
+    <section class="card stack" aria-labelledby="step3">
+      <h2 id="step3" data-i18n="welcome_step3_title">3. Try it</h2>
+      <p id="shortcutText"></p>
+      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_edit">Change shortcuts</button></div>
+      <p data-i18n="welcome_try_body">SceneVoice works on YouTube and Bilibili video pages. Open a video and play it: the first time, SceneVoice says once how to start the descriptions.</p>
+      <ul class="plain">
+        <li><a id="tryYoutube" href="https://www.youtube.com/watch?v=aqz-KE-bpKQ" target="_blank" rel="noopener" data-i18n="welcome_try_youtube">Open a short YouTube video to try (opens in a new tab)</a></li>
+        <li id="tryBilibiliItem" hidden><a id="tryBilibili" href="https://www.bilibili.com/video/BV1GJ411x7h7/" target="_blank" rel="noopener" data-i18n="welcome_try_bilibili">Open a short Bilibili video to try (opens in a new tab)</a></li>
+      </ul>
+    </section>
+
+    <p><a id="skip" href="options.html" data-i18n="welcome_skip">Skip, open all settings</a></p>
+  </main>
+  <script src="welcome.js"></script>
+</body>
+</html>

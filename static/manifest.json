@@ -26,7 +26,7 @@
     "type": "module"
   },
   "permissions": ["storage", "unlimitedStorage", "tts", "activeTab", "offscreen"],
-  "host_permissions": ["https://generativelanguage.googleapis.com/*", "https://dashscope.aliyuncs.com/*"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*", "https://dashscope.aliyuncs.com/*", "https://api.scenevoice.app/*"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
   "content_scripts": [
     {

@@ -16,23 +16,27 @@ It is built for screen reader users first. Every control works from the keyboard
 - **Says what it sees, and says when it is not sure.** Descriptions stick to what is visible: no guessed feelings or motives, no praise or judgement, and no names unless they are on screen or spoken. When something is blurred, small or too quick, the description says so ("appears to", "hard to see"), and descriptions Gemini is not sure of are spoken less often.
 - **Tell it when it is wrong.** *Last description is wrong* (in the popup, or a shortcut you set) marks what you just heard. SceneVoice describes only that moment again, replaces the saved description, and tells you each step. The mark stays on your computer.
 - **Your screen reader, or a built-in voice.** By default descriptions go to a live region that NVDA, JAWS and VoiceOver read with your own settings. People without a screen reader can switch to the browser's built-in voices.
-- **Chinese and English, and more.** Descriptions can be written in Simplified or Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic or Hindi. The interface is in English and Simplified Chinese.
+- **Your language.** Descriptions can be written in any language your browser is set to; 24 of them (Simplified and Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic, Hindi, Italian, Dutch, Polish, Turkish, Vietnamese, Thai, Indonesian, Bengali, Urdu, Persian, Ukrainian, Swahili) have their own hedging words and test sentences. The interface is in 14 languages: English and Simplified Chinese are complete and reviewed; Traditional Chinese, Spanish, Portuguese (Brazil), French, German, Japanese, Korean, Russian, Arabic, Hindi, Indonesian and Vietnamese are AI drafts awaiting native screen-reader users' review (see `CONTRIBUTING.md`).
 - **Large-text overlay** for low-vision viewers and for sighted people watching with you.
 - **No account, no server, no tracking.** You use your own free Gemini API key. SceneVoice has no backend and collects nothing.
 - **China site (experimental): Bilibili with Qwen.** On Bilibili video pages, SceneVoice can describe as you watch with Alibaba Cloud's Qwen. See [below](#china-site--bilibili-experimental).
 
 ## Install
 
-### From the Chrome Web Store
+SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116 or newer). Get it from:
 
-Coming soon. Until then, install the unpacked build below. SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116 or newer).
+- Chrome Web Store (link when published)
+- Edge Add-ons (link when published)
+- [GitHub Releases](https://github.com/reddynb666/scenevoice/releases): `scenevoice-<version>.zip`, with `SHA256SUMS` to check the download; load it as an unpacked extension (see [Development](#development))
+- Gitee mirror for mainland China (see [docs/distribution-china.md](./docs/distribution-china.md))
 
-### Unpacked (developer) build
+### First run
 
-1. Download the latest `scenevoice-<version>.zip` from the Releases page and unzip it, or build it yourself (see Development).
-2. Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and pick the unzipped `dist` folder.
-3. The settings page opens, with focus on the key field (the Qwen key field in a Chinese browser). Follow the steps there, or the step-by-step guide linked from it, written for screen reader users, to add a key. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are.
-4. The first time you play a video without descriptions, SceneVoice says once which key creates them. The popup lists every shortcut under *All keyboard shortcuts*, with a button to change them.
+After installing, the welcome page opens: hear a sample, then choose SceneVoice Cloud (free allowance, no key) or your own key.
+
+1. **Hear a sample.** Three sample descriptions through your screen reader or the built-in voice. Nothing is sent anywhere.
+2. **Choose how descriptions are made.** *SceneVoice Cloud*: press *Start free* and you get an anonymous device token with 60 minutes of newly described video a day; videos other SceneVoice users already had described do not count, and finished descriptions are shared back as text (switch it off in settings). *My own key*: the settings page opens at the key field (the Qwen key field in a Chinese browser), with a step-by-step guide written for screen reader users. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are.
+3. **Try it.** The page says your shortcut and links to a short video. The first time you play a video without descriptions, SceneVoice says once how to start. The popup lists every shortcut under *All keyboard shortcuts*, with a button to change them.
 
 ### Getting a Gemini API key
 
@@ -180,7 +184,7 @@ Descriptions are generated by a language model and can be wrong. SceneVoice asks
 - The descriptions you mark as wrong are recorded on your computer only, with the saved descriptions, and are deleted with them. There is no feedback server.
 - Settings (not the key) are synced through your browser profile if sync is on.
 
-Full policy: [PRIVACY.md](./PRIVACY.md).
+Full policy: [PRIVACY.md](./PRIVACY.md) (中文版：[PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)).
 
 ## Development
 
@@ -189,9 +193,18 @@ npm install
 npm run build        # builds into dist/
 npm test             # unit tests (vitest)
 npm run test:e2e     # end-to-end test in headless Chromium with a mock Gemini API
-npm run package      # build + scenevoice-<version>.zip for the Web Store
+npm run package      # build + scenevoice-<version>.zip for the stores, and -sourcemaps.zip
+npm run build:meta   # build + dist-meta.json and a bundle size table (CI fails if content.js > 120 KB)
+npm run screenshots  # store screenshots and promo tile into docs/store/ (needs dist/)
+npm run release -- 1.2.0   # cut CHANGELOG, set the version, test, build, commit and tag (no push); see docs/release.md
 npm run dev          # rebuild on change
 ```
+
+Unpacked (developer) build:
+
+1. Build (`npm run build`), or download `scenevoice-<version>.zip` from [Releases](https://github.com/reddynb666/scenevoice/releases) and unzip it into a folder you will keep.
+2. Open `chrome://extensions` (`edge://extensions` in Edge), turn on **Developer mode**, choose **Load unpacked**, and pick the `dist` folder (or the unzipped folder).
+3. After each `npm run build`, press *Reload* on that page and refresh the video tab.
 
 Layout:
 
@@ -207,12 +220,12 @@ Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUT
 
 ## Roadmap
 
-Done since 1.0.0: defaults by video type (tutorials more detailed, music videos brief), and an experimental Bilibili and Qwen edition for mainland China.
+Done since 1.0.0: defaults by video type, the Bilibili and Qwen edition for mainland China, an honest first minute (the welcome page, one key describing every site, nothing hanging in silence), descriptions that no longer talk over dialogue or cut each other off, a usage counter with a daily limit, 14 interface languages, SceneVoice Cloud (the optional no-key path: an extension provider, a reference relay under `server/`, and a privacy section), a website under `site/`, and release engineering (tagged GitHub Releases with checksums, store drafts, CI with an accessibility gate). The plan behind this is `docs/plan-2026-11.zh-CN.md`.
 
 Next, in order:
 
 1. Tests with blind and low-vision users (NVDA, JAWS, VoiceOver; English and Chinese), then the Chrome Web Store and Microsoft Edge Add-ons, with a Gitee mirror for mainland China.
-2. No key needed to start: donated model credits through a partner organisation, with a fair monthly allowance per person.
+2. SceneVoice Cloud live: the relay deployed under the project's domain, a free daily allowance for everyone and a paid tier that funds it; grants and donated credits where they can be had.
 3. For creators: export the descriptions as text or an audio track to upload as a YouTube *descriptive* track.
 4. More expressive Chinese voices (for example CosyVoice) as an option, and a large-print, high-contrast mode for the text shown on the video.
 5. Character memory you can edit ("call the woman in the red coat Maya"), kept per channel.

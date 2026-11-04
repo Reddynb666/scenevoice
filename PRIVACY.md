@@ -35,14 +35,27 @@ Qwen cannot open a video by its address, and Gemini cannot open Bilibili's. With
 
 On a Bilibili video page, SceneVoice reads the video's title, uploader, description, section and parts from the page itself (the data the page is delivered with), and calls none of Bilibili's APIs. When you turn on CC subtitles in the player, SceneVoice fetches the same subtitle file the player has just loaded, from Bilibili's file servers (`*.hdslb.com`), to fit descriptions between lines of dialogue. Nothing from either is stored or sent elsewhere.
 
+### SceneVoice Cloud (optional)
+
+SceneVoice Cloud is for people who do not want to make an API key. It is off until you press **Start free** on the welcome page or the settings page, and users with their own key send nothing to SceneVoice.
+
+- **What the relay receives.** The same request Google would receive (see above: the video's address, title, channel and description, the section to describe, your question, the recent descriptions; on Bilibili, the scaled-down pictures), sent to `https://api.scenevoice.app` instead, with an anonymous device token in place of your key. The relay forwards it to the Gemini API with the project's own key and passes the answer back. It does not log the request or the answer.
+- **The device token** is a random string issued when you press *Start free*. It is not tied to an account, an email address or a name, and nothing else identifies you. The relay keeps, per token, how many seconds of video were described today (the free allowance) and which plan the token is on. Remove the token at any time with *Stop using Cloud* on the settings page; a new *Start free* issues a new one.
+- **Finished descriptions, when sharing is on.** With *Share finished descriptions with other SceneVoice users* turned on (it is turned on when you press *Start free*; turn it off on the settings page), the text of a video's descriptions is sent to the relay once they are complete: the video ID, language, length, the descriptions with their timing, the labels used for people, the kind of video and the model. The relay keeps this text so the next listener of the same video gets it at once. It does not keep who sent it, and SceneVoice strips the descriptions you marked as wrong before sending.
+- **What the relay never keeps:** pictures of the video, your questions, the model's answers to them, your IP address (a salted hash of it is used only to limit how many tokens one network can create in a day), or anything about your browser.
+- **Licences.** If you activate a Plus or organisation licence key, the relay stores which key is attached to your token. Payment, where there is any, is handled by Stripe or the platform you paid on; the relay sees only that a licence key exists.
+
+The relay's own privacy addendum, with the data it stores and for how long, is in the project repository (`server/PRIVACY-ADDENDUM.md`).
+
 No other network requests are made.
 
 ## What is stored on your computer
 
-- **Your API keys** (Gemini, Qwen), with the model and address for each, in the browser's local extension storage (`chrome.storage.local`). It never leaves your computer except as described above, and it is never placed in a URL. Remove it at any time on the settings page.
+- **Your API keys** (Gemini, Qwen), with the model and address for each, and the SceneVoice Cloud device token if you have one, in the browser's local extension storage (`chrome.storage.local`). They never leave your computer except as described above, and are never placed in a URL. Remove them at any time on the settings page.
 - **Descriptions** that have been generated, keyed by video and language, so a video is described only once, with the kind of video Gemini judged it to be (entertainment or tutorial). The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
 - **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server) and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
-- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language, and whether SceneVoice has already told you how to create descriptions. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language, the daily limit, and whether SceneVoice has already told you how to create descriptions. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Usage counts** — the tokens and requests each model reports for the current day, with a rough cost estimate from list prices, and each video's own token count next to its descriptions — are kept on this computer only, so the settings page can show today's usage and the popup what a video cost; they are never sent anywhere.
 - **Videos whose "AI-generated" notice you have heard**, only if you set that notice to once per video: the video IDs (YouTube's or Bilibili's), the last 300, in the same synced settings storage, so the notice is not repeated.
 
 Nothing is stored anywhere else.
@@ -53,6 +66,7 @@ Nothing is stored anywhere else.
 - **Read and change data on www.bilibili.com/video/** — the same, on Bilibili video pages only (experimental).
 - **generativelanguage.googleapis.com** — to call the Gemini API.
 - **dashscope.aliyuncs.com** — to call the Qwen API (Alibaba Cloud Model Studio).
+- **api.scenevoice.app** — SceneVoice Cloud, the optional relay above. Contacted only after you press *Start free*.
 - **Storage** — to keep your key, settings and generated descriptions on your computer.
 - **Text-to-speech** — for the optional built-in voice.
 - **Active tab** — so the toolbar popup can tell whether the current tab is a video SceneVoice supports.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ESTIMATE_MARGIN,
   applyConfidence,
   chooseUtterance,
   cleanText,
@@ -14,8 +15,8 @@ import {
   parseTime,
   planChunks,
 } from '../src/shared/script.js';
-import { HEDGE_WORDS, LANGUAGES, UNCERTAIN_LEAD, ANSWER_AT } from '../src/shared/constants.js';
-import { CueScheduler, pickOne } from '../src/shared/scheduler.js';
+import { HEDGE_WORDS, LANGUAGES, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, ANSWER_AT } from '../src/shared/constants.js';
+import { CueScheduler, mayInterrupt, pickOne } from '../src/shared/scheduler.js';
 import { resolveLanguage } from '../src/shared/storage.js';
 import { parseIsoDuration, videoIdFromUrl } from '../src/content/youtube.js';
 
@@ -176,14 +177,30 @@ describe('confidence', () => {
     expect(applyConfidence({ priority: 1, confidence: 'high', brief: 'A dog.' }, 'en')).toEqual({ priority: 1, confidence: 'high', brief: 'A dog.' });
   });
 
-  it('has words for every description language', () => {
-    for (const { code } of LANGUAGES) {
+  it('has words for every description language, and for no other', () => {
+    const codes = LANGUAGES.map((l) => l.code);
+    // The languages with tables of their own; any other real language falls back to the English tables.
+    expect(codes).toEqual(['en', 'zh-CN', 'zh-TW', 'es', 'fr', 'de', 'pt', 'ja', 'ko', 'ru', 'ar', 'hi', 'it', 'nl', 'pl', 'tr', 'vi', 'th', 'id', 'bn', 'ur', 'fa', 'uk', 'sw']);
+    // Every table has exactly these languages: a new language must be added to all of them.
+    const sorted = [...codes].sort();
+    for (const [name, table] of Object.entries({ LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, HEDGE_WORDS, ANSWER_AT })) {
+      expect(Object.keys(table).sort(), name).toEqual(sorted);
+    }
+    for (const { code, name } of LANGUAGES) {
+      expect(name, code).toBeTruthy();
+      expect(LANGUAGE_NAMES_EN[code], code).toMatch(/^[A-Z]/);
       expect(UNCERTAIN_LEAD[code], code).toBeTruthy();
+      // Ends with the space or punctuation the language needs before the description.
+      expect(UNCERTAIN_LEAD[code], code).toMatch(/[\s。]$/);
       expect(ANSWER_AT[code], code).toContain('$1');
-      expect(HEDGE_WORDS[code]?.length, code).toBeGreaterThan(2);
+      // Enough words to recognise the model's own hedging; the first three are shown to it as examples.
+      expect(HEDGE_WORDS[code]?.length, code).toBeGreaterThanOrEqual(6);
       // The lead counts as saying so, so it is never added twice.
       expect(isHedged(UNCERTAIN_LEAD[code], code), code).toBe(true);
-      for (const w of HEDGE_WORDS[code]) expect(w, code).toBe(w.toLowerCase());
+      for (const w of HEDGE_WORDS[code]) {
+        expect(w, code).toBe(w.toLowerCase());
+        expect(w.trim(), code).toBe(w);
+      }
     }
   });
 });
@@ -257,19 +274,32 @@ describe('chooseUtterance', () => {
     const u = chooseUtterance(tight, { mode: 'pause', detail: 'standard', rate: 1, onScreenText: true });
     expect(u).toEqual({ text: tight.standard, needsPause: true });
   });
-  it('a gap measured from captions gets no extra leeway', () => {
+  it('keeps half a second back from a gap the model estimated, and none from one measured from captions', () => {
     // "A door opens." takes about 1.3 s at rate 1.
-    const c = cue(0, { gap: 1.2 });
-    expect(chooseUtterance(c, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true }).text).toBe(c.brief);
-    expect(chooseUtterance({ ...c, gapMeasured: true }, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true })).toBeNull();
-    expect(chooseUtterance({ ...c, gapMeasured: true }, { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
+    expect(ESTIMATE_MARGIN).toBe(0.5);
+    const c = cue(0, { gap: 1.5 });
+    expect(chooseUtterance({ ...c, gapMeasured: true }, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true }).text).toBe(c.brief);
+    // The estimate is optimistic: 1.5 s claimed leaves 1 s of room, not enough.
+    expect(chooseUtterance(c, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true })).toBeNull();
+    expect(chooseUtterance(c, { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
+    // The margin never makes the room negative, and at 2x the gap is halved before the margin comes off.
+    expect(chooseUtterance(cue(0, { gap: 0.3 }), { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
+    expect(chooseUtterance(cue(0, { gap: 4 }), { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true, playbackRate: 2 }).text).toBe(c.brief);
+    expect(chooseUtterance(cue(0, { gap: 3 }), { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true, playbackRate: 2 })).toBeNull();
+  });
+  it('treats a gap of 0 (frames mode: no pause known) as no room at all', () => {
+    const unknown = cue(0, { gap: 0, priority: 1 });
+    expect(chooseUtterance(unknown, { mode: 'gaps', detail: 'standard', rate: 3, onScreenText: true })).toBeNull();
+    expect(chooseUtterance(unknown, { mode: 'pause', detail: 'standard', rate: 1, onScreenText: true })).toEqual({ text: unknown.standard, needsPause: true });
+    expect(chooseUtterance(unknown, { mode: 'manual', detail: 'standard', rate: 1, onScreenText: true })).toEqual({ text: unknown.standard, needsPause: false });
   });
   it('pause mode pauses only when needed', () => {
     expect(chooseUtterance(cue(0, { gap: 1 }), { mode: 'pause', detail: 'detailed', rate: 1, onScreenText: true }).needsPause).toBe(true);
     expect(chooseUtterance(cue(0, { gap: 30 }), { mode: 'pause', detail: 'detailed', rate: 1, onScreenText: true }).needsPause).toBe(false);
   });
   it('faster readers fit more', () => {
-    const c = cue(0, { gap: 3 });
+    // 3.5 s claimed, 3 s of room after the margin.
+    const c = cue(0, { gap: 3.5 });
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'detailed', rate: 1, onScreenText: true }).text).toBe(c.brief);
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'detailed', rate: 2, onScreenText: true }).text).toBe(c.standard);
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'detailed', rate: 3, onScreenText: true }).text).toBe(c.detailed);
@@ -331,6 +361,32 @@ describe('CueScheduler', () => {
     expect(pickOne([cue(1, { priority: 2 }), cue(2, { priority: 1 }), cue(3, { priority: 2 })]).start).toBe(2);
     expect(pickOne([cue(1), cue(3)]).start).toBe(3);
     expect(pickOne([])).toBeNull();
+  });
+});
+
+describe('mayInterrupt', () => {
+  const visual = (priority) => ({ kind: 'visual', priority });
+  const text = (priority) => ({ kind: 'text', priority });
+  it('lets anything through when nothing is being said', () => {
+    expect(mayInterrupt(null, visual(3))).toBe(true);
+    expect(mayInterrupt(undefined, text(2))).toBe(true);
+  });
+  it('never cuts off a description of equal or higher priority', () => {
+    expect(mayInterrupt(visual(1), visual(1))).toBe(false);
+    expect(mayInterrupt(visual(1), visual(2))).toBe(false);
+    expect(mayInterrupt(visual(2), visual(1))).toBe(true);
+    expect(mayInterrupt(text(2), text(2))).toBe(false);
+    expect(mayInterrupt(text(2), text(1))).toBe(true);
+  });
+  it('keeps on-screen text safe from a visual description that is no more important', () => {
+    expect(mayInterrupt(text(2), visual(2))).toBe(false);
+    expect(mayInterrupt(text(2), visual(3))).toBe(false);
+    expect(mayInterrupt(text(2), visual(1))).toBe(true);
+  });
+  it('lets nothing scheduled cut off what the user asked for', () => {
+    const manual = { kind: 'manual', priority: 0 };
+    expect(mayInterrupt(manual, visual(1))).toBe(false);
+    expect(mayInterrupt(manual, text(1))).toBe(false);
   });
 });
 

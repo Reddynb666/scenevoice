@@ -19,11 +19,31 @@
     <section class="card stack" aria-labelledby="h-key">
       <h2 id="h-key" data-i18n="opt_key_title">1. Connect an AI model</h2>
 
+      <!-- SceneVoice Cloud: the no-key path. Plan and allowance, Start free, licence, sharing, stop. -->
+      <h3 id="h-cloud" data-i18n="provider_cloud">SceneVoice Cloud</h3>
+      <p id="cloudIntro" class="small muted" data-i18n="opt_cloud_intro">SceneVoice Cloud describes videos with the project’s own key, so there is nothing to set up.</p>
+      <p id="cloudInfo"></p>
+      <div class="row">
+        <button type="button" id="cloudStart" aria-describedby="cloudIntro" data-i18n="opt_cloud_start">Start free</button>
+        <button type="button" id="cloudStop" class="danger" hidden data-i18n="opt_cloud_stop">Stop using Cloud</button>
+      </div>
+      <p id="cloudStatus" role="status" aria-live="polite"></p>
+      <label class="check"><input type="checkbox" id="shareDescriptions" data-setting="shareDescriptions" aria-describedby="shareHint"><span data-i18n="set_share_descriptions">Share finished descriptions with other SceneVoice users</span></label>
+      <p id="shareHint" class="small muted" data-i18n="set_share_descriptions_hint">When a video’s descriptions are complete, their text is sent to the SceneVoice cache. Never pictures, questions or who you are.</p>
+      <label class="field" for="licenseKey"><span data-i18n="opt_license_label">Licence key</span></label>
+      <div class="row nowrap">
+        <input type="text" id="licenseKey" autocomplete="off" spellcheck="false" aria-describedby="licenseHint licenseStatus">
+        <button type="button" id="activateLicense" class="secondary" data-i18n="opt_license_activate">Activate a licence key</button>
+      </div>
+      <p id="licenseHint" class="small muted" data-i18n="opt_license_hint">For SceneVoice Cloud Plus or an organisation licence. Keys look like svl-XXXX-XXXX-XXXX.</p>
+      <p id="licenseStatus" role="status" aria-live="polite"></p>
+
       <h3 id="h-provider" data-i18n="opt_provider_title">Which model describes each site</h3>
       <p id="providerHint" class="small muted" data-i18n="opt_provider_hint">Gemini watches a whole YouTube video by its link.</p>
       <label class="field">
         <span data-i18n="set_provider_youtube">YouTube videos</span>
         <select id="youtubeProvider" data-setting="youtubeProvider" aria-describedby="providerHint">
+          <option value="cloud" data-i18n="provider_cloud">SceneVoice Cloud</option>
           <option value="gemini" data-i18n="provider_gemini">Gemini (Google)</option>
           <option value="qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</option>
         </select>
@@ -31,6 +51,7 @@
       <label class="field">
         <span data-i18n="set_provider_bilibili">Bilibili videos (experimental)</span>
         <select id="bilibiliProvider" data-setting="bilibiliProvider" aria-describedby="providerHint">
+          <option value="cloud" data-i18n="provider_cloud">SceneVoice Cloud</option>
           <option value="gemini" data-i18n="provider_gemini">Gemini (Google)</option>
           <option value="qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</option>
         </select>
@@ -295,6 +316,21 @@
       <h2 id="h-data" data-i18n="opt_data_title">5. Saved descriptions and privacy</h2>
       <p id="cacheInfo" role="status" aria-live="polite"></p>
       <div class="row"><button type="button" id="clearCache" class="danger" data-i18n="opt_cache_clear">Delete all saved descriptions</button></div>
+
+      <h3 id="h-usage" data-i18n="opt_usage_title">Usage today</h3>
+      <ul id="usageList" class="small" aria-describedby="usageNote"></ul>
+      <p id="usageNote" class="small muted" data-i18n="opt_usage_note">Counted on this computer only, from the token counts the model reports, and starts again at midnight. The estimate uses paid-tier list prices; a free-tier Gemini key is not charged.</p>
+      <label class="field">
+        <span data-i18n="set_daily_budget">Daily limit</span>
+        <select id="dailyBudget" data-setting="dailyBudgetSeconds" data-number aria-describedby="dailyBudgetHint">
+          <option value="0" data-i18n="budget_none">No limit</option>
+          <option value="1800" data-i18n="budget_30m">30 minutes</option>
+          <option value="3600" data-i18n="budget_1h">1 hour</option>
+          <option value="7200" data-i18n="budget_2h">2 hours</option>
+          <option value="14400" data-i18n="budget_4h">4 hours</option>
+        </select>
+      </label>
+      <p id="dailyBudgetHint" class="small muted" data-i18n="set_daily_budget_hint">How much video SceneVoice may describe per day, every model together, counted on this computer. When it is reached, no new descriptions start until tomorrow; questions still work.</p>
       <ul class="small">
         <li data-i18n="privacy_1">SceneVoice has no server and no account. It does not collect analytics.</li>
         <li data-i18n="privacy_2">To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google's terms for the Gemini API apply.</li>

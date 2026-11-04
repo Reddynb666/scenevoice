@@ -2,6 +2,8 @@
 // correct the pauses the model estimated, so descriptions do not talk over speech.
 // No browser APIs here, so everything is unit-testable.
 
+import { estimateSeconds } from './script.js';
+
 /** Seconds a word-timed (auto-generated) caption line is assumed to run past its last word. */
 const WORD_TAIL = 1;
 
@@ -153,6 +155,9 @@ function laterPause(cue, intervals, wait, room, margin) {
   return null;
 }
 
+/** How long a visual cue of priority 1 may wait for a pause that fits its brief version (seconds of video). */
+export const VISUAL_WAIT = 5;
+
 /**
  * Correct each cue's gap with the real dialogue timing.
  * - A cue that starts while someone is speaking moves to the end of that speech
@@ -163,14 +168,23 @@ function laterPause(cue, intervals, wait, room, margin) {
  * - On-screen text matters more than a passing visual detail, and is still
  *   worth hearing a few seconds after it appeared: a text cue without `textRoom`
  *   seconds of room waits up to `textWait` seconds for the first pause that has it.
+ * - A visual cue of priority 1 (a new place, a new person, the main action) is
+ *   what the viewer cannot follow without. In a talking-head video it almost
+ *   always lands on speech, so it too waits, up to `visualWait` seconds, for the
+ *   first pause long enough for its brief version at the user's reading speed
+ *   (`rate`, and `playbackRate` since the pause passes faster at 2x).
  * Corrected cues carry gapMeasured: true.
  */
-export function fitCuesToDialogue(cues, intervals, { maxShift = 2, margin = 0.3, textWait = 8, textRoom = 1.5 } = {}) {
+export function fitCuesToDialogue(cues, intervals, { maxShift = 2, margin = 0.3, textWait = 8, textRoom = 1.5, visualWait = VISUAL_WAIT, rate = 1, playbackRate = 1 } = {}) {
   if (!intervals?.length) return cues;
   return cues
     .map((cue) => {
       let fit = fitOne(cue, intervals, maxShift, margin);
       if (cue.kind === 'text' && fit.gap < textRoom) fit = laterPause(cue, intervals, textWait, textRoom, margin) || fit;
+      else if (cue.kind !== 'text' && cue.priority === 1) {
+        const room = estimateSeconds(cue.brief || cue.standard, rate) * Math.max(0.25, playbackRate || 1);
+        if (fit.gap < room) fit = laterPause(cue, intervals, visualWait, room, margin) || fit;
+      }
       return { ...cue, start: fit.start, gap: Math.round(fit.gap * 10) / 10, gapMeasured: true };
     })
     .sort((a, b) => a.start - b.start);

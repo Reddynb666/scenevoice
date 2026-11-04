@@ -7,8 +7,19 @@ export const DEFAULT_API_BASE = 'https://generativelanguage.googleapis.com';
 /** Sites SceneVoice runs on. Bilibili is experimental. */
 export const PLATFORMS = Object.freeze(['youtube', 'bilibili']);
 
-/** Models that can write the descriptions (see providers.js). */
-export const PROVIDERS = Object.freeze(['gemini', 'qwen']);
+/**
+ * Models that can write the descriptions (see providers.js). 'cloud' is the
+ * SceneVoice Cloud relay: Gemini behind a metered proxy, with an anonymous
+ * device token in place of a key, for listeners who have no key of their own.
+ */
+export const PROVIDERS = Object.freeze(['gemini', 'qwen', 'cloud']);
+
+/**
+ * SceneVoice Cloud relay (server/). Gemini-compatible, so GeminiClient talks to
+ * it unchanged with apiKey = the device token. The owner changes this to the
+ * domain they register; the manifest's host permission names the same origin.
+ */
+export const CLOUD_API_BASE = 'https://api.scenevoice.app';
 
 /**
  * Qwen (通义千问) through Alibaba Cloud Model Studio (阿里云百炼 / DashScope),
@@ -109,6 +120,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** The model that describes videos on each site (see providers.js). */
   youtubeProvider: 'gemini',
   bilibiliProvider: 'qwen',
+  /** Seconds of video described per day before new jobs are refused (DAILY_BUDGETS); 0 = no limit. */
+  dailyBudgetSeconds: 0,
+  /** Send finished descriptions (text only) to the SceneVoice Cloud cache, so the next
+   *  listener of the same video gets them at once. Turned on when the listener picks Cloud. */
+  shareDescriptions: false,
 });
 
 /** Allowed values for the choice settings, in the order the cycle shortcuts step through them. */
@@ -141,6 +157,40 @@ export const VOICE_SAMPLES = Object.freeze({
   ru: 'Женщина в красном пальто переходит заснеженную улицу.',
   ar: 'امرأة ترتدي معطفًا أحمر تعبر الشارع المغطى بالثلج.',
   hi: 'लाल कोट पहने एक महिला बर्फ़ से ढकी सड़क पार करती है।',
+  it: 'Una donna con un cappotto rosso attraversa la strada innevata.',
+  nl: 'Een vrouw in een rode jas steekt de besneeuwde straat over.',
+  pl: 'Kobieta w czerwonym płaszczu przechodzi przez zaśnieżoną ulicę.',
+  tr: 'Kırmızı paltolu bir kadın karla kaplı caddeden karşıya geçiyor.',
+  vi: 'Một người phụ nữ mặc áo khoác đỏ băng qua con đường phủ tuyết.',
+  th: 'ผู้หญิงสวมเสื้อโค้ตสีแดงเดินข้ามถนนที่ปกคลุมด้วยหิมะ',
+  id: 'Seorang perempuan bermantel merah menyeberangi jalan yang tertutup salju.',
+  bn: 'লাল কোট পরা এক নারী বরফে ঢাকা রাস্তা পার হচ্ছেন।',
+  ur: 'سرخ کوٹ پہنے ایک عورت برف سے ڈھکی سڑک پار کر رہی ہے۔',
+  fa: 'زنی با پالتوی قرمز از خیابان پوشیده از برف عبور می‌کند.',
+  uk: 'Жінка в червоному пальті переходить засніжену вулицю.',
+  sw: 'Mwanamke aliyevaa koti jekundu anavuka barabara iliyofunikwa na theluji.',
+});
+
+/**
+ * Spoken by the welcome page's "Hear a sample", in the interface language, with
+ * no model and no key: what descriptions sound like. On-screen text first, a
+ * person labelled by two features, then an action, the way the prompts ask.
+ */
+export const SAMPLE_DESCRIPTIONS = Object.freeze({
+  en: ['Title: How to repot a plant.', 'A woman with grey hair and a green apron lifts a fern out of its pot.', 'She shakes the soil from the roots over a newspaper.'],
+  'zh-CN': ['标题：怎样给植物换盆。', '一位灰白头发、系绿色围裙的女人把一盆蕨类从花盆里提出来。', '她在报纸上方抖掉根上的土。'],
+  'zh-TW': ['標題：怎樣幫植物換盆。', '一位灰白頭髮、繫綠色圍裙的女人把一盆蕨類從花盆裡提出來。', '她在報紙上方抖掉根上的土。'],
+  es: ['Título: Cómo trasplantar una planta.', 'Una mujer de pelo gris y delantal verde saca un helecho de su maceta.', 'Sacude la tierra de las raíces sobre un periódico.'],
+  fr: ['Titre : Comment rempoter une plante.', 'Une femme aux cheveux gris et au tablier vert sort une fougère de son pot.', 'Elle secoue la terre des racines au-dessus d’un journal.'],
+  de: ['Titel: Wie man eine Pflanze umtopft.', 'Eine Frau mit grauen Haaren und grüner Schürze hebt einen Farn aus seinem Topf.', 'Sie schüttelt die Erde über einer Zeitung von den Wurzeln.'],
+  pt: ['Título: Como replantar uma planta.', 'Uma mulher de cabelo grisalho e avental verde tira uma samambaia do vaso.', 'Ela sacode a terra das raízes sobre um jornal.'],
+  ja: ['タイトル：植物の植え替え方。', '白髪で緑のエプロンをした女性が、鉢からシダを持ち上げる。', '彼女は新聞紙の上で根の土を振り落とす。'],
+  ko: ['제목: 화분 분갈이하는 법.', '흰머리에 초록 앞치마를 두른 여자가 화분에서 고사리를 들어 올린다.', '그녀는 신문지 위에서 뿌리의 흙을 털어 낸다.'],
+  ru: ['Заголовок: Как пересадить растение.', 'Седая женщина в зелёном фартуке вынимает папоротник из горшка.', 'Она стряхивает землю с корней над газетой.'],
+  ar: ['العنوان: كيف تنقل نبتة إلى أصيص جديد.', 'امرأة شعرها رمادي وترتدي مئزرًا أخضر ترفع سرخسًا من أصيصه.', 'تنفض التراب عن الجذور فوق صحيفة.'],
+  hi: ['शीर्षक: पौधे को नए गमले में कैसे लगाएँ।', 'सफ़ेद बालों वाली, हरा एप्रन पहने एक महिला गमले से फ़र्न बाहर निकालती है।', 'वह अख़बार के ऊपर जड़ों से मिट्टी झाड़ती है।'],
+  id: ['Judul: Cara memindahkan tanaman ke pot baru.', 'Seorang perempuan berambut abu-abu dengan celemek hijau mengangkat pakis dari potnya.', 'Ia mengibaskan tanah dari akarnya di atas koran.'],
+  vi: ['Tiêu đề: Cách thay chậu cho cây.', 'Một người phụ nữ tóc bạc, đeo tạp dề xanh lá nhấc cây dương xỉ ra khỏi chậu.', 'Bà giũ đất khỏi rễ cây trên một tờ báo.'],
 });
 
 /**
@@ -160,13 +210,31 @@ export const UNCERTAIN_LEAD = Object.freeze({
   ru: 'Возможно, неточно. ',
   ar: 'غير مؤكد. ',
   hi: 'निश्चित नहीं। ',
+  it: 'Non è certo. ',
+  nl: 'Niet zeker. ',
+  pl: 'Nie jest to pewne. ',
+  tr: 'Kesin değil. ',
+  vi: 'Không chắc chắn. ',
+  // Thai separates clauses with a space, not a full stop.
+  th: 'ไม่แน่ใจ ',
+  id: 'Tidak pasti. ',
+  bn: 'নিশ্চিত নয়। ',
+  ur: 'یقینی نہیں۔ ',
+  fa: 'قطعی نیست. ',
+  uk: 'Можливо, неточно. ',
+  sw: 'Si hakika. ',
 });
 
-/** Words that already say a description is not certain, per description language, in lower case. */
+/**
+ * Words that already say a description is not certain, per description
+ * language, in lower case. The first three of each list are also shown to the
+ * model as examples of how to hedge in that language (gemini.js hedgeExamples),
+ * so they are the plainest ones.
+ */
 export const HEDGE_WORDS = Object.freeze({
-  en: ['appears to', 'appear to', 'seems', 'seem to', 'looks like', 'possibly', 'perhaps', 'maybe', 'probably', 'likely', 'might', 'may be', 'unclear', 'not clear', 'hard to', 'difficult to', 'cannot see', "can't see", 'cannot tell', "can't tell", 'not certain', 'uncertain', 'blurry', 'indistinct'],
-  'zh-CN': ['可能', '似乎', '好像', '看起来', '看上去', '看不清', '不清楚', '不太清', '难以辨认', '也许', '大概', '或许', '疑似', '像是', '不确定', '不太确定'],
-  'zh-TW': ['可能', '似乎', '好像', '看起來', '看上去', '看不清', '不清楚', '不太清', '難以辨認', '也許', '大概', '或許', '疑似', '像是', '不確定', '不太確定'],
+  en: ['appears to', 'possibly', 'hard to see', 'appear to', 'seems', 'seem to', 'looks like', 'perhaps', 'maybe', 'probably', 'likely', 'might', 'may be', 'unclear', 'not clear', 'hard to', 'difficult to', 'cannot see', "can't see", 'cannot tell', "can't tell", 'not certain', 'uncertain', 'blurry', 'indistinct'],
+  'zh-CN': ['可能', '看起来', '看不清', '似乎', '好像', '看上去', '不清楚', '不太清', '难以辨认', '也许', '大概', '或许', '疑似', '像是', '不确定', '不太确定'],
+  'zh-TW': ['可能', '看起來', '看不清', '似乎', '好像', '看上去', '不清楚', '不太清', '難以辨認', '也許', '大概', '或許', '疑似', '像是', '不確定', '不太確定'],
   es: ['parece', 'posiblemente', 'quizá', 'tal vez', 'probablemente', 'no se ve', 'no está claro', 'no es seguro'],
   fr: ['semble', 'peut-être', 'probablement', 'on dirait', 'difficile', 'pas sûr', 'pas certain', 'flou'],
   de: ['scheint', 'möglicherweise', 'vielleicht', 'wahrscheinlich', 'undeutlich', 'unklar', 'nicht sicher'],
@@ -174,8 +242,20 @@ export const HEDGE_WORDS = Object.freeze({
   ja: ['おそらく', 'らしい', 'ようだ', 'ようです', 'ような', 'かもしれ', 'はっきりし', '見えにく', 'と思われ'],
   ko: ['아마', '것 같', '보이는', '불분명', '확실하지', '잘 보이지'],
   ru: ['возможно', 'похоже', 'кажется', 'вероятно', 'неясно', 'неточно', 'видимо', 'плохо видно'],
-  ar: ['ربما', 'يبدو', 'غير واضح', 'غير مؤكد'],
-  hi: ['शायद', 'लगता', 'संभवतः', 'स्पष्ट नहीं', 'निश्चित नहीं'],
+  ar: ['ربما', 'يبدو', 'غير واضح', 'غير مؤكد', 'قد يكون', 'على ما يبدو', 'من الصعب رؤية'],
+  hi: ['शायद', 'लगता', 'संभवतः', 'स्पष्ट नहीं', 'निश्चित नहीं', 'हो सकता है', 'साफ़ नहीं', 'धुंधला'],
+  it: ['sembra', 'forse', 'non si vede bene', 'sembrano', 'pare', 'probabilmente', 'possibilmente', 'potrebbe', 'non è chiaro', 'non è certo', 'difficile da', 'sfocato'],
+  nl: ['lijkt', 'misschien', 'moeilijk te zien', 'lijken', 'blijkbaar', 'mogelijk', 'waarschijnlijk', 'vermoedelijk', 'onduidelijk', 'niet duidelijk', 'niet zeker', 'wazig'],
+  pl: ['wydaje się', 'być może', 'trudno dostrzec', 'wygląda na', 'chyba', 'może', 'prawdopodobnie', 'możliwe', 'niewyraźn', 'niejasn', 'nie jest to pewne', 'nie widać'],
+  tr: ['gibi görünüyor', 'belki', 'net değil', 'gibi', 'muhtemelen', 'olabilir', 'galiba', 'sanki', 'kesin değil', 'belirsiz', 'zor görülüyor', 'bulanık'],
+  vi: ['có vẻ', 'có lẽ', 'khó thấy rõ', 'dường như', 'hình như', 'có thể', 'không rõ', 'không chắc', 'khó thấy', 'khó nhìn', 'mờ'],
+  th: ['ดูเหมือน', 'อาจจะ', 'มองไม่ชัด', 'น่าจะ', 'คงจะ', 'ไม่ชัด', 'ไม่ชัดเจน', 'ไม่แน่ใจ', 'เบลอ'],
+  id: ['tampaknya', 'mungkin', 'sulit dilihat', 'sepertinya', 'kelihatannya', 'kemungkinan', 'tidak jelas', 'kurang jelas', 'tidak pasti', 'tidak terlihat jelas', 'buram'],
+  bn: ['সম্ভবত', 'মনে হচ্ছে', 'স্পষ্ট নয়', 'মনে হয়', 'হয়তো', 'হতে পারে', 'অস্পষ্ট', 'নিশ্চিত নয়', 'দেখা যাচ্ছে না', 'ঝাপসা'],
+  ur: ['لگتا ہے', 'شاید', 'واضح نہیں', 'لگتی ہے', 'غالباً', 'ممکنہ طور پر', 'ہو سکتا ہے', 'یقینی نہیں', 'صاف نظر نہیں', 'دھندلا'],
+  fa: ['به نظر می‌رسد', 'شاید', 'واضح نیست', 'به نظر', 'احتمالاً', 'ظاهراً', 'مشخص نیست', 'معلوم نیست', 'قطعی نیست', 'به سختی دیده'],
+  uk: ['схоже', 'можливо', 'погано видно', 'здається', 'ймовірно', 'мабуть', 'неясно', 'неточно', 'нечітко', 'не видно', 'важко розгледіти'],
+  sw: ['inaonekana', 'labda', 'haionekani vizuri', 'yaonekana', 'huenda', 'pengine', 'yawezekana', 'si wazi', 'si hakika', 'haijulikani', 'vigumu kuona'],
 });
 
 /** How an answer to a question names the moment it is about ($1 is m:ss), in the description language. */
@@ -192,6 +272,18 @@ export const ANSWER_AT = Object.freeze({
   ru: 'На $1: ',
   ar: 'عند $1: ',
   hi: '$1 पर: ',
+  it: 'A $1: ',
+  nl: 'Op $1: ',
+  pl: 'W $1: ',
+  tr: '$1 anında: ',
+  vi: 'Tại $1: ',
+  th: 'ที่ $1: ',
+  id: 'Pada $1: ',
+  bn: '$1-এ: ',
+  ur: '$1 پر: ',
+  fa: 'در $1: ',
+  uk: 'На $1: ',
+  sw: 'Kwenye $1: ',
 });
 
 /** Secrets and per-device data, stored in chrome.storage.local only. */
@@ -208,6 +300,11 @@ export const DEFAULT_LOCAL = Object.freeze({
   qwenJsonMode: false,
   /** Pictures per request: the documented limit is 250 base64 images; 6 keeps requests small and cheap. */
   qwenMaxFrames: FRAME_SAMPLING.maxFrames,
+  /** SceneVoice Cloud: the anonymous device token (the only credential, kept like a key),
+   *  the plan it was last seen on ('free' | 'plus' | 'org'), and the model chosen through the relay ('' = automatic). */
+  cloudToken: '',
+  cloudPlan: '',
+  cloudModel: '',
 });
 
 export const LANGUAGES = Object.freeze([
@@ -223,6 +320,18 @@ export const LANGUAGES = Object.freeze([
   { code: 'ru', name: 'Русский' },
   { code: 'ar', name: 'العربية' },
   { code: 'hi', name: 'हिन्दी' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'pl', name: 'Polski' },
+  { code: 'tr', name: 'Türkçe' },
+  { code: 'vi', name: 'Tiếng Việt' },
+  { code: 'th', name: 'ไทย' },
+  { code: 'id', name: 'Bahasa Indonesia' },
+  { code: 'bn', name: 'বাংলা' },
+  { code: 'ur', name: 'اردو' },
+  { code: 'fa', name: 'فارسی' },
+  { code: 'uk', name: 'Українська' },
+  { code: 'sw', name: 'Kiswahili' },
 ]);
 
 export const LANGUAGE_NAMES_EN = Object.freeze({
@@ -238,7 +347,22 @@ export const LANGUAGE_NAMES_EN = Object.freeze({
   ru: 'Russian',
   ar: 'Arabic',
   hi: 'Hindi',
+  it: 'Italian',
+  nl: 'Dutch',
+  pl: 'Polish',
+  tr: 'Turkish',
+  vi: 'Vietnamese',
+  th: 'Thai',
+  id: 'Indonesian',
+  bn: 'Bengali',
+  ur: 'Urdu',
+  fa: 'Persian',
+  uk: 'Ukrainian',
+  sw: 'Swahili',
 });
+
+/** Description languages written right to left: their names and text get dir="rtl" / dir="auto". */
+export const RTL_LANGUAGES = Object.freeze(['ar', 'fa', 'he', 'ur']);
 
 /** Seconds of video per Gemini request. Shorter chunks keep output within limits. */
 export const CHUNK_SECONDS = 300;
@@ -300,4 +424,29 @@ export const COMMANDS = Object.freeze([
   'speed-up',
   'speed-down',
   'stop-speaking',
+]);
+
+/** Choices for the daily limit: none, 30 minutes, 1, 2 and 4 hours of video described per day. */
+export const DAILY_BUDGETS = Object.freeze([0, 1800, 3600, 7200, 14400]);
+
+/** chrome.storage.local key of the rolling daily usage counter (see usage.js). */
+export const USAGE_KEY = 'usage';
+
+/**
+ * List prices per million tokens, for the estimate shown to the listener.
+ * Checked on 2026-11-04 against ai.google.dev/gemini-api/docs/pricing and the
+ * Model Studio price list. A model id matches the row with the longest prefix,
+ * so dated snapshots and previews price like their family; a model with no row
+ * shows tokens only. Thinking tokens are billed as output. These are paid-tier
+ * prices: a free-tier Gemini key is not charged at all.
+ */
+export const MODEL_PRICES = Object.freeze([
+  // Doubles on 2027-01-01 (announced with the 3.8 launch).
+  { prefix: 'gemini-3.8-flash', currency: 'USD', input: 0.75, output: 3.75, after: { on: '2027-01-01', input: 1.5, output: 7.5 } },
+  { prefix: 'gemini-3.5-flash-lite', currency: 'USD', input: 0.3, output: 2.5 },
+  { prefix: 'gemini-3.1-flash-lite', currency: 'USD', input: 0.25, output: 1.5 },
+  { prefix: 'gemini-2.5-flash-lite', currency: 'USD', input: 0.1, output: 0.4 },
+  // Deprecated: from 2026-12-01 its requests go to 3.5 Flash-Lite, at the same price.
+  { prefix: 'gemini-2.5-flash', currency: 'USD', input: 0.3, output: 2.5 },
+  { prefix: 'qwen3-vl-plus', currency: 'CNY', input: 1, output: 10 },
 ]);

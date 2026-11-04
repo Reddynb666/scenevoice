@@ -1,10 +1,11 @@
 // Gemini API client. Request builders are pure functions so they can be tested;
 // network calls take an injectable fetch.
 
-import { ANSWER_AT, LANGUAGE_NAMES_EN } from './constants.js';
+import { ANSWER_AT, HEDGE_WORDS, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD } from './constants.js';
 import { ApiError } from './errors.js';
 import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
 import { askHistoryText } from './ask.js';
+import { countedUsage } from './usage.js';
 
 /** The people the descriptions have labelled so far, for the model to keep calling them the same. */
 export function peopleText(characters) {
@@ -83,8 +84,42 @@ const ASK_SCHEMA = {
   propertyOrdering: ['time', 'confidence', 'answer'],
 };
 
+/**
+ * The description language's English name, for the prompts. Any real language
+ * can be asked for (storage.js resolveLanguage), so one without a table is
+ * named by the browser ("sv" → "Swedish"); the code itself is the last resort.
+ */
 export function languageName(code) {
-  return LANGUAGE_NAMES_EN[code] || code;
+  if (LANGUAGE_NAMES_EN[code]) return LANGUAGE_NAMES_EN[code];
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' }).of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+/**
+ * How to hedge, as examples for the model: in English, and in the description
+ * language when that is another one. Taken from the words SceneVoice itself
+ * recognises as hedging (HEDGE_WORDS), so a model that uses them is not told
+ * "Not certain." a second time. A language without a table gets English only.
+ */
+export function hedgeExamples(lang) {
+  const quoted = (words) => words.slice(0, 3).map((w) => `"${w}"`).join(', ');
+  const en = quoted(HEDGE_WORDS.en);
+  const own = lang && lang !== 'en' && HEDGE_WORDS[lang];
+  return own ? `${en} (in ${languageName(lang)} ${quoted(own)})` : en;
+}
+
+/**
+ * The "I cannot see it" example for the question prompts: in English, and in
+ * the description language when it has its own "Not certain." lead (with the
+ * full stop that language writes, without the space that follows it).
+ */
+export function cannotTellExample(lang) {
+  const en = 'for example "I can\'t tell from the picture"';
+  const own = lang && lang !== 'en' && UNCERTAIN_LEAD[lang];
+  return own ? `${en}, or in ${languageName(lang)} "${own.trim()}"` : en;
 }
 
 export function youtubeUrl(videoId) {
@@ -137,7 +172,7 @@ export function scriptInstructions(lang) {
     '- Do not guess what people feel, think, want or intend, and do not explain why something happens. Describe the face, the body and the action, and let the viewer draw the conclusion.',
     '- Do not judge or praise: no "beautiful", "delicious", "amazing", "ugly", "funny", "elegant". Say what makes it so ("a three-layer cake with white icing", not "a delicious cake").',
     '- Do not guess who someone is. A name, job, title, relationship (wife, boss, doctor), nationality, religion or health comes only from on-screen text (a lower third, a name tag, a sign) or from the dialogue saying it clearly. Never identify anyone from their face or voice, however famous they look.',
-    '- When something is small, far away, blurred, dark, partly hidden or too quick to see, say so instead of filling in the detail: "appears to", "possibly", "hard to see" (in Chinese "可能", "看起来像", "看不清"). Leave out what you cannot see at all. A vague description that is true is better than a precise one that is wrong.',
+    `- When something is small, far away, blurred, dark, partly hidden or too quick to see, say so instead of filling in the detail: ${hedgeExamples(lang)}. Leave out what you cannot see at all. A vague description that is true is better than a precise one that is wrong.`,
     '- "confidence" says how sure you are that everything in the description is right: "high" when it is clearly visible, "medium" when a detail is inferred from what is visible, "low" when the picture is unclear or you are guessing what something is. With "low", the description itself must say in words that it is not certain.',
     '',
     'Examples (wrong → right):',
@@ -196,13 +231,29 @@ export function scriptInstructions(lang) {
   ].join('\n');
 }
 
-export function scriptPrompt({ meta = {}, chunk, duration, characters = [], lang }) {
+/** How many of the previous section's last descriptions the next section is told about. */
+export const PREVIOUS_CUES = 4;
+
+/**
+ * The request text for one section.
+ * @param {Array<{start: number, text: string}>} [previous]  the last descriptions
+ *   of the section before, so this one does not describe the same thing again,
+ *   and does not open with an establishing description as if the video began here.
+ */
+export function scriptPrompt({ meta = {}, chunk, duration, characters = [], previous = [], lang }) {
+  const recent = (Array.isArray(previous) ? previous : []).slice(-PREVIOUS_CUES);
   const lines = [
     `Video title: ${clip(meta.title, 200) || 'unknown'}`,
     meta.channel ? `Channel: ${clip(meta.channel, 100)}` : '',
     meta.description ? `Video description (from the uploader): ${clip(meta.description, 1500)}` : '',
     Number.isFinite(duration) ? `Full video length: ${formatTime(duration)} (${Math.round(duration)} seconds).` : '',
     `Describe only the section from ${formatTime(chunk.start)} to ${formatTime(chunk.end)} (${chunk.start}s to ${chunk.end}s). Timestamps must be seconds from the start of the full video.`,
+    chunk.start > 0
+      ? 'This section is not the start of the video: the viewer has been watching since the beginning, so give no establishing description. Carry on from what was already described, and describe only what appears, happens or changes in this section.'
+      : '',
+    recent.length
+      ? `Already described just before this section; do not describe it again unless it changed: ${recent.map((r) => `${formatTime(r.start)} ${clip(r.text, 160)}`).join(' | ')}`
+      : '',
     characters.length
       ? peopleText(characters)
       : '',
@@ -217,7 +268,7 @@ export function outputLimit(model = '') {
   return /^gemini-(1\.|2\.0)/.test(model) ? 8192 : 32768;
 }
 
-export function buildScriptRequest({ videoId, meta, chunk, duration, characters, lang, model }) {
+export function buildScriptRequest({ videoId, meta, chunk, duration, characters, previous, lang, model }) {
   const isWhole = chunk.start <= 0 && Number.isFinite(duration) && chunk.end >= duration - 1;
   const videoPart = { fileData: { fileUri: youtubeUrl(videoId) } };
   if (!isWhole) {
@@ -228,7 +279,7 @@ export function buildScriptRequest({ videoId, meta, chunk, duration, characters,
     contents: [
       {
         role: 'user',
-        parts: [videoPart, { text: scriptPrompt({ meta, chunk, duration, characters, lang }) }],
+        parts: [videoPart, { text: scriptPrompt({ meta, chunk, duration, characters, previous, lang }) }],
       },
     ],
     generationConfig: {
@@ -271,7 +322,7 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
             `Answer in ${languageName(lang)}, in at most 3 short sentences, plain text without markdown.`,
             'Base the answer on what can be seen in the clip, at or just before the moment they asked. Describe what is visible: do not guess what people feel or intend, do not judge, and name a person only if on-screen text or the dialogue gives the name.',
             'Quote any text on screen that bears on the question exactly as written.',
-            'If the clip does not show the answer, or you cannot see it clearly, say so plainly (for example "I can\'t tell from the picture", or in Chinese "画面上看不清") and set "confidence" to "low". Never invent details.',
+            `If the clip does not show the answer, or you cannot see it clearly, say so plainly (${cannotTellExample(lang)}) and set "confidence" to "low". Never invent details.`,
             '"time": the moment your answer is about, in seconds from the start of the full video (not from the start of the clip). SceneVoice says that moment before your answer, so do not put a time in "answer".',
             '"confidence": "high" when the answer is clearly visible, "medium" when part of it is inferred, "low" when you are not sure.',
             'The recent audio descriptions were written by an AI and can be wrong: check them against the picture, and do not repeat them as fact.',
@@ -379,7 +430,7 @@ function revisionPrompt({ meta = {}, duration, cue, clip: span, characters = [],
     `Look again, closely, at the clip from ${formatTime(span.start)} to ${formatTime(span.end)} (${span.start}s to ${span.end}s of the full video), and write a corrected description of that moment: one cue, with "start" at ${cue.start}.`,
     '- Check every detail against the picture: people, actions, objects, colours, numbers and text. Leave out anything you cannot clearly see.',
     '- Do not repeat the reported description, and do not just reword it. Keep only what you can confirm in the picture.',
-    '- If you are still not sure, say so in the description ("appears to", "hard to see") and set "confidence" to "low".',
+    `- If you are still not sure, say so in the description (${hedgeExamples(lang)}) and set "confidence" to "low".`,
     '- If, looking again, nothing at that moment is worth describing, return an empty "cues" list.',
     characters.length
       ? `People already introduced earlier in the video (reuse these labels): ${characters.map((c) => `${c.label}${c.description ? ` (${c.description})` : ''}`).join('; ')}`
@@ -471,18 +522,60 @@ export function usableModels(models) {
     .filter((m) => ids.has(m.id));
 }
 
+/** A 429 about the day's quota rather than this minute's: the free tier's per-day limits, and YouTube hours per day. */
+const DAILY_QUOTA = /per.?day|daily|youtube.{0,40}hours?/i;
+
+/** The wait the server asks for, from a google.rpc.RetryInfo detail ("12s", or { seconds, nanos }), in ms; undefined when none. */
+export function retryDelayMs(details) {
+  for (const d of Array.isArray(details) ? details : []) {
+    if (!/RetryInfo$/.test(String(d?.['@type'] || '')) || d.retryDelay == null) continue;
+    const delay = d.retryDelay;
+    const seconds = typeof delay === 'string' ? parseFloat(delay) : Number(delay.seconds || 0) + Number(delay.nanos || 0) / 1e9;
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  }
+  return undefined;
+}
+
+/** When the SceneVoice Cloud allowance comes back, from the error detail that refused the request (ISO time), or ''. */
+function allowanceReset(details) {
+  for (const d of Array.isArray(details) ? details : []) {
+    const at = d?.resetsAt || d?.metadata?.resetsAt || d?.resetAt || d?.metadata?.resetAt;
+    if (typeof at === 'string' && !Number.isNaN(Date.parse(at))) return at;
+  }
+  return '';
+}
+
+/**
+ * The error for a failed HTTP reply, as a stable code. 429 is split: the
+ * minute's rate limit ('rate-limited', retried, honouring RetryInfo) and the
+ * day's quota ('quota-daily', not retried: another model may still have some).
+ * The SceneVoice Cloud relay refuses a used-up free allowance with
+ * reason SCENEVOICE_ALLOWANCE ('allowance': neither retried nor switched).
+ */
 function classifyHttp(status, body) {
   const msg = body?.error?.message || '';
-  const reason = JSON.stringify(body?.error?.details || '');
+  const details = Array.isArray(body?.error?.details) ? body.error.details : [];
+  const reason = JSON.stringify(details);
+  if (details.some((d) => d?.reason === 'SCENEVOICE_ALLOWANCE')) {
+    const err = new GeminiError('allowance', msg, status);
+    err.resetAt = allowanceReset(details);
+    return err;
+  }
   // Checked first: it can come as a 400 or a 403, and is not about the key.
   if (/location is not supported|not available in your (country|region)/i.test(msg)) return new GeminiError('region', msg, status);
   if (status === 400 && /api key|API_KEY_INVALID/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
   if (status === 401 || status === 403) {
-    if (/api key|permission|PERMISSION_DENIED|API_KEY/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
+    // SCENEVOICE_DEVICE_UNKNOWN: the relay no longer knows this device token (Start free issues a new one).
+    if (/api key|permission|PERMISSION_DENIED|API_KEY|SCENEVOICE_DEVICE_UNKNOWN/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
     return new GeminiError('forbidden', msg, status);
   }
   if (status === 404) return new GeminiError('model-not-found', msg, status);
-  if (status === 429) return new GeminiError('quota', msg, status);
+  if (status === 429) {
+    if (DAILY_QUOTA.test(`${msg} ${reason}`)) return new GeminiError('quota-daily', msg, status);
+    const err = new GeminiError('rate-limited', msg, status);
+    err.retryAfterMs = retryDelayMs(details);
+    return err;
+  }
   if (status === 400 && /(video|youtube|file|uri|private|unavailable|not supported)/i.test(msg)) {
     return new GeminiError('video-unsupported', msg, status);
   }
@@ -499,6 +592,18 @@ const sleep = (ms, signal) =>
       reject(new GeminiError('aborted'));
     });
   });
+
+/** Longest wait a RetryInfo is followed for: anything longer is as good as a failure to the listener. */
+const MAX_RETRY_WAIT_MS = 90000;
+
+/** How long to wait before attempt n (1-based) after a retryable error. */
+export function retryWait(err, attempt) {
+  if (err.code === 'rate-limited') {
+    if (Number.isFinite(err.retryAfterMs)) return Math.min(MAX_RETRY_WAIT_MS, Math.max(1000, err.retryAfterMs));
+    return 6000 * 2 ** (attempt - 1);
+  }
+  return 2000 * 2 ** (attempt - 1);
+}
 
 export class GeminiClient {
   constructor({ apiKey, apiBase, model, fetchImpl }) {
@@ -522,9 +627,12 @@ export class GeminiClient {
   }
 
   /**
-   * generateContent with retries. Overloaded servers (503), rate limits (429) and
-   * network failures are retried with exponential backoff: 2, 4, 8 s for server
-   * and network errors, 6, 12, 24 s for rate limits.
+   * generateContent with retries. Overloaded servers (503), the minute's rate
+   * limit (429) and network failures are retried with exponential backoff:
+   * 2, 4, 8 s for server and network errors, 6, 12, 24 s for rate limits, or
+   * the wait the server itself asks for (RetryInfo) when it gives one. A used-up
+   * daily quota, or a used-up Cloud allowance, is not retried: it will not
+   * come back within the minute.
    */
   async generate(body, signal, { retries = 3 } = {}) {
     if (!this.model) throw new GeminiError('no-model');
@@ -542,10 +650,10 @@ export class GeminiClient {
           payload = { ...payload, generationConfig: rest };
           continue;
         }
-        const retryable = ['server', 'quota', 'network'].includes(err.code);
+        const retryable = ['server', 'rate-limited', 'network'].includes(err.code);
         if (!retryable || attempt >= retries) throw err;
         attempt += 1;
-        await sleep((err.code === 'quota' ? 6000 : 2000) * 2 ** (attempt - 1), signal);
+        await sleep(retryWait(err, attempt), signal);
       }
     }
   }
@@ -572,6 +680,12 @@ export class GeminiClient {
     if (!res.ok) throw classifyHttp(res.status, body);
     return body || {};
   }
+}
+
+/** What one reply cost, from its usageMetadata (zeros when the server sent none): see usage.js. */
+export function usageOf(body) {
+  const u = body?.usageMetadata || {};
+  return countedUsage({ input: u.promptTokenCount, output: u.candidatesTokenCount, thinking: u.thoughtsTokenCount });
 }
 
 /** Text of the first candidate, with a clear error for blocked or empty output. */

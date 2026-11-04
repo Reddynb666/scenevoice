@@ -69,8 +69,11 @@ describe('normalizeSettings', () => {
   });
 
   it('keeps only voices for known languages, as strings', () => {
-    const s = normalizeSettings({ ttsVoices: { 'zh-CN': 'Tingting', klingon: 'Worf', en: 5, fr: 'x'.repeat(500) } });
-    expect(s.ttsVoices).toEqual({ 'zh-CN': 'Tingting' });
+    const s = normalizeSettings({ ttsVoices: { 'zh-CN': 'Tingting', klingon: 'Worf', en: 5, fr: 'x'.repeat(500), sv: 'Alva' } });
+    // Any real language keeps its voice (a Swedish browser gets Swedish descriptions), not only those with tables.
+    expect(s.ttsVoices).toEqual({ 'zh-CN': 'Tingting', sv: 'Alva' });
+    expect(normalizeSettings({ language: 'sv' }).language).toBe('sv');
+    expect(normalizeSettings({ language: 'xx' }).language).toBe(DEFAULT_SETTINGS.language);
     expect(normalizeSettings({ ttsVoices: ['a'] }).ttsVoices).toEqual({});
   });
 
@@ -189,8 +192,14 @@ describe('voice for a description language', () => {
     expect(voiceTestMessage(s, 'xx').text).toBe(VOICE_SAMPLES.en);
   });
 
-  it('has a test sentence for every description language', () => {
-    for (const { code } of LANGUAGES) expect(VOICE_SAMPLES[code], code).toBeTruthy();
+  it('has a test sentence for every description language, and for no other', () => {
+    const codes = LANGUAGES.map((l) => l.code);
+    expect(Object.keys(VOICE_SAMPLES).sort()).toEqual([...codes].sort());
+    for (const code of codes) {
+      expect(VOICE_SAMPLES[code], code).toBeTruthy();
+      // In that language, not the English sentence copied.
+      if (code !== 'en') expect(VOICE_SAMPLES[code], code).not.toBe(VOICE_SAMPLES.en);
+    }
   });
 });
 

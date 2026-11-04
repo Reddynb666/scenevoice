@@ -66,13 +66,20 @@ button[disabled] { opacity: .6; cursor: progress; }
   p.hint { color: #c4c4c4; }
   textarea { background: #111317; color: #f2f2f2; border-color: #9a9a9a; }
   button.secondary { background: transparent; color: #8db4ff; border-color: #8db4ff; }
-  button { background: #3b7cf0; border-color: #3b7cf0; }
+  /* 5.2:1 against the white label; #3b7cf0 was 3.9:1, under axe's 4.5:1. */
+  button { background: #2563eb; border-color: #2563eb; }
   .answer.filled { background: #2a2e36; }
   textarea:focus-visible, button:focus-visible { outline-color: #8db4ff; }
 }
 `;
 
 const ICON = `<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true" focusable="false"><path fill="#fff" d="M10 11h12a2 2 0 0 1 2 2v1.5l4-2.5v12l-4-2.5V23a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V13a2 2 0 0 1 2-2zm2 5v2h8v-2h-8zm0 3.5v2h5v-2h-5z"/></svg>`;
+
+/** Mark an element's text as being in a language; no language, no attribute (it would mean "unknown"). */
+function setLang(el, lang) {
+  if (lang) el.setAttribute('lang', lang);
+  else el.removeAttribute('lang');
+}
 
 export class PageUI {
   constructor({ onToggle, platform = youtubePlatform }) {
@@ -87,6 +94,9 @@ export class PageUI {
     this.overlay.className = 'overlay';
     this.overlay.hidden = true;
     this.overlay.setAttribute('aria-hidden', 'true'); // screen readers get the text through the live region
+    this.overlay.setAttribute('dir', 'auto'); // Arabic, Persian, Urdu descriptions run right to left
+    /** The description language; set by the content script (see the lang setter). */
+    this._lang = '';
     this.progress = document.createElement('div');
     this.progress.className = 'progress';
     this.progress.hidden = true;
@@ -98,6 +108,22 @@ export class PageUI {
     this.dialog = null;
     this.enabled = true;
     this.shortcut = '';
+  }
+
+  /**
+   * The description language, on the text overlay and on the answer in the
+   * ask dialog: the page is in the interface language, and these two show
+   * text in another one, so browsers and screen readers are told which.
+   */
+  get lang() {
+    return this._lang;
+  }
+
+  set lang(value) {
+    this._lang = typeof value === 'string' ? value : '';
+    setLang(this.overlay, this._lang);
+    const answer = this.dialog?.querySelector('.answer');
+    if (answer) setLang(answer, this._lang);
   }
 
   /** Keep the overlay inside the current player and the button in its controls. */
@@ -236,6 +262,9 @@ export class PageUI {
     dialog.querySelector('[data-act=ask]').textContent = t('ask_submit');
     const input = dialog.querySelector('textarea');
     const answer = dialog.querySelector('.answer');
+    // The answer comes in the description language; the rest of the dialog is in the interface language.
+    setLang(answer, this._lang);
+    answer.setAttribute('dir', 'auto');
     const submit = dialog.querySelector('[data-act=ask]');
     // First in the row: one Tab from the question field reaches it.
     const jump = dialog.querySelector('[data-act=jump]');

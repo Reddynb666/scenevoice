@@ -6,6 +6,7 @@
 
 import { SCRIPT_VERSION } from './constants.js';
 import { mergeScript } from './script.js';
+import { addUsage } from './usage.js';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
@@ -96,10 +97,10 @@ export function newFramesScript({ videoId, lang, duration, platform, provider })
 
 /**
  * A described stretch [start, end] added to a saved script: its cues and
- * people merged in, the stretch counted as covered, and the script complete
- * once the whole video is.
+ * people merged in, the stretch counted as covered, its tokens added to the
+ * script's total, and the script complete once the whole video is.
  */
-export function mergeFramesChunk(script, chunk, { start, end, duration, model, provider }) {
+export function mergeFramesChunk(script, chunk, { start, end, duration, model, provider, usage }) {
   const length = Number.isFinite(duration) && duration > 0 ? duration : script.duration;
   const merged = mergeScript(script, chunk, 0);
   const covered = addRange(coveredRanges(script), start, end);
@@ -113,6 +114,7 @@ export function mergeFramesChunk(script, chunk, { start, end, duration, model, p
     mode: 'frames',
     model: model || merged.model || '',
     provider: provider || merged.provider || '',
+    usage: addUsage(script.usage, usage || chunk.usage),
   };
 }
 

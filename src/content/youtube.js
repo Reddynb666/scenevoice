@@ -210,14 +210,27 @@ export function extractCategory(html) {
 }
 
 /**
+ * YouTube's numeric category id ("27" for Education), when the player
+ * response carries one next to the category name; it does not always, and
+ * the name is read either way. The id is the same in every page language,
+ * so videotype.js prefers it. '' when the page has none.
+ */
+export function extractCategoryId(html) {
+  if (typeof html !== 'string') return '';
+  const at = html.indexOf('"playerMicroformatRenderer"');
+  const m = at >= 0 && /"categoryId":\s*"?(\d{1,3})"?/.exec(html.slice(at, at + 50000));
+  return m ? m[1] : '';
+}
+
+/**
  * What this video's watch page says about it: caption tracks (for dialogue
  * timing) and category (for the video type). Same origin as the page.
  */
 export async function fetchWatchPage(videoId) {
   const res = await fetch(`${location.origin}/watch?v=${encodeURIComponent(videoId)}`, { credentials: 'same-origin' });
-  if (!res.ok) return { tracks: [], category: '' };
+  if (!res.ok) return { tracks: [], category: '', categoryId: '' };
   const html = await res.text();
-  return { tracks: extractCaptionTracks(html), category: extractCategory(html) };
+  return { tracks: extractCaptionTracks(html), category: extractCategory(html), categoryId: extractCategoryId(html) };
 }
 
 export function rightControls() {
@@ -232,7 +245,7 @@ export async function loadPageInfo(videoId) {
   const page = await fetchWatchPage(videoId);
   const track = pickCaptionTrack(page.tracks);
   const url = track && timedTextUrl(track.baseUrl);
-  return { category: page.category, captionUrls: url ? [url] : [] };
+  return { category: page.category, categoryId: page.categoryId || '', captionUrls: url ? [url] : [] };
 }
 
 /**
@@ -260,7 +273,7 @@ export const youtubePlatform = Object.freeze({
   onNavigate,
   loadPageInfo,
   watchCaptionRequests: watchTimedTextRequests,
-  videoType: ({ category, title }) => pageVideoType({ category, title }),
+  videoType: ({ category, categoryId, title }) => pageVideoType({ category, categoryId, title }),
   buttonClass: 'ytp-button scenevoice-button',
   buttonStyle: '',
 });

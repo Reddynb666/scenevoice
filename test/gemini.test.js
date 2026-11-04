@@ -12,9 +12,12 @@ import {
   parseAskResponse,
   parseScriptResponse,
   responseText,
+  retryDelayMs,
+  retryWait,
   revisionClip,
   tuningFor,
   usableModels,
+  usageOf,
 } from '../src/shared/gemini.js';
 
 const m = (name, methods = ['generateContent']) => ({ name: `models/${name}`, supportedGenerationMethods: methods });
@@ -98,7 +101,8 @@ describe('describer instructions', () => {
     expect(text).not.toMatch(/the mood the picture creates/);
   });
   it('say when something is not clear, in English and Chinese, rather than fill it in', () => {
-    expect(text).toMatch(/"appears to", "possibly", "hard to see" \(in Chinese "可能", "看起来像", "看不清"\)/);
+    // The second set of examples is in the description language (here Chinese), from HEDGE_WORDS.
+    expect(text).toMatch(/"appears to", "possibly", "hard to see" \(in Simplified Chinese "可能", "看起来", "看不清"\)/);
     expect(text).toMatch(/A vague description that is true is better than a precise one that is wrong/);
     expect(text).toMatch(/Never complete a word, a name or a number by guessing/);
   });
@@ -153,7 +157,7 @@ describe('request builders', () => {
     const req = buildAskRequest({ videoId: 'abcdefghijk', meta: {}, time: 100, duration: 300, question: 'Who?', nearbyText: 'A chef enters.', lang: 'zh-CN' });
     const rules = req.systemInstruction.parts[0].text;
     expect(rules).toMatch(/Base the answer on what can be seen in the clip/);
-    expect(rules).toMatch(/say so plainly .*"画面上看不清".* set "confidence" to "low"\. Never invent details\./);
+    expect(rules).toMatch(/say so plainly .*or in Simplified Chinese "不太确定。".* set "confidence" to "low"\. Never invent details\./);
     expect(rules).toMatch(/"time": the moment your answer is about, in seconds from the start of the full video \(not from the start of the clip\)/);
     expect(rules).toMatch(/The recent audio descriptions were written by an AI and can be wrong/);
     expect(req.contents[0].parts[1].text).toContain('The clip covers 1:20 to 1:44 (80s to 104s) of the full video.');
@@ -274,12 +278,83 @@ describe('GeminiClient', () => {
       [{ status: 403, body: { error: { message: 'User location is not supported for the API use.' } } }, 'region'],
       [{ status: 400, body: { error: { message: 'User location is not supported for the API use.', status: 'FAILED_PRECONDITION' } } }, 'region'],
       [{ status: 403, body: { error: { message: 'Permission denied on resource project.' } } }, 'bad-key'],
-      [{ status: 429, body: { error: { message: 'Resource has been exhausted (e.g. check quota).' } } }, 'quota'],
+      [{ status: 429, body: { error: { message: 'Resource has been exhausted (e.g. check quota).' } } }, 'rate-limited'],
     ];
     for (const [resp, code] of cases) {
       const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: fakeFetch([resp]) });
       await expect(c.generate({}, undefined, { retries: 0 })).rejects.toMatchObject({ code });
     }
+  });
+
+  it("tells this minute's rate limit from the day's quota, and the Cloud allowance from both", async () => {
+    const quotaFailure = (quotaId, extra = []) => ({
+      status: 429,
+      body: {
+        error: {
+          code: 429,
+          message: 'You exceeded your current quota, please check your plan and billing details.',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: 'generativelanguage.googleapis.com/generate_content_free_tier_requests', quotaId }] },
+            ...extra,
+          ],
+        },
+      },
+    });
+    const retryInfo = { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '27s' };
+    const code = async (resp) => {
+      const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: fakeFetch([resp]) });
+      return c.generate({}, undefined, { retries: 0 }).catch((e) => e);
+    };
+    const minute = await code(quotaFailure('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', [retryInfo]));
+    expect(minute).toMatchObject({ code: 'rate-limited', retryAfterMs: 27000 });
+    expect(await code(quotaFailure('GenerateRequestsPerDayPerProjectPerModel-FreeTier', [retryInfo]))).toMatchObject({ code: 'quota-daily' });
+    expect(await code({ status: 429, body: { error: { message: 'Quota exceeded for youtube video hours per day.' } } })).toMatchObject({ code: 'quota-daily' });
+    // The SceneVoice Cloud relay: its own reason, whatever the status, with the reset time when it gives one.
+    const allowance = await code({ status: 429, body: { error: { message: 'allowance used up', details: [{ reason: 'SCENEVOICE_ALLOWANCE', metadata: { resetAt: '2026-11-05T00:00:00Z' } }] } } });
+    expect(allowance).toMatchObject({ code: 'allowance', resetAt: '2026-11-05T00:00:00Z' });
+    expect(await code({ status: 403, body: { error: { message: 'x', details: [{ reason: 'SCENEVOICE_ALLOWANCE' }] } } })).toMatchObject({ code: 'allowance', resetAt: '' });
+  });
+
+  it('reads the wait the server asks for, in either form', () => {
+    expect(retryDelayMs([{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '12s' }])).toBe(12000);
+    expect(retryDelayMs([{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: { seconds: 1, nanos: 500000000 } }])).toBe(1500);
+    expect(retryDelayMs([{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo' }])).toBeUndefined();
+    expect(retryDelayMs(undefined)).toBeUndefined();
+    // Honoured, within reason; else 6, 12, 24 s for rate limits and 2, 4, 8 s for the rest.
+    expect(retryWait({ code: 'rate-limited', retryAfterMs: 27000 }, 1)).toBe(27000);
+    expect(retryWait({ code: 'rate-limited', retryAfterMs: 600000 }, 1)).toBe(90000);
+    expect([1, 2, 3].map((n) => retryWait({ code: 'rate-limited' }, n))).toEqual([6000, 12000, 24000]);
+    expect([1, 2, 3].map((n) => retryWait({ code: 'server' }, n))).toEqual([2000, 4000, 8000]);
+  });
+
+  it('retries a rate limit after the wait the server asks for, and a used-up daily quota not at all', async () => {
+    vi.useFakeTimers();
+    const limited = { status: 429, body: { error: { message: 'slow down', details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '3s' }] } } };
+    const f = fakeFetch([limited, { status: 200, body: { ok: 1 } }]);
+    const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: f });
+    const p = c.generate({});
+    await vi.advanceTimersByTimeAsync(2900);
+    expect(f).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(p).resolves.toEqual({ ok: 1 });
+
+    const daily = fakeFetch([{ status: 429, body: { error: { message: 'Quota exceeded: requests per day' } } }, { status: 200, body: { ok: 1 } }]);
+    const d = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: daily });
+    await expect(d.generate({})).rejects.toMatchObject({ code: 'quota-daily' });
+    expect(daily).toHaveBeenCalledTimes(1);
+
+    const allowance = fakeFetch([{ status: 429, body: { error: { message: 'x', details: [{ reason: 'SCENEVOICE_ALLOWANCE' }] } } }, { status: 200, body: { ok: 1 } }]);
+    const a = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: allowance });
+    await expect(a.generate({})).rejects.toMatchObject({ code: 'allowance' });
+    expect(allowance).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('reads what an answer cost from usageMetadata, thinking apart', () => {
+    expect(usageOf({ usageMetadata: { promptTokenCount: 91234, candidatesTokenCount: 2100, thoughtsTokenCount: 800, totalTokenCount: 94134 } })).toEqual({ input: 91234, output: 2100, thinking: 800, requests: 1 });
+    expect(usageOf({ candidates: [] })).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
+    expect(usageOf(null)).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
   });
 
   it('retries server errors, then succeeds', async () => {

@@ -1,4 +1,4 @@
-import { LANGUAGES, MSG } from '../shared/constants.js';
+import { LANGUAGES, MSG, RTL_LANGUAGES } from '../shared/constants.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, localizeDocument, t } from '../shared/i18n.js';
@@ -6,6 +6,7 @@ import { generationProgressLabels, liveProgressLabels, typeAdjustedText } from '
 import { voiceTestMessage } from '../shared/settings.js';
 import { platformOfUrl } from '../shared/platforms.js';
 import { getSettings, resolveLanguage } from '../shared/storage.js';
+import { budgetLabelKey, costText } from '../shared/usage.js';
 import { typeAdjustments } from '../shared/videotype.js';
 
 const $ = (id) => document.getElementById(id);
@@ -20,8 +21,43 @@ function fillLanguages(select) {
     o.value = l.code;
     o.textContent = l.name;
     o.lang = l.code;
+    if (RTL_LANGUAGES.includes(l.code)) o.dir = 'rtl';
     select.append(o);
   }
+}
+
+/** A language's name in itself: from the list, else as the browser names it ("sv" → "svenska"). */
+function nativeName(code) {
+  const base = code.split('-')[0];
+  const listed = LANGUAGES.find((l) => l.code === code) || LANGUAGES.find((l) => l.code === base);
+  if (listed) return listed.name;
+  try {
+    return new Intl.DisplayNames([code], { type: 'language' }).of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+/** The interface language, as a tag: the locale SceneVoice's strings are shown in ("en", "zh_CN"). */
+const interfaceLanguage = () => (chrome.i18n.getMessage('@@ui_locale') || 'en').replace(/_/g, '-');
+
+/**
+ * Under the language choice, which language the descriptions come in when it
+ * is not the interface language: a Swedish browser gets an English interface
+ * (no Swedish strings yet) and Swedish descriptions, and a Chinese interface
+ * gets Chinese descriptions on Bilibili whatever the browser language. Hidden
+ * when they are the same, so there is nothing extra to read then.
+ */
+function renderLanguageNote() {
+  if (!savedSettings) return;
+  const note = $('languageNote');
+  const ui = interfaceLanguage();
+  const lang = current?.supported && current.lang ? current.lang : resolveLanguage(savedSettings.language, chrome.i18n.getUILanguage());
+  const same = lang === ui || lang === ui.split('-')[0];
+  note.hidden = same;
+  note.textContent = same ? '' : t('popup_language_note', nativeName(ui), nativeName(lang));
+  if (same) $('language').removeAttribute('aria-describedby');
+  else $('language').setAttribute('aria-describedby', 'languageNote');
 }
 
 async function activeTab() {
@@ -63,18 +99,31 @@ let current = null;
 /** From the service worker: which keys exist ({ gemini, qwen }), or only whether the Gemini key does. */
 let keyStatus = null;
 
+/** Where the banner's button goes: the welcome page when nothing at all is set up, else the settings page. */
+let setupTarget = 'options';
+
 /**
  * Ask for a key when the model this tab's site uses has none. Away from a
  * video any key will do, and the key asked for is the one this listener's
- * language suggests (Gemini cannot be reached from mainland China).
+ * language suggests (Gemini cannot be reached from mainland China). With no
+ * key and no SceneVoice Cloud token at all, the welcome page is the place to
+ * start: a sample, then Cloud or a key.
  */
 function renderKeyBanner() {
   const onVideo = Boolean(current?.supported && current.provider);
   const keys = keyStatus?.keys;
-  const has = keys ? (onVideo ? keys[current.provider] : keys.gemini || keys.qwen) : keyStatus?.hasKey;
+  const any = keys ? Boolean(keys.gemini || keys.qwen || keys.cloud) : Boolean(keyStatus?.hasKey);
+  const has = keys ? (onVideo ? keys[current.provider] : any) : keyStatus?.hasKey;
   $('keyBanner').hidden = Boolean(has);
+  setupTarget = any ? 'options' : 'welcome';
+  if (!any) {
+    $('setupBody').textContent = t('popup_setup_body_welcome');
+    $('setupKey').textContent = t('popup_setup_welcome');
+    return;
+  }
   const wantsQwen = onVideo ? current.provider === 'qwen' : chrome.i18n.getUILanguage().startsWith('zh');
   $('setupBody').textContent = wantsQwen ? t('popup_setup_body_qwen') : t('popup_setup_body');
+  $('setupKey').textContent = t('popup_setup_button');
 }
 
 function render(state) {
@@ -117,17 +166,19 @@ function render(state) {
         text = t('popup_generating_state');
         gen.hidden = true;
         break;
+      // Once a video is described, its cost at list price goes with the status: one
+      // sentence in the same live region, written once, not a figure that changes.
       case 'ready':
-        text = state.cueCount ? t('popup_ready_detail', String(state.cueCount), formatTime(state.firstCue || 0)) : t('status_ready_empty');
+        text = withCost(state.cueCount ? t('popup_ready_detail', String(state.cueCount), formatTime(state.firstCue || 0)) : t('status_ready_empty'), state.cost);
         cls = 'status-good';
         break;
       case 'partial':
-        text = t('popup_partial', String(Math.max(1, Math.round(state.completedUntil / 60))));
+        text = withCost(t('popup_partial', String(Math.max(1, Math.round(state.completedUntil / 60)))), state.cost);
         cls = 'status-warn';
         gen.textContent = t('popup_continue');
         break;
       case 'error':
-        text = errorMessage(state.errorCode, state.provider);
+        text = errorText(state.errorCode, state.provider);
         cls = 'status-bad';
         break;
       case 'loading':
@@ -146,9 +197,23 @@ function render(state) {
   if (state?.status === 'generating' || state?.status === 'loading') pollTimer = setTimeout(refresh, 1000);
   else if (state?.status === 'live') pollTimer = setTimeout(refresh, 3000);
   renderType();
+  renderLanguageNote();
 }
 
 let savedSettings = null;
+
+/** A status sentence followed by what the video cost, when known (no space after a Chinese full stop). */
+function withCost(text, cost) {
+  if (!cost) return text;
+  return `${text}${/[。！？]$/.test(text) ? '' : ' '}${t('popup_cost', costText(cost, t))}`;
+}
+
+/** An error in words. The day's limit names the limit set; the Cloud allowance its reset time (unknown here: the usual one). */
+function errorText(code, provider) {
+  if (code === 'budget') return t('error_budget', t(budgetLabelKey(savedSettings?.dailyBudgetSeconds)));
+  if (code === 'allowance') return t('error_allowance', t('time_midnight_utc'));
+  return errorMessage(code, provider);
+}
 
 /**
  * Show mode, detail and density as they apply to the video in this tab: when
@@ -198,6 +263,7 @@ function onSettings(settings) {
   $('readerSpeed').hidden = settings.output !== 'screenreader';
   savedSettings = settings;
   renderType();
+  renderLanguageNote();
 }
 
 function onSaveError() {
@@ -257,7 +323,10 @@ async function init() {
   $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   $('testVoice').addEventListener('click', testVoice);
 
-  $('setupKey').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  $('setupKey').addEventListener('click', () => {
+    if (setupTarget === 'welcome') chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
+    else chrome.runtime.openOptionsPage();
+  });
   $('openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
   $('generate').addEventListener('click', async () => {
     const state = await tabRequest({ type: MSG.TAB_STATE });

@@ -15,6 +15,8 @@ const partial = { version: 2, videoId: ID, lang: 'en', duration: 900, cues: [cue
 let fake;
 let said;
 let saved = null;
+/** What the fake service worker answers a request to start with; null = a job started. */
+let startRefusal = null;
 const listeners = [];
 const sender = () => ({ id: fake.chrome.runtime.id });
 const sent = (type) => fake.sent.filter((m) => m.type === type);
@@ -26,6 +28,12 @@ function tabState() {
 }
 function command(name) {
   for (const fn of listeners) fn({ type: MSG.COMMAND, command: name }, sender(), () => {});
+}
+/** An action from the popup; resolves with the tab's state afterwards. */
+function action(name) {
+  return new Promise((resolve) => {
+    for (const fn of listeners) fn({ type: MSG.TAB_ACTION, action: name }, sender(), resolve);
+  });
 }
 function genEvent(ev) {
   for (const fn of listeners) fn({ type: MSG.GEN_EVENT, videoId: ID, lang: 'en', ...ev }, sender(), () => {});
@@ -48,7 +56,7 @@ beforeAll(async () => {
       if (msg.type === MSG.GET_STATUS) return { hasKey: true, shortcuts: { 'toggle-descriptions': 'Alt+Shift+D' } };
       if (msg.type === MSG.GET_SCRIPT) return { script: saved };
       if (msg.type === MSG.GEN_STATUS) return { status: 'idle' };
-      if (msg.type === MSG.GEN_START) return { status: 'generating', done: saved ? 1 : 0, total: 3, chunkStartedAt: Date.now(), chunkMs: [] };
+      if (msg.type === MSG.GEN_START) return startRefusal || { status: 'generating', done: saved ? 1 : 0, total: 3, chunkStartedAt: Date.now(), chunkMs: [] };
       return {};
     },
   });
@@ -102,5 +110,51 @@ describe('an error part-way through', () => {
     window.dispatchEvent(new Event('online'));
     await new Promise((r) => setTimeout(r, 200));
     expect(sent(MSG.GEN_START)).toHaveLength(3);
+  });
+
+  it("after this minute's rate limit, the shortcut carries on too; the day's quota names another model instead", async () => {
+    command('toggle-descriptions');
+    await vi.waitFor(() => expect(sent(MSG.GEN_START)).toHaveLength(4));
+    genEvent({ event: 'error', code: 'rate-limited' });
+    await vi.waitFor(() => expect(said().at(-1)).toMatch(/^Too many requests to Gemini in a short time\..*Press Alt\+Shift\+D to carry on from where it stopped\.$/));
+    command('toggle-descriptions');
+    await vi.waitFor(() => expect(sent(MSG.GEN_START)).toHaveLength(5));
+    genEvent({ event: 'error', code: 'quota-daily' });
+    await vi.waitFor(() => expect(said().at(-1)).toMatch(/^Today’s Gemini quota for this model is used up/));
+    // Tomorrow's quota is not a reason to press again: no "carry on" offered.
+    expect(said().at(-1)).not.toMatch(/Press Alt\+Shift\+D/);
+  });
+
+  it("says the day's limit, with the limit set, when the shortcut starts descriptions; a second press is answered too", async () => {
+    // A video with no descriptions yet, descriptions on, and a limit of an hour.
+    saved = null;
+    expect((await action('delete')).cueCount).toBe(0);
+    await fake.chrome.storage.sync.set({ settings: { enabled: true, dailyBudgetSeconds: 3600 } });
+    // The page hears of the change on the next tick (storage.onChanged), as in Chrome.
+    await new Promise((r) => setTimeout(r, 20));
+    startRefusal = { error: 'budget' };
+    const before = sent(MSG.GEN_START).length;
+    command('toggle-descriptions');
+    await vi.waitFor(() => expect(said().at(-1)).toBe('Today’s limit of 1 hour is reached. Change it in settings, or carry on tomorrow.'));
+    expect(sent(MSG.GEN_START)).toHaveLength(before + 1);
+    expect((await tabState()).status).toBe('error');
+    // Not a reason to press again, so no "carry on" is offered; descriptions are not switched off either.
+    expect(fake.areas.sync.settings.enabled).toBe(true);
+    // The listener presses again (to raise the limit they go to settings): asked again, told again.
+    command('toggle-descriptions');
+    await vi.waitFor(() => expect(sent(MSG.GEN_START)).toHaveLength(before + 2));
+    await vi.waitFor(() => expect(said().filter((s) => s.startsWith('Today’s limit of 1 hour')).length).toBe(2));
+    startRefusal = null;
+  });
+
+  it('says when the SceneVoice Cloud allowance comes back, from the reply when it says so', async () => {
+    startRefusal = { error: 'allowance', detail: 'used up', resetAt: '2026-11-05T00:00:00Z' };
+    command('toggle-descriptions');
+    const at = new Date('2026-11-05T00:00:00Z').toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    await vi.waitFor(() => expect(said().at(-1)).toBe(`Your free SceneVoice allowance for today is used up. It resets at ${at}. Use your own key in settings, or upgrade.`));
+    startRefusal = { error: 'allowance' };
+    command('toggle-descriptions');
+    await vi.waitFor(() => expect(said().at(-1)).toBe('Your free SceneVoice allowance for today is used up. It resets at midnight UTC. Use your own key in settings, or upgrade.'));
+    startRefusal = null;
   });
 });

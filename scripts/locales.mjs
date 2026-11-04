@@ -10,7 +10,7 @@
 
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** Languages that must have every string: the build fails on a missing one. */
 export const CORE_LOCALES = ['en', 'zh_CN'];
@@ -24,7 +24,10 @@ const files = readdirSync(dir)
 
 /** { locale: { key: text } } for every language file. */
 export const TABLES = {};
-for (const locale of files) TABLES[locale] = (await import(`./locales/${locale}.mjs`)).default;
+// Imported by absolute file URL on purpose: a relative template literal would
+// make Vite (vitest) bake the folder's file list into its module cache, so a
+// locale file added later was not seen until the cache was cleared.
+for (const locale of files) TABLES[locale] = (await import(pathToFileURL(join(dir, `${locale}.mjs`)).href)).default;
 
 /** Every language shipped, core first. */
 export const LOCALES = Object.keys(TABLES);

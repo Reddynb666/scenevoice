@@ -265,8 +265,8 @@ describe('the manifest asks for as little as it can', () => {
     expect(bili).toEqual([{ matches: ['https://www.bilibili.com/video/*'], js: ['content.js'], run_at: 'document_idle', all_frames: false }]);
   });
 
-  it('reaches only the two model APIs; Bilibili’s own APIs are called from the Bilibili page', () => {
-    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*']);
+  it('reaches only the two model APIs and the SceneVoice Cloud relay; Bilibili’s own APIs are called from the Bilibili page', () => {
+    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*', 'https://api.scenevoice.app/*']);
     expect(manifest.permissions).toEqual(['storage', 'unlimitedStorage', 'tts', 'activeTab', 'offscreen']);
   });
 });

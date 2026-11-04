@@ -298,6 +298,9 @@ export function estimateSeconds(text, rate = 1) {
   return cjk / (4.5 * r) + words / (2.8 * r) + 0.25;
 }
 
+/** Seconds kept back from a pause the model estimated (see chooseUtterance). */
+export const ESTIMATE_MARGIN = 0.5;
+
 /**
  * Decide what to say for a cue.
  * @returns {{text: string, needsPause: boolean} | null} null = skip this cue
@@ -306,9 +309,13 @@ export function chooseUtterance(cue, { mode, detail, rate, onScreenText, playbac
   if (!cue) return null;
   if (cue.kind === 'text' && !onScreenText) return null;
   const order = DETAIL_ORDER[detail] || DETAIL_ORDER.standard;
-  // The gap is in video seconds; at 2x it passes twice as fast. The model's own
-  // estimate gets half a second of leeway; a gap measured from captions gets none.
-  const room = cue.gap / Math.max(0.25, playbackRate || 1) + (cue.gapMeasured ? 0 : 0.5);
+  // The gap is in video seconds; at 2x it passes twice as fast. A gap measured
+  // from captions is taken as it is. The model's own estimate runs optimistic
+  // (it places the pause by ear and rounds up), so half a second is kept back:
+  // a description that runs over the estimate covers the next line of dialogue.
+  // A gap of 0 (frames mode: the model could not tell whether anyone speaks)
+  // leaves no room at all: skipped here, or paused for in 'pause' mode.
+  const room = Math.max(0, cue.gap / Math.max(0.25, playbackRate || 1) - (cue.gapMeasured ? 0 : ESTIMATE_MARGIN));
 
   if (mode === 'gaps') {
     for (const key of order) {

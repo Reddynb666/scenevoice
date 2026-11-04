@@ -3,8 +3,8 @@
 
 export default {
   // ----- manifest -----
-  ext_name: 'SceneVoice: AI Audio Description for YouTube',
-  ext_description: 'Audio description for any YouTube video, made for blind and low-vision viewers. Works with your screen reader.',
+  ext_name: 'SceneVoice: AI Audio Description for Video',
+  ext_description: 'AI audio description for YouTube and Bilibili videos, made for blind and low-vision viewers. Works with your screen reader.',
   cmd_toggle: 'Create descriptions, or turn them on and off',
   cmd_describe_now: 'Describe what is on screen now',
   cmd_repeat: 'Repeat the last description',
@@ -136,6 +136,11 @@ export default {
   announce_reader_speed: 'Screen reader speed: $1.',
   announce_fastest: 'That is the fastest.',
   announce_slowest: 'That is the slowest.',
+  // Said once per video, in "keep playing" mode, once more than a few descriptions found no pause.
+  status_skipped_no_pause: '$1 descriptions were skipped because there was no pause. Press $2 for pause mode.',
+  status_skipped_no_pause_setting: '$1 descriptions were skipped because there was no pause. Choose “Pause the video” as the mode in the SceneVoice popup or settings.',
+  // SceneVoice Cloud's shared cache had this video already: said in place of "creating descriptions".
+  status_loaded_cloud: 'Descriptions for this video were already made by another SceneVoice user; loaded.',
   // ----- describing from frames (Qwen, and any model on Bilibili) -----
   status_live_start:
     'SceneVoice is describing as you watch: every few seconds it sends a picture from the video to $1. Descriptions come a few seconds after the picture, and are saved for the next time you watch.',
@@ -153,6 +158,11 @@ export default {
   // Only one key is saved, and it is not the one chosen for this site: that key's model describes instead.
   status_fallback_gemini: 'Only a Gemini key is set, so Gemini describes this site.',
   status_fallback_qwen: 'Only a Qwen key is set, so Qwen describes this site.',
+  // Before a description made from frames that is said well after its moment. Trailing space on purpose.
+  late_prefix: 'Earlier: ',
+  // No key of the listener's own, but a SceneVoice Cloud token: the relay describes instead.
+  status_fallback_cloud: 'No key of your own is set, so SceneVoice Cloud describes this site.',
+  provider_name_cloud: 'SceneVoice Cloud',
   // ----- errors -----
   error_no_key: 'SceneVoice needs a Gemini API key. The settings page is opening so you can add one.',
   error_bad_key: 'The Gemini API key was not accepted. Check it on the SceneVoice settings page.',
@@ -210,6 +220,32 @@ export default {
   error_qwen_empty_response: 'Qwen returned no answer. Try again.',
   error_qwen_truncated: 'The answer from Qwen was cut off. Try again.',
   error_qwen_bad_json: 'Qwen returned an answer SceneVoice could not read. Try again.',
+  // 429s told apart: this minute's limit, the day's quota, the SceneVoice Cloud allowance, and the limit set in settings.
+  error_rate_limited: 'Too many requests to Gemini in a short time. Wait a minute and try again; descriptions made so far are saved.',
+  error_quota_daily:
+    'Today’s Gemini quota for this model is used up (the free tier has a daily limit). It resets tomorrow. To carry on now, pick another model on the settings page: each has its own quota.',
+  error_allowance: 'Your free SceneVoice allowance for today is used up. It resets at $1. Use your own key in settings, or upgrade.',
+  error_budget: 'Today’s limit of $1 is reached. Change it in settings, or carry on tomorrow.',
+  error_qwen_rate_limited: 'Too many requests to Qwen in a short time. Wait a minute and try again; descriptions made so far are saved.',
+  error_qwen_quota_daily: 'Today’s Qwen quota is used up. It resets tomorrow; check your allowance in the Model Studio console.',
+  // When the Cloud allowance comes back, if the relay did not say.
+  time_midnight_utc: 'midnight UTC',
+  // SceneVoice Cloud's own words: no key to check, only a device token, and "Start free" instead of "add a key".
+  error_cloud_no_key: 'SceneVoice Cloud is not set up on this computer. Press Start free in settings to get your free SceneVoice allowance, or add a key of your own.',
+  error_cloud_bad_key: 'SceneVoice Cloud did not recognise this computer’s device token. Press Start free in settings to get a new one.',
+  error_cloud_forbidden: 'SceneVoice Cloud refused the request. Try again in a moment, or use a key of your own in settings.',
+  error_cloud_model_not_found: 'That model is not available on your SceneVoice Cloud plan. Pick another model in settings, or leave the choice to SceneVoice.',
+  error_cloud_no_model: 'SceneVoice Cloud offered no model this plan can use. Try again later, or use a key of your own in settings.',
+  error_cloud_quota: 'SceneVoice Cloud is busy right now. Try again in a few minutes; descriptions made so far are saved.',
+  error_cloud_server: 'SceneVoice Cloud had a problem. Try again in a moment.',
+  error_cloud_request_failed: 'The request to SceneVoice Cloud failed. Try again.',
+  error_cloud_network: 'Could not reach SceneVoice Cloud. Check your internet connection, or use a key of your own in settings.',
+  error_cloud_blocked: 'The model behind SceneVoice Cloud declined to describe this video.',
+  error_cloud_empty_response: 'SceneVoice Cloud returned no answer. Try again.',
+  error_cloud_truncated: 'The answer from SceneVoice Cloud was cut off. Try again.',
+  error_cloud_bad_json: 'SceneVoice Cloud returned an answer SceneVoice could not read. Try again.',
+  error_cloud_rate_limited: 'Too many requests to SceneVoice Cloud in a short time. Wait a minute and try again; descriptions made so far are saved.',
+  error_cloud_quota_daily: 'The model behind SceneVoice Cloud has no quota left today. Try again tomorrow, or use a key of your own in settings.',
   // ----- popup -----
   popup_setup_title: 'Set up SceneVoice',
   popup_setup_body: 'Add your free Gemini API key to start creating descriptions.',
@@ -243,6 +279,15 @@ export default {
   quick_mode: 'mode',
   quick_faster: 'faster',
   quick_slower: 'slower',
+  // Under the language choice, only when the descriptions are not in the interface language.
+  popup_language_note: 'Interface: $1 · Descriptions: $2',
+  // After the status, once a video is described: what it cost at list price ($1 is "$0.03" or "¥0.2").
+  popup_cost: 'This video: about $1.',
+  // An amount in yuan ($1 is the number). Dollars are written "$0.03" in the code.
+  money_cny: '¥$1',
+  // No key and no Cloud token at all: the welcome page, not the settings page, is the place to start.
+  popup_setup_body_welcome: 'SceneVoice can describe videos for free, with nothing to set up. The welcome page shows how, in three steps.',
+  popup_setup_welcome: 'Set up SceneVoice',
   // ----- shared settings -----
   set_enabled: 'Describe while I watch',
   set_enabled_hint: 'Speak descriptions automatically during playback.',
@@ -319,6 +364,15 @@ export default {
   set_duck_level: 'Video volume while describing',
   set_show_text: 'Show descriptions as large text on the video',
   set_show_text_hint: 'Helpful for low vision, and for people watching with you.',
+  // The daily limit: video described per day, every model together (usage.js).
+  set_daily_budget: 'Daily limit',
+  set_daily_budget_hint:
+    'How much video SceneVoice may describe per day, every model together, counted on this computer. When it is reached, no new descriptions start until tomorrow; questions still work.',
+  budget_none: 'No limit',
+  budget_30m: '30 minutes',
+  budget_1h: '1 hour',
+  budget_2h: '2 hours',
+  budget_4h: '4 hours',
   // ----- video type -----
   opt_type_title: 'By video type',
   set_auto_by_type: 'Adjust descriptions to the video type',
@@ -396,6 +450,8 @@ export default {
   opt_next_youtube_button: 'Next: open any YouTube video and press the SceneVoice button in the player.',
   opt_next_bilibili: 'Next: open any Bilibili video and press $1 to hear descriptions.',
   opt_next_bilibili_button: 'Next: open any Bilibili video and press the SceneVoice button in the player.',
+  // Said when the second key is saved and a site goes back to its usual model.
+  opt_providers_default: 'Each site now uses its usual model: Gemini on YouTube, Qwen on Bilibili. Change this under “Which model describes each site”.',
   opt_key_removed: 'Key removed.',
   opt_model_label: 'Model',
   opt_model_hint: 'The recommended model is chosen automatically. Flash models are fast and inexpensive.',
@@ -440,4 +496,70 @@ export default {
   opt_reset_done: 'Default settings restored.',
   opt_reset_failed: 'The settings could not be restored just now. Try again in a moment.',
   opt_footer: 'SceneVoice is free and open source.',
+  // Usage today: one line per model that was used, from the model's own token counts.
+  opt_usage_title: 'Usage today',
+  opt_usage_none: 'Nothing described yet today.',
+  opt_usage_row: '$1: $2 requests, $3 tokens, about $4 minutes of video.',
+  opt_usage_row_cost: '$1: $2 requests, $3 tokens, about $4 minutes of video, about $5.',
+  opt_usage_note:
+    'Counted on this computer only, from the token counts the model reports, and starts again at midnight. The estimate uses paid-tier list prices; a free-tier Gemini key is not charged.',
+  provider_cloud: 'SceneVoice Cloud',
+  // SceneVoice Cloud block at the top of section 1: plan and allowance, Start free, licence, sharing, stop.
+  opt_cloud_intro:
+    'SceneVoice Cloud describes videos with the project’s own Gemini key, so there is nothing to set up. Each installation gets an anonymous device token and a free daily allowance; videos already described by other SceneVoice users do not count against it. Requests go through the SceneVoice relay, which keeps only the day’s count and, when sharing is on, the finished text. See the privacy policy.',
+  opt_cloud_none: 'Not set up on this computer. Press Start free to get a device token and the free daily allowance. No account is needed.',
+  opt_cloud_status: 'Plan: $1. Used today: $2 of $3 minutes. The allowance resets at $4.',
+  opt_cloud_status_offline: 'Plan: $1. SceneVoice Cloud could not be reached just now, so today’s usage is not known.',
+  opt_cloud_start: 'Start free',
+  opt_cloud_starting: 'Getting your free allowance…',
+  opt_cloud_started: 'SceneVoice Cloud is ready. You have $1 minutes of newly described video a day; videos already described by others do not count.',
+  opt_cloud_use_own: 'You can use a key of your own instead: Gemini or Qwen, below.',
+  opt_cloud_stop: 'Stop using Cloud',
+  opt_cloud_stopped: 'SceneVoice Cloud is no longer used on this computer; the device token was removed.',
+  set_share_descriptions: 'Share finished descriptions with other SceneVoice users',
+  set_share_descriptions_hint:
+    'When a video’s descriptions are complete, their text is sent to the SceneVoice cache, so the next listener gets them at once and the video is described only once. Never pictures, questions or who you are. Only with SceneVoice Cloud.',
+  opt_license_label: 'Licence key',
+  opt_license_hint: 'For SceneVoice Cloud Plus or an organisation licence (a school, library or employer). Keys look like svl-XXXX-XXXX-XXXX.',
+  opt_license_activate: 'Activate a licence key',
+  opt_license_missing: 'Enter the licence key first.',
+  opt_license_invalid: 'A licence key looks like svl-XXXX-XXXX-XXXX. Check it and try again.',
+  opt_license_ok: 'Licence activated. Plan: $1, $2 minutes of newly described video a day.',
+  opt_license_not_found: 'That licence key was not found. Check it, or ask whoever gave it to you.',
+  opt_license_full: 'That licence has no free seats left. Ask whoever manages it.',
+  opt_license_failed: 'The licence could not be activated just now. $1',
+  plan_free: 'Free',
+  plan_plus: 'Plus',
+  plan_org: 'Organisation',
+  // ----- welcome page (first run) -----
+  welcome_title: 'Welcome to SceneVoice',
+  welcome_intro:
+    'SceneVoice says what is on screen in YouTube and Bilibili videos, in the pauses between speech, through your screen reader or a built-in voice. Three steps, about two minutes.',
+  welcome_step1_title: '1. Hear what SceneVoice does',
+  welcome_step1_body: 'Three sample descriptions, the way they come during a video. Nothing is sent anywhere and no key is needed.',
+  welcome_output_legend: 'Hear them through',
+  welcome_sample_button: 'Hear a sample',
+  welcome_sample_between: 'The video keeps playing; descriptions fit the pauses.',
+  welcome_sample_done: 'That was the sample. Next: choose how descriptions are made.',
+  welcome_step2_title: '2. Choose how descriptions are made',
+  welcome_source_legend: 'Descriptions are made by',
+  welcome_source_cloud: 'SceneVoice Cloud: free allowance, nothing to set up (recommended)',
+  welcome_source_cloud_hint: '60 minutes of newly described video a day; videos already described by other SceneVoice users do not count. Requests go through the SceneVoice relay with an anonymous device token, no account.',
+  welcome_source_own: 'My own key (Gemini or Qwen): unlimited, private',
+  welcome_source_own_hint: 'You get a free key from Google AI Studio or Alibaba Cloud Model Studio and paste it in. Nothing goes through SceneVoice.',
+  welcome_start_free: 'Start free',
+  welcome_cloud_share_note:
+    'Start free also turns on sharing: when a video’s descriptions are complete, their text goes to the SceneVoice cache so the next listener gets them at once, never pictures or questions. You can turn it off in settings.',
+  welcome_privacy_link: 'Privacy note: what SceneVoice Cloud receives and keeps (opens in a new tab)',
+  welcome_cloud_ready: 'SceneVoice Cloud is ready. You have $1 minutes of newly described video a day. Videos already described by others do not count. Next: step 3, try it.',
+  welcome_cloud_already: 'SceneVoice Cloud is already set up on this computer.',
+  welcome_cloud_failed_next: 'You can use your own key instead: choose “My own key” above.',
+  welcome_own_key_link: 'Add my key in settings',
+  welcome_step3_title: '3. Try it',
+  welcome_shortcut_set: 'Your shortcut to create descriptions, and to turn them on or off, is $1.',
+  welcome_shortcut_unset: 'No shortcut is set for creating descriptions yet. The SceneVoice button in the player and the toolbar popup work too.',
+  welcome_try_body: 'SceneVoice works on YouTube and Bilibili video pages. Open a video and play it: the first time, SceneVoice says once how to start the descriptions.',
+  welcome_try_youtube: 'Open a short YouTube video to try (opens in a new tab)',
+  welcome_try_bilibili: 'Open a short Bilibili video to try (opens in a new tab)',
+  welcome_skip: 'Skip, open all settings',
 };

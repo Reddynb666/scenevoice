@@ -74,13 +74,19 @@ export function pickOne(cues) {
 }
 
 /**
- * Whether a cue that comes due may cut off the one being spoken. On-screen
- * text is not cut off by a visual description that is no more important; the
- * description is dropped instead. Everything else is replaced by what is on
- * screen now, as before.
+ * Whether a cue that comes due may cut off the one being spoken. Only a more
+ * important cue may (priority 1 is the highest): a description cut off
+ * half-way is worse than one heard a few seconds late, and in a talking-head
+ * video the cues come close enough that cutting off on equals would leave
+ * most of them unfinished. On-screen text keeps its old protection (a visual
+ * description that is no more important never cuts it off) and gains the
+ * same against other text. What the user asked for (describe now, repeat,
+ * an answer) is passed as {kind: 'manual', priority: 0}: nothing scheduled
+ * outranks it. The cue held back waits for the next pause or is dropped (see
+ * the content script).
  * @param {{kind: string, priority: number} | null} speaking  the cue being spoken, if any
  */
 export function mayInterrupt(speaking, next) {
-  if (!speaking || speaking.kind !== 'text' || next.kind === 'text') return true;
+  if (!speaking) return true;
   return next.priority < speaking.priority;
 }

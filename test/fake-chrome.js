@@ -89,6 +89,7 @@ export function fakeChrome({ locale = 'en', uiLanguage = 'en-US', sync = {}, loc
         return reply(msg);
       },
       getManifest: () => ({ version: '1.0.0' }),
+      getURL: (path) => `chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef/${path}`,
       async openOptionsPage() {},
       onMessage: { addListener() {} },
     },

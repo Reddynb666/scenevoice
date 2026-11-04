@@ -2,8 +2,8 @@
 
 export default {
   // ----- manifest -----
-  ext_name: 'SceneVoice 声景：YouTube AI 口述影像',
-  ext_description: '为任意 YouTube 视频生成口述影像，专为盲人和低视力观众设计，配合读屏软件使用。',
+  ext_name: 'SceneVoice 声景：AI 口述影像',
+  ext_description: '为 YouTube 和哔哩哔哩视频生成 AI 口述影像，专为盲人和低视力观众设计，配合读屏软件使用。',
   cmd_toggle: '生成口述，或开启/关闭口述',
   cmd_describe_now: '描述当前画面',
   cmd_repeat: '重复上一条描述',
@@ -126,6 +126,11 @@ export default {
   announce_reader_speed: '读屏语速：$1。',
   announce_fastest: '已经是最快了。',
   announce_slowest: '已经是最慢了。',
+  // Said once per video, in "keep playing" mode, once more than a few descriptions found no pause.
+  status_skipped_no_pause: '有 $1 条描述因为没有对白空隙而跳过了。按 $2 可以切换到暂停模式。',
+  status_skipped_no_pause_setting: '有 $1 条描述因为没有对白空隙而跳过了。可以在 SceneVoice 弹出面板或设置里把模式改为“暂停视频”。',
+  // SceneVoice Cloud's shared cache had this video already: said in place of "creating descriptions".
+  status_loaded_cloud: '这个视频的口述已由其他 SceneVoice 用户生成过，已直接加载。',
   // ----- describing from frames (Qwen, and any model on Bilibili) -----
   status_live_start: 'SceneVoice 开始边看边生成口述：每隔几秒把视频画面发给$1。口述会比画面晚几秒，生成的口述会保存，下次观看时按时播报。',
   status_live_resuming: '继续边看边生成口述，只补还没有口述的部分。',
@@ -142,6 +147,11 @@ export default {
   // Only one key is saved, and it is not the one chosen for this site: that key's model describes instead.
   status_fallback_gemini: '只填写了 Gemini 密钥，这个网站将由 Gemini 描述。',
   status_fallback_qwen: '只填写了通义千问 API Key，这个网站将由通义千问描述。',
+  // Before a description made from frames that is said well after its moment. Trailing space on purpose.
+  late_prefix: '刚才：',
+  // No key of the listener's own, but a SceneVoice Cloud token: the relay describes instead.
+  status_fallback_cloud: '没有填写自己的密钥，这个网站将由 SceneVoice 云端描述。',
+  provider_name_cloud: ' SceneVoice 云端',
   // ----- errors -----
   error_no_key: 'SceneVoice 需要 Gemini API 密钥，正在打开设置页面，请添加密钥。',
   error_bad_key: 'Gemini API 密钥无效，请在 SceneVoice 设置页检查。',
@@ -194,6 +204,31 @@ export default {
   error_qwen_empty_response: '通义千问没有返回结果，请重试。',
   error_qwen_truncated: '通义千问的回答被截断，请重试。',
   error_qwen_bad_json: '通义千问返回的内容无法解析，请重试。',
+  // 429s told apart: this minute's limit, the day's quota, the SceneVoice Cloud allowance, and the limit set in settings.
+  error_rate_limited: '短时间内向 Gemini 发的请求太多了。请等一分钟再试，已生成的口述都已保存。',
+  error_quota_daily: '这个 Gemini 模型今天的额度已经用完（免费额度有每日上限），明天会恢复。想现在继续，可以在设置页换一个模型，每个模型的额度是分开的。',
+  error_allowance: '你今天的 SceneVoice 免费额度已经用完，$1 恢复。可以在设置里改用自己的密钥，或者升级。',
+  error_budget: '今天已经用到你设的上限（$1）。可以在设置里调整，或者明天再继续。',
+  error_qwen_rate_limited: '短时间内向通义千问发的请求太多了。请等一分钟再试，已生成的口述都已保存。',
+  error_qwen_quota_daily: '通义千问今天的额度已经用完，明天会恢复。请到阿里云百炼控制台查看额度。',
+  // When the Cloud allowance comes back, if the relay did not say.
+  time_midnight_utc: '世界标准时间零点',
+  // SceneVoice Cloud's own words: no key to check, only a device token, and "Start free" instead of "add a key".
+  error_cloud_no_key: '这台电脑还没有设置 SceneVoice 云端。请在设置页按“免费开始”领取免费额度，或者添加自己的密钥。',
+  error_cloud_bad_key: 'SceneVoice 云端不认识这台电脑的设备凭证。请在设置页按“免费开始”重新领取。',
+  error_cloud_forbidden: 'SceneVoice 云端拒绝了请求。请稍后再试，或在设置里改用自己的密钥。',
+  error_cloud_model_not_found: '你的 SceneVoice 云端套餐不能使用这个模型。请在设置里换一个，或者交给 SceneVoice 自动选择。',
+  error_cloud_no_model: 'SceneVoice 云端没有提供这个套餐可用的模型。请稍后再试，或在设置里改用自己的密钥。',
+  error_cloud_quota: 'SceneVoice 云端现在很忙，请过几分钟再试，已生成的口述都已保存。',
+  error_cloud_server: 'SceneVoice 云端出现问题，请稍后重试。',
+  error_cloud_request_failed: '向 SceneVoice 云端发送请求失败，请重试。',
+  error_cloud_network: '无法连接 SceneVoice 云端。请检查网络，或在设置里改用自己的密钥。',
+  error_cloud_blocked: 'SceneVoice 云端背后的模型拒绝描述这个视频。',
+  error_cloud_empty_response: 'SceneVoice 云端没有返回结果，请重试。',
+  error_cloud_truncated: 'SceneVoice 云端的回答被截断，请重试。',
+  error_cloud_bad_json: 'SceneVoice 云端返回的内容无法解析，请重试。',
+  error_cloud_rate_limited: '短时间内向 SceneVoice 云端发的请求太多了。请等一分钟再试，已生成的口述都已保存。',
+  error_cloud_quota_daily: 'SceneVoice 云端背后的模型今天的额度已经用完。请明天再试，或在设置里改用自己的密钥。',
   // ----- popup -----
   popup_setup_title: '设置 SceneVoice',
   popup_setup_body: '添加免费的 Gemini API 密钥后即可开始生成口述。',
@@ -226,6 +261,15 @@ export default {
   quick_mode: '模式',
   quick_faster: '加快语速',
   quick_slower: '放慢语速',
+  // Under the language choice, only when the descriptions are not in the interface language.
+  popup_language_note: '界面语言：$1 · 口述语言：$2',
+  // After the status, once a video is described: what it cost at list price ($1 is "$0.03" or "0.2 元").
+  popup_cost: '这个视频约 $1。',
+  // An amount in yuan ($1 is the number). Dollars are written "$0.03" in the code.
+  money_cny: '$1 元',
+  // No key and no Cloud token at all: the welcome page, not the settings page, is the place to start.
+  popup_setup_body_welcome: 'SceneVoice 可以免费描述视频，不需要任何设置。欢迎页分三步带你开始。',
+  popup_setup_welcome: '开始设置',
   // ----- shared settings -----
   set_enabled: '观看时自动口述',
   set_enabled_hint: '播放时自动朗读口述。',
@@ -299,6 +343,14 @@ export default {
   set_duck_level: '口述时的视频音量',
   set_show_text: '在视频上用大字显示口述',
   set_show_text_hint: '方便低视力用户，以及和你一起观看的人。',
+  // The daily limit: video described per day, every model together (usage.js).
+  set_daily_budget: '每日上限',
+  set_daily_budget_hint: 'SceneVoice 每天最多描述多长的视频，所有模型合计，在这台电脑上统计。达到上限后，当天不再开始新的口述，明天恢复；提问不受影响。',
+  budget_none: '不限',
+  budget_30m: '30 分钟',
+  budget_1h: '1 小时',
+  budget_2h: '2 小时',
+  budget_4h: '4 小时',
   // ----- video type -----
   opt_type_title: '按视频类型',
   set_auto_by_type: '按视频类型自动调整',
@@ -372,6 +424,8 @@ export default {
   opt_next_youtube_button: '下一步：打开任意 YouTube 视频，按播放器里的 SceneVoice 按钮。',
   opt_next_bilibili: '下一步：打开任意哔哩哔哩视频，按 $1 开始听口述。',
   opt_next_bilibili_button: '下一步：打开任意哔哩哔哩视频，按播放器里的 SceneVoice 按钮。',
+  // Said when the second key is saved and a site goes back to its usual model.
+  opt_providers_default: '两个网站现在各用常规模型：YouTube 用 Gemini，哔哩哔哩用通义千问。可在“各网站用哪个模型”处更改。',
   opt_key_removed: '密钥已删除。',
   opt_model_label: '模型',
   opt_model_hint: '会自动选择推荐模型。Flash 系列速度快、费用低。',
@@ -411,4 +465,65 @@ export default {
   opt_reset_done: '已恢复默认设置。',
   opt_reset_failed: '暂时没能恢复默认设置，请稍后再试。',
   opt_footer: 'SceneVoice 免费且开源。',
+  // Usage today: one line per model that was used, from the model's own token counts.
+  opt_usage_title: '今日用量',
+  opt_usage_none: '今天还没有生成过口述。',
+  opt_usage_row: '$1：$2 次请求，$3 个 token，约 $4 分钟视频。',
+  opt_usage_row_cost: '$1：$2 次请求，$3 个 token，约 $4 分钟视频，约 $5。',
+  opt_usage_note: '只在这台电脑上统计，数字来自模型自己报告的 token 数，每天零点清零。费用按付费档的标价估算；Gemini 免费额度的密钥不会被收费。',
+  provider_cloud: 'SceneVoice 云端',
+  // SceneVoice Cloud block at the top of section 1: plan and allowance, Start free, licence, sharing, stop.
+  opt_cloud_intro: 'SceneVoice 云端用项目自己的 Gemini 密钥描述视频，什么都不用设置。每次安装会得到一个匿名的设备凭证和每天的免费额度；其他 SceneVoice 用户已经描述过的视频不计入额度。请求经过 SceneVoice 中转服务器，它只记录当天的用量，开启共享时还会保存生成完成的文字。详见隐私政策。',
+  opt_cloud_none: '这台电脑还没有设置。按“免费开始”即可获得设备凭证和每天的免费额度，不需要注册账号。',
+  opt_cloud_status: '套餐：$1。今天已用 $2 分钟，共 $3 分钟。额度在 $4 恢复。',
+  opt_cloud_status_offline: '套餐：$1。现在连不上 SceneVoice 云端，暂时不知道今天的用量。',
+  opt_cloud_start: '免费开始',
+  opt_cloud_starting: '正在领取免费额度……',
+  opt_cloud_started: 'SceneVoice 云端已就绪。每天可以新生成 $1 分钟视频的口述；别人已经描述过的视频不计入。',
+  opt_cloud_use_own: '也可以改用自己的密钥：下方的 Gemini 或通义千问。',
+  opt_cloud_stop: '停用云端',
+  opt_cloud_stopped: '这台电脑不再使用 SceneVoice 云端，设备凭证已删除。',
+  set_share_descriptions: '把生成完成的口述分享给其他 SceneVoice 用户',
+  set_share_descriptions_hint: '一个视频的口述全部生成后，把文字发送到 SceneVoice 缓存，下一位听同一个视频的人就能直接使用，同一个视频只需生成一次。只发送文字，不发送画面、问题或任何关于你的信息。仅在使用 SceneVoice 云端时有效。',
+  opt_license_label: '许可证密钥',
+  opt_license_hint: '用于 SceneVoice 云端 Plus 或机构许可（学校、图书馆、单位）。密钥形如 svl-XXXX-XXXX-XXXX。',
+  opt_license_activate: '激活许可证密钥',
+  opt_license_missing: '请先输入许可证密钥。',
+  opt_license_invalid: '许可证密钥形如 svl-XXXX-XXXX-XXXX，请检查后重试。',
+  opt_license_ok: '许可证已激活。套餐：$1，每天可以新生成 $2 分钟视频的口述。',
+  opt_license_not_found: '找不到这个许可证密钥。请检查，或向给你密钥的人确认。',
+  opt_license_full: '这个许可证的名额已经用完，请联系管理它的人。',
+  opt_license_failed: '暂时没能激活许可证。$1',
+  plan_free: '免费版',
+  plan_plus: 'Plus 版',
+  plan_org: '机构版',
+  // ----- welcome page (first run) -----
+  welcome_title: '欢迎使用 SceneVoice',
+  welcome_intro: 'SceneVoice 会在 YouTube 和 B 站视频的对白空隙里，通过你的读屏软件或内置语音，说出画面上正在发生什么。三步，大约两分钟。',
+  welcome_step1_title: '1. 先听听看',
+  welcome_step1_body: '三条示例口述，就像看视频时听到的那样。不会发送任何内容，也不需要密钥。',
+  welcome_output_legend: '用什么来听',
+  welcome_sample_button: '听一段示例',
+  welcome_sample_between: '视频继续播放，口述只在对白空隙里说。',
+  welcome_sample_done: '示例结束。下一步：选择口述由谁生成。',
+  welcome_step2_title: '2. 选择口述由谁生成',
+  welcome_source_legend: '口述由谁生成',
+  welcome_source_cloud: 'SceneVoice 云端：有免费额度，不用任何设置（推荐）',
+  welcome_source_cloud_hint: '每天可以新生成 60 分钟视频的口述；其他 SceneVoice 用户已经描述过的视频不计入。请求经过 SceneVoice 中转服务器，使用匿名设备凭证，不需要账号。',
+  welcome_source_own: '自己的密钥（Gemini 或通义千问）：不限量，更私密',
+  welcome_source_own_hint: '到 Google AI Studio 或阿里云百炼免费申请一个密钥，粘贴进来。任何内容都不经过 SceneVoice。',
+  welcome_start_free: '免费开始',
+  welcome_cloud_share_note: '按“免费开始”同时会开启共享：一个视频的口述全部生成后，文字会存入 SceneVoice 缓存，下一位听同一个视频的人就能直接使用；不会发送画面或问题。可以在设置里关闭。',
+  welcome_privacy_link: '隐私说明：SceneVoice 云端会收到和保存什么（在新标签页打开）',
+  welcome_cloud_ready: 'SceneVoice 云端已就绪。每天可以新生成 $1 分钟视频的口述，别人已经描述过的视频不计入。下一步：第 3 步，试一试。',
+  welcome_cloud_already: '这台电脑已经设置好 SceneVoice 云端了。',
+  welcome_cloud_failed_next: '也可以改用自己的密钥：在上面选择“自己的密钥”。',
+  welcome_own_key_link: '去设置页添加我的密钥',
+  welcome_step3_title: '3. 试一试',
+  welcome_shortcut_set: '生成口述、以及开关口述的快捷键是 $1。',
+  welcome_shortcut_unset: '还没有为生成口述设置快捷键。也可以用播放器里的 SceneVoice 按钮或工具栏弹出面板。',
+  welcome_try_body: 'SceneVoice 在 YouTube 和 B 站的视频页上工作。打开一个视频并播放：第一次时，SceneVoice 会说一遍怎样开始口述。',
+  welcome_try_youtube: '打开一个短的 YouTube 视频试试（在新标签页打开）',
+  welcome_try_bilibili: '打开一个短的 B 站视频试试（在新标签页打开）',
+  welcome_skip: '跳过，打开全部设置',
 };

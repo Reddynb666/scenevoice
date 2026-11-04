@@ -45,9 +45,14 @@ function sendSafe(msg) {
 
 export class Announcer {
   /** @param {() => object} getSettings  returns current settings */
-  constructor(getSettings) {
+  /**
+   * @param {() => object} getSettings  returns current settings
+   * @param {{isAudible?: () => boolean}} [opts]
+   *   isAudible: whether this tab's video is playing with sound right now (see speakTts). Default: yes.
+   */
+  constructor(getSettings, { isAudible = () => true } = {}) {
     this.getSettings = getSettings;
-    this.lang = 'en';
+    this.isAudible = isAudible;
     this.host = document.createElement('div');
     this.host.dataset.scenevoice = 'announcer';
     this.host.style.cssText = HIDDEN_STYLE;
@@ -55,6 +60,7 @@ export class Announcer {
     this.polite = [makeRegion('polite'), makeRegion('polite')];
     this.assertive = [makeRegion('assertive'), makeRegion('assertive')];
     this.host.append(...this.polite, ...this.assertive);
+    this.lang = 'en';
     this.flip = 0;
     this.pending = null; // { id, resolve, timer }
     /** Texts waiting to be written to a live region, oldest first. */
@@ -71,6 +77,21 @@ export class Announcer {
         // Ignore a message we cannot attribute.
       }
     });
+  }
+
+  /**
+   * The description language. It goes on every live region as well, so a
+   * screen reader that switches voices by language reads the descriptions in
+   * the right one instead of the page's (YouTube's page is in the interface
+   * language, which may not be the description language).
+   */
+  get lang() {
+    return this._lang;
+  }
+
+  set lang(value) {
+    this._lang = value || 'en';
+    for (const el of [...this.polite, ...this.assertive]) el.setAttribute('lang', this._lang);
   }
 
   mount() {
@@ -139,8 +160,12 @@ export class Announcer {
 
   speakTts(text, enqueue) {
     const s = this.getSettings();
-    // A background tab must not talk over the one the user is watching.
-    if (document.visibilityState !== 'visible') {
+    // A hidden tab whose video is paused or muted must not talk over the tab
+    // the user is watching (with two tabs open, YouTube pauses the one in the
+    // background). A hidden tab whose video plays with sound is being listened
+    // to, from another window or with the screen off: it keeps describing.
+    // The wait stands in for the speech, so the scheduler is not thrown off.
+    if (document.visibilityState !== 'visible' && !this.isAudible()) {
       return new Promise((resolve) => setTimeout(resolve, estimateSeconds(text, s.ttsRate) * 1000));
     }
     const id = `u${(this.seq += 1)}`;

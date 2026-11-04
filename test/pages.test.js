@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MSG } from '../src/shared/constants.js';
 import { fakeChrome } from './fake-chrome.js';
 
@@ -27,8 +27,21 @@ const COMMANDS = [
 
 let fake;
 
+// A page left polling (the popup while "generating") would fire into the next
+// test's document: every timer a page sets is remembered and cleared before
+// the next page is loaded.
+const timers = new Set();
+const realSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (...args) => {
+  const id = realSetTimeout(...args);
+  timers.add(id);
+  return id;
+};
+
 /** Load an extension page's HTML (without running its script tag) and then its module. */
 async function openPage(page, opts = {}) {
+  for (const id of timers) clearTimeout(id);
+  timers.clear();
   const html = readFileSync(join(root, 'src', page, `${page}.html`), 'utf8');
   document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
   fake = fakeChrome({
@@ -46,7 +59,7 @@ async function openPage(page, opts = {}) {
   vi.resetModules();
   await import(`../src/${page}/${page}.js`);
   // Wait for init() to finish: these are filled in after every listener is attached.
-  const last = { options: '#cacheInfo', guide: null, popup: '#quickKeys' }[page];
+  const last = { options: '#cacheInfo', guide: null, popup: '#quickKeys', welcome: '#shortcutText' }[page];
   if (last) await vi.waitFor(() => expect(document.querySelector(last).textContent).not.toBe(''));
 }
 
@@ -224,6 +237,42 @@ describe('popup quick settings', () => {
     choose($('input[name=detail][value=detailed]'));
     expect(status.textContent).toBe('');
     await vi.waitFor(() => expect(stored().detail).toBe('detailed'));
+  });
+});
+
+describe('popup: interface and description languages', () => {
+  const tab = (lang) => (msg) =>
+    msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'abcdefghijk', title: 'Diner', status: 'ready', cueCount: 4, firstCue: 1, lang, videoType: '' } : { ok: true };
+
+  it('says nothing when the descriptions are in the interface language', async () => {
+    await openPage('popup');
+    await vi.waitFor(() => expect($('input[name=detail][value=standard]').checked).toBe(true));
+    expect($('#languageNote').hidden).toBe(true);
+    expect($('#languageNote').textContent).toBe('');
+    expect($('#language').hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('names both when a browser language without an interface gets descriptions of its own', async () => {
+    await openPage('popup', { uiLanguage: 'sv-SE' });
+    await vi.waitFor(() => expect($('#languageNote').hidden).toBe(false));
+    expect($('#languageNote').textContent).toBe('Interface: English · Descriptions: svenska');
+    expect($('#language').getAttribute('aria-describedby')).toBe('languageNote');
+  });
+
+  it('follows the language of the video in the tab, in Chinese for a Chinese interface', async () => {
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab('en') });
+    await vi.waitFor(() => expect($('#languageNote').hidden).toBe(false));
+    expect($('#languageNote').textContent).toBe('界面语言：简体中文 · 口述语言：English');
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab('zh-CN') });
+    await vi.waitFor(() => expect($('#videoTitle').textContent).toBe('Diner'));
+    expect($('#languageNote').hidden).toBe(true);
+  });
+
+  it('marks right-to-left language names as such in the list', async () => {
+    await openPage('popup');
+    expect($('#language option[value=ar]').getAttribute('dir')).toBe('rtl');
+    expect($('#language option[value=ur]').lang).toBe('ur');
+    expect($('#language option[value=fr]').hasAttribute('dir')).toBe(false);
   });
 });
 
@@ -588,7 +637,7 @@ describe('settings page: models for each site, and the Qwen key', () => {
     vi.unstubAllGlobals();
   });
 
-  it('offers Gemini and Qwen for each site, Gemini on YouTube and Qwen on Bilibili by default, with a hint', async () => {
+  it('offers Cloud, Gemini and Qwen for each site, Gemini on YouTube and Qwen on Bilibili by default, with a hint', async () => {
     await openPage('options');
     const youtube = $('#youtubeProvider');
     const bilibili = $('#bilibiliProvider');
@@ -596,11 +645,12 @@ describe('settings page: models for each site, and the Qwen key', () => {
     expect(bilibili.value).toBe('qwen');
     expect(youtube.labels[0].querySelector('span').textContent).toBe('YouTube videos');
     expect(bilibili.labels[0].querySelector('span').textContent).toBe('Bilibili videos (experimental)');
-    expect([...bilibili.options].map((o) => o.textContent)).toEqual(['Gemini (Google)', 'Qwen (Alibaba Cloud Model Studio)']);
+    expect([...bilibili.options].map((o) => o.textContent)).toEqual(['SceneVoice Cloud', 'Gemini (Google)', 'Qwen (Alibaba Cloud Model Studio)']);
     expect(bilibili.getAttribute('aria-describedby')).toBe('providerHint');
     expect($('#providerHint').textContent).toMatch(/descriptions come a few seconds after the picture/);
-    expect([...document.querySelectorAll('#main h2, #main h3')].slice(0, 4).map((h) => `${h.tagName} ${h.textContent}`)).toEqual([
+    expect([...document.querySelectorAll('#main h2, #main h3')].slice(0, 5).map((h) => `${h.tagName} ${h.textContent}`)).toEqual([
       'H2 1. Connect an AI model',
+      'H3 SceneVoice Cloud',
       'H3 Which model describes each site',
       'H3 Gemini (Google)',
       'H3 Qwen (Alibaba Cloud Model Studio)',
@@ -629,6 +679,20 @@ describe('settings page: models for each site, and the Qwen key', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
     expect(init.headers.authorization).toBe('Bearer sk-qwen-test');
+  });
+
+  it('gives a site back its usual model when the second key arrives, and says so', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => okChat));
+    // Gemini was the only key, so it was describing Bilibili too (adoptProviderIfOnlyKey).
+    await openPage('options', { local: { local: { apiKey: 'AIza-first' } }, sync: { settings: { youtubeProvider: 'gemini', bilibiliProvider: 'gemini' } } });
+    $('#qwenApiKey').value = 'sk-qwen-second';
+    $('#saveQwenKey').click();
+    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen3-vl-plus. Each site now uses its usual model: Gemini on YouTube, Qwen on Bilibili. Change this under “Which model describes each site”. Next: open any Bilibili video and press Alt+Shift+D to hear descriptions.'));
+    expect(stored()).toMatchObject({ youtubeProvider: 'gemini', bilibiliProvider: 'qwen' });
+    // Nothing to say when both sites already had their usual model.
+    $('#qwenApiKey').value = 'sk-qwen-third';
+    $('#saveQwenKey').click();
+    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen3-vl-plus. Next: open any Bilibili video and press Alt+Shift+D to hear descriptions.'));
   });
 
   it('says in Chinese when Qwen refuses the key', async () => {
@@ -786,5 +850,353 @@ describe('popup on a Bilibili video', () => {
   it('explains an error in Qwen’s words', async () => {
     await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab({ status: 'error', errorCode: 'frames-tainted' }) });
     await vi.waitFor(() => expect($('#videoStatus').textContent).toMatch(/^SceneVoice 截不到这个视频的画面/));
+  });
+});
+
+describe('popup: what a video cost, and the daily limit', () => {
+  const tab = (state) => (msg) => (msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'abcdefghijk', title: 'Dogs', lang: 'en', videoType: '', platform: 'youtube', provider: 'gemini', inputMode: 'video', cueCount: 12, firstCue: 5, completedUntil: 600, complete: true, ...state } : null);
+
+  it('says what the video cost with the status, once, in dollars or yuan', async () => {
+    await openPage('popup', { tabReply: tab({ status: 'ready', cost: { amount: 0.03325, currency: 'USD' } }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('12 descriptions ready, the first at 0:05. This video: about $0.03.'));
+    await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab({ status: 'partial', complete: false, cost: { amount: 0.17, currency: 'CNY' }, platform: 'bilibili', provider: 'qwen', videoId: 'bili:BV1GJ411x7h7' }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('前 10 分钟的口述已就绪。这个视频约 0.2 元。'));
+    // A model with no price, or an old script: nothing about money.
+    await openPage('popup', { tabReply: tab({ status: 'ready', cost: null }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('12 descriptions ready, the first at 0:05.'));
+  });
+
+  it('names the limit set when the day’s limit is reached', async () => {
+    await openPage('popup', { sync: { settings: { dailyBudgetSeconds: 7200 } }, tabReply: tab({ status: 'error', errorCode: 'budget', cueCount: 0 }) });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('Today’s limit of 2 hours is reached. Change it in settings, or carry on tomorrow.'));
+  });
+});
+
+describe('settings page: usage today and the daily limit', () => {
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  it('says when nothing has been described yet, and offers the daily limit with none set', async () => {
+    await openPage('options');
+    expect($('#usageList').textContent).toBe('Nothing described yet today.');
+    expect($('#usageNote').textContent).toMatch(/this computer only.*free-tier Gemini key is not charged/);
+    const select = $('#dailyBudget');
+    expect(select.value).toBe('0');
+    expect([...select.options].map((o) => o.textContent)).toEqual(['No limit', '30 minutes', '1 hour', '2 hours', '4 hours']);
+    expect(select.getAttribute('aria-describedby')).toBe('dailyBudgetHint');
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('lists today’s requests, tokens, minutes and estimate per model, and follows the counter as it moves', async () => {
+    const usage = {
+      day: today(),
+      gemini: { input: 92450, output: 2550, requests: 2, seconds: 325, cost: 0.03325 },
+      qwen: { input: 3300, output: 240, requests: 1, seconds: 12, cost: 0.0057 },
+      cloud: { input: 0, output: 0, requests: 0, seconds: 0, cost: 0 },
+    };
+    await openPage('options', { local: { usage } });
+    const rows = () => [...document.querySelectorAll('#usageList li')].map((li) => li.textContent);
+    expect(rows()).toEqual(['Gemini (Google): 2 requests, 95k tokens, about 5 minutes of video, about $0.03.', 'Qwen (Alibaba Cloud Model Studio): 1 requests, 4k tokens, about 1 minutes of video, about ¥0.1.']);
+    // Another tab describes on: the page keeps up.
+    await chrome.storage.local.set({ usage: { ...usage, cloud: { input: 500, output: 50, requests: 1, seconds: 5, cost: 0 } } });
+    await vi.waitFor(() => expect(rows()).toHaveLength(3));
+    expect(rows()[2]).toBe('SceneVoice Cloud: 1 requests, 550 tokens, about 1 minutes of video.');
+    // Yesterday's counter is not today's.
+    await openPage('options', { local: { usage: { ...usage, day: '2020-01-01' } } });
+    expect($('#usageList').textContent).toBe('Nothing described yet today.');
+  });
+
+  it('shows the usage in Chinese, in yuan', async () => {
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN', local: { usage: { day: today(), qwen: { input: 3300, output: 240, requests: 1, seconds: 12, cost: 0.17 } } } });
+    expect($('#usageList').textContent).toBe('通义千问（阿里云百炼）：1 次请求，4k 个 token，约 1 分钟视频，约 0.2 元。');
+    expect($('#h-usage').textContent).toBe('今日用量');
+  });
+
+  it('saves the daily limit', async () => {
+    await openPage('options');
+    selectValue($('#dailyBudget'), '3600');
+    await vi.waitFor(() => expect(stored().dailyBudgetSeconds).toBe(3600));
+  });
+});
+
+// ---------- SceneVoice Cloud: the welcome page, the popup banner and the settings block ----------
+
+const TOKEN = `svd_${'0123456789abcdef'.repeat(2)}`;
+const DEVICE = { token: TOKEN, plan: 'free', allowance: { secondsPerDay: 3600, usedToday: 0, resetsAt: '2026-11-05T00:00:00Z' } };
+
+/** A fetch for the relay: one answer per path (the part after the origin, without the query), remembering every call. */
+function relay(routes) {
+  return vi.fn(async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    const route = routes[path] || routes[`${init.method || 'GET'} ${path}`];
+    if (!route) throw new TypeError(`Failed to fetch ${path}`);
+    const [status, body] = typeof route === 'function' ? route(init) : route;
+    return { status, ok: status >= 200 && status < 300, json: async () => body };
+  });
+}
+
+/** A choice on the welcome page: its listeners are on the controls themselves, so the event need not bubble. */
+function pick(el) {
+  el.checked = true;
+  el.dispatchEvent(new Event('change'));
+}
+
+/** Let the promise chain after a click run (a few awaits over the fake storage), under fake timers. */
+async function flush() {
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+}
+
+describe('welcome page (first run)', () => {
+  let realFetch;
+  beforeEach(() => {
+    realFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.useRealTimers();
+  });
+
+  it('starts on the heading, has three steps with every control named, and passes axe in both languages', async () => {
+    await openPage('welcome');
+    expect(document.activeElement.id).toBe('title');
+    expect(document.activeElement.textContent).toBe('Welcome to SceneVoice');
+    expect([...document.querySelectorAll('h2')].map((h) => h.textContent)).toEqual(['1. Hear what SceneVoice does', '2. Choose how descriptions are made', '3. Try it']);
+    // Nothing but the title and one sentence above step 1.
+    expect($('main').children[1].tagName).toBe('P');
+    expect($('main').children[2].getAttribute('aria-labelledby')).toBe('step1');
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+    expect($('input[name=source][value=cloud]').checked).toBe(true);
+    expect($('#cloudBox').hidden).toBe(false);
+    expect($('#ownBox').hidden).toBe(true);
+    expect($('#ownKey').getAttribute('href')).toBe('options.html#gemini');
+    expect($('#tryBilibiliItem').hidden).toBe(true);
+    expect($('#tryYoutube').getAttribute('target')).toBe('_blank');
+    expect($('#tryYoutube').textContent).toMatch(/opens in a new tab/);
+    expect($('#shortcutText').textContent).toBe('Your shortcut to create descriptions, and to turn them on or off, is Alt+Shift+D.');
+    expect($('#skip').textContent).toBe('Skip, open all settings');
+    expect($('#skip').getAttribute('href')).toBe('options.html');
+
+    await openPage('welcome', { locale: 'zh_CN', uiLanguage: 'zh-CN', commands: [] });
+    expect(document.title).toBe('欢迎使用 SceneVoice');
+    expect(document.activeElement.id).toBe('title');
+    expect($('#ownKey').getAttribute('href')).toBe('options.html#qwen');
+    expect($('#tryBilibiliItem').hidden).toBe(false);
+    expect($('#shortcutText').textContent).toMatch(/^还没有为生成口述设置快捷键/);
+    expect($('#startFree').textContent).toBe('免费开始');
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('plays three sample descriptions in the live region, one at a time, with the sentence about pauses, and sends nothing', async () => {
+    await openPage('welcome');
+    const out = $('#sampleOut');
+    expect(out.getAttribute('role')).toBe('status');
+    vi.useFakeTimers();
+    $('#sample').click();
+    await flush();
+    expect(out.getAttribute('aria-live')).toBe('polite');
+    expect(out.textContent).toBe('Title: How to repot a plant.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('The video keeps playing; descriptions fit the pauses.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('A woman with grey hair and a green apron lifts a fern out of its pot.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('She shakes the soil from the roots over a newspaper.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('That was the sample. Next: choose how descriptions are made.');
+    expect(fake.sent.some((m) => m.type === MSG.SPEAK)).toBe(false);
+    expect(realFetch === undefined || !vi.isMockFunction(realFetch) || realFetch.mock.calls.length === 0).toBe(true);
+  });
+
+  it('speaks the sample with the built-in voice when that is chosen, in Chinese for a Chinese interface, and keeps the live region quiet', async () => {
+    await openPage('welcome', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    pick($('input[name=output][value=tts]'));
+    await vi.waitFor(() => expect(stored().output).toBe('tts'));
+    $('#sample').click();
+    await vi.waitFor(() => expect(fake.sent.some((m) => m.type === MSG.SPEAK)).toBe(true));
+    const msg = fake.sent.find((m) => m.type === MSG.SPEAK);
+    expect(msg.lang).toBe('zh-CN');
+    expect(msg.text).toBe('标题：怎样给植物换盆。 视频继续播放，口述只在对白空隙里说。 一位灰白头发、系绿色围裙的女人把一盆蕨类从花盆里提出来。 她在报纸上方抖掉根上的土。 示例结束。下一步：选择口述由谁生成。');
+    expect($('#sampleOut').getAttribute('aria-live')).toBe('off');
+  });
+
+  it('Start free gets a device token, keeps it with the keys, has Cloud describe both sites with sharing on, and says the allowance', async () => {
+    await openPage('welcome');
+    globalThis.fetch = relay({ 'POST /v1/devices': [201, DEVICE] });
+    $('#startFree').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('SceneVoice Cloud is ready. You have 60 minutes of newly described video a day. Videos already described by others do not count. Next: step 3, try it.'));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe('https://api.scenevoice.app/v1/devices');
+    expect(JSON.parse(init.body)).toEqual({ client: 'extension', version: '1.0.0', locale: 'en' });
+    expect(fake.areas.local.local).toMatchObject({ cloudToken: TOKEN, cloudPlan: 'free' });
+    expect(stored()).toMatchObject({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true });
+    expect(JSON.stringify(fake.areas.sync)).not.toContain(TOKEN);
+    expect($('#startFree').hidden).toBe(true);
+    expect(document.activeElement.id).toBe('step3');
+    expect($('#privacyLink').getAttribute('href')).toMatch(/PRIVACY\.md#scenevoice-cloud-optional$/);
+    expect($('#startFree').getAttribute('aria-describedby')).toBe('shareNote');
+    expect($('#shareNote').textContent).toMatch(/turns on sharing/);
+  });
+
+  it('says plainly when the relay cannot be reached or answers nonsense, keeps nothing, and points at the own-key path', async () => {
+    await openPage('welcome');
+    globalThis.fetch = relay({});
+    $('#startFree').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('Could not reach SceneVoice Cloud. Check your internet connection, or use a key of your own in settings. You can use your own key instead: choose “My own key” above.'));
+    expect(fake.areas.local.local?.cloudToken).toBeFalsy();
+    expect(stored()).toEqual({});
+    expect($('#startFree').disabled).toBe(false);
+
+    globalThis.fetch = relay({ 'POST /v1/devices': [200, { token: '<script>alert(1)</script>', plan: 'free' }] });
+    $('#startFree').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toMatch(/^The request to SceneVoice Cloud failed\. Try again\./));
+    expect(fake.areas.local.local?.cloudToken).toBeFalsy();
+
+    pick($('input[name=source][value=own]'));
+    expect($('#ownBox').hidden).toBe(false);
+    expect($('#cloudBox').hidden).toBe(true);
+    expect($('#ownKey').textContent).toBe('Add my key in settings');
+  });
+
+  it('says Cloud is already set up when a token exists', async () => {
+    await openPage('welcome', { locale: 'zh_CN', uiLanguage: 'zh-CN', local: { local: { cloudToken: TOKEN } } });
+    expect($('#startFree').hidden).toBe(true);
+    expect($('#cloudStatus').textContent).toBe('这台电脑已经设置好 SceneVoice 云端了。');
+  });
+});
+
+describe('popup with nothing set up', () => {
+  it('sends the listener to the welcome page, and asks for nothing once a Cloud token exists', async () => {
+    await openPage('popup', { status: { hasKey: false, keys: { gemini: false, qwen: false, cloud: false } } });
+    await vi.waitFor(() => expect($('#keyBanner').hidden).toBe(false));
+    expect($('#setupKey').textContent).toBe('Set up SceneVoice');
+    expect($('#setupBody').textContent).toBe('SceneVoice can describe videos for free, with nothing to set up. The welcome page shows how, in three steps.');
+    const create = vi.spyOn(fake.chrome.tabs, 'create');
+    const openOptions = vi.spyOn(fake.chrome.runtime, 'openOptionsPage');
+    $('#setupKey').click();
+    expect(create).toHaveBeenCalledWith({ url: 'chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef/welcome.html' });
+    expect(openOptions).not.toHaveBeenCalled();
+    expect(await axeViolations()).toEqual([]);
+
+    await openPage('popup', { status: { hasKey: false, keys: { gemini: false, qwen: false, cloud: true } } });
+    expect($('#keyBanner').hidden).toBe(true);
+
+    // A key of their own missing for this site, while another exists: the settings page, as before.
+    await openPage('popup', { status: { hasKey: true, keys: { gemini: true, qwen: false, cloud: false } }, tabReply: (msg) => (msg.type === MSG.TAB_STATE ? { supported: true, videoId: 'bili:BV1GJ411x7h7', title: 'T', lang: 'zh-CN', videoType: '', platform: 'bilibili', provider: 'qwen', inputMode: 'frames', cueCount: 0, status: 'none' } : null) });
+    await vi.waitFor(() => expect($('#keyBanner').hidden).toBe(false));
+    expect($('#setupKey').textContent).toBe('Add API key');
+  });
+});
+
+describe('settings page: SceneVoice Cloud', () => {
+  let realFetch;
+  beforeEach(() => {
+    realFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+  const me = (plan, used, perDay) => [200, { plan, allowance: { secondsPerDay: perDay, usedToday: used, resetsAt: '2026-11-05T00:00:00Z' }, cacheHits: 1 }];
+
+  it('offers Start free at the top of section 1 when there is no token, with the switch and the licence field named', async () => {
+    await openPage('options');
+    expect($('#h-key + h3').id).toBe('h-cloud');
+    expect($('#h-cloud').textContent).toBe('SceneVoice Cloud');
+    expect($('#cloudInfo').textContent).toBe('Not set up on this computer. Press Start free to get a device token and the free daily allowance. No account is needed.');
+    expect($('#cloudStart').hidden).toBe(false);
+    expect($('#cloudStop').hidden).toBe(true);
+    expect($('#shareDescriptions').checked).toBe(false);
+    expect($('#shareDescriptions').labels[0].textContent.trim()).toBe('Share finished descriptions with other SceneVoice users');
+    expect($('#licenseKey').labels[0].textContent.trim()).toBe('Licence key');
+    expect([...$('#youtubeProvider').options].map((o) => o.value)).toEqual(['cloud', 'gemini', 'qwen']);
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('Start free registers, turns sharing on, has Cloud describe both sites when there is no key, and moves focus to Stop', async () => {
+    await openPage('options');
+    globalThis.fetch = relay({ 'POST /v1/devices': [201, DEVICE], '/v1/me': me('free', 0, 3600) });
+    $('#cloudStart').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('SceneVoice Cloud is ready. You have 60 minutes of newly described video a day; videos already described by others do not count.'));
+    expect(fake.areas.local.local).toMatchObject({ cloudToken: TOKEN, cloudPlan: 'free' });
+    await vi.waitFor(() => expect(stored()).toMatchObject({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true }));
+    await vi.waitFor(() => expect($('#shareDescriptions').checked).toBe(true));
+    expect($('#cloudInfo').textContent).toMatch(/^Plan: Free\. Used today: 0 of 60 minutes\. The allowance resets at /);
+    expect($('#cloudStart').hidden).toBe(true);
+    expect(document.activeElement.id).toBe('cloudStop');
+    // Registering is one request; the plan just received is not asked for again.
+    expect(fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(['/v1/devices']);
+  });
+
+  it('reads the plan and today’s use with a token, once a minute, and activates a licence', async () => {
+    globalThis.fetch = relay({
+      '/v1/me': me('free', 600, 3600),
+      'POST /v1/licenses/activate': (init) => (JSON.parse(init.body).licenseKey === 'svl-ABCD-EFGH-IJKL' ? [200, { plan: 'plus', allowance: { secondsPerDay: 14400, usedToday: 600 } }] : [404, { error: { message: 'no such licence' } }]),
+    });
+    await openPage('options', { local: { local: { cloudToken: TOKEN, cloudPlan: 'free' } } });
+    await vi.waitFor(() => expect($('#cloudInfo').textContent).toMatch(/^Plan: Free\. Used today: 10 of 60 minutes\./));
+    expect($('#cloudStart').hidden).toBe(true);
+    expect($('#cloudStop').hidden).toBe(false);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe('https://api.scenevoice.app/v1/me');
+    expect(init.headers['x-goog-api-key']).toBe(TOKEN);
+    // Not sent back to the key fields, not shown in them.
+    expect($('#apiKey').value).toBe('');
+    expect($('#qwenApiKey').value).toBe('');
+
+    $('#activateLicense').click();
+    await vi.waitFor(() => expect($('#licenseStatus').textContent).toBe('Enter the licence key first.'));
+    expect(document.activeElement.id).toBe('licenseKey');
+    $('#licenseKey').value = 'abc';
+    $('#activateLicense').click();
+    await vi.waitFor(() => expect($('#licenseStatus').textContent).toMatch(/^A licence key looks like svl-XXXX-XXXX-XXXX/));
+    $('#licenseKey').value = 'svl-ZZZZ-ZZZZ-ZZZZ';
+    $('#activateLicense').click();
+    await vi.waitFor(() => expect($('#licenseStatus').textContent).toBe('That licence key was not found. Check it, or ask whoever gave it to you.'));
+    $('#licenseKey').value = 'svl-ABCD-EFGH-IJKL';
+    $('#activateLicense').click();
+    await vi.waitFor(() => expect($('#licenseStatus').textContent).toBe('Licence activated. Plan: Plus, 240 minutes of newly described video a day.'));
+    expect(fake.areas.local.local.cloudPlan).toBe('plus');
+    expect($('#cloudInfo').textContent).toMatch(/^Plan: Plus\. Used today: 10 of 240 minutes\./);
+    expect($('#licenseKey').value).toBe('');
+    // The plan was read from the relay once; the licence answer stood in for the second read.
+    expect(fetch.mock.calls.filter(([u]) => u.endsWith('/v1/me'))).toHaveLength(1);
+  });
+
+  it('says so when the relay cannot be reached, keeping the token and the plan it last saw', async () => {
+    globalThis.fetch = relay({});
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN', local: { local: { cloudToken: TOKEN, cloudPlan: 'plus' } } });
+    await vi.waitFor(() => expect($('#cloudInfo').textContent).toBe('套餐：Plus 版。现在连不上 SceneVoice 云端，暂时不知道今天的用量。'));
+    expect(fake.areas.local.local.cloudToken).toBe(TOKEN);
+    expect($('#h-cloud').textContent).toBe('SceneVoice 云端');
+    expect($('#cloudStop').textContent).toBe('停用云端');
+    expect($('#shareDescriptions').labels[0].textContent.trim()).toBe('把生成完成的口述分享给其他 SceneVoice 用户');
+  });
+
+  it('Stop using Cloud removes the token, gives the sites back to their default models, turns sharing off, and says so', async () => {
+    globalThis.fetch = relay({ '/v1/me': me('free', 0, 3600) });
+    await openPage('options', { local: { local: { cloudToken: TOKEN, cloudPlan: 'free' } }, sync: { settings: { youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true } } });
+    await vi.waitFor(() => expect($('#cloudStop').hidden).toBe(false));
+    $('#cloudStop').click();
+    await vi.waitFor(() => expect($('#cloudStatus').textContent).toBe('SceneVoice Cloud is no longer used on this computer; the device token was removed.'));
+    expect(fake.areas.local.local).toMatchObject({ cloudToken: '', cloudPlan: '' });
+    await vi.waitFor(() => expect(stored()).toMatchObject({ youtubeProvider: 'gemini', bilibiliProvider: 'qwen', shareDescriptions: false }));
+    expect($('#cloudInfo').textContent).toMatch(/^Not set up on this computer\./);
+    expect($('#cloudStart').hidden).toBe(false);
+    expect(document.activeElement.id).toBe('cloudStart');
+  });
+
+  it('opens at the Cloud block when sent there, and saves the sharing switch', async () => {
+    window.location.hash = '#cloud';
+    await openPage('options');
+    expect(document.activeElement.id).toBe('cloudStart');
+    window.location.hash = '';
+    choose($('#shareDescriptions'));
+    await vi.waitFor(() => expect(stored().shareDescriptions).toBe(true));
   });
 });

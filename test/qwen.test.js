@@ -7,13 +7,16 @@ import { askFrames, createClient, describeFrames, reviseFrames } from '../src/sh
 import { ApiError } from '../src/shared/errors.js';
 import { framesScriptPrompt } from '../src/shared/frames.js';
 import { GeminiError } from '../src/shared/gemini.js';
-import { QwenClient, buildQwenRequest, classifyQwenHttp, qwenResponseText } from '../src/shared/qwen.js';
+import { QwenClient, buildQwenRequest, classifyQwenHttp, qwenResponseText, qwenUsageOf } from '../src/shared/qwen.js';
 
 const frames = [
   { time: 12.2, data: '/9j/AAA1' },
   { time: 14.2, data: '/9j/AAA2' },
 ];
-const chat = (content, finish = 'stop') => ({ choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finish }] });
+const usage = { prompt_tokens: 3300, completion_tokens: 240, total_tokens: 3540 };
+const chat = (content, finish = 'stop') => ({ choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finish }], usage });
+/** What every answer above cost, as SceneVoice counts it. */
+const counted = { input: 3300, output: 240, thinking: 0, requests: 1 };
 
 /** A fetch that answers with `answers` in turn ({status, body}) and records each request. */
 function fakeFetch(...answers) {
@@ -72,13 +75,22 @@ describe('Qwen requests', () => {
     expect(code(401, { message: 'Incorrect API key provided.', code: 'invalid_api_key' })).toBe('bad-key');
     expect(code(400, { message: 'Invalid API-key provided.', code: 'InvalidApiKey' })).toBe('bad-key');
     expect(code(404, { message: 'The model `qwen-x` does not exist', code: 'model_not_found' })).toBe('model-not-found');
-    expect(code(429, { message: 'Requests rate limit exceeded' })).toBe('quota');
+    // This minute's limit is retried; the day's quota and the Cloud allowance are not.
+    expect(code(429, { message: 'Requests rate limit exceeded' })).toBe('rate-limited');
+    expect(code(429, { message: 'Free tier daily quota exhausted', code: 'limit_requests' })).toBe('quota-daily');
+    expect(classifyQwenHttp(429, { error: { message: 'allowance used up', code: 'allowance', resetAt: '2026-11-05T00:00:00Z' } })).toMatchObject({ code: 'allowance', resetAt: '2026-11-05T00:00:00Z' });
     expect(code(400, { message: 'Access denied, please make sure your account is in good standing.', code: 'Arrearage' })).toBe('quota');
     expect(code(400, { message: 'Input data may contain inappropriate content.', code: 'data_inspection_failed' })).toBe('blocked');
     expect(code(403, { message: 'Model access denied.' })).toBe('forbidden');
     expect(code(503, { message: 'busy' })).toBe('server');
     expect(code(400, { message: 'something else' })).toBe('request-failed');
     expect(classifyQwenHttp(500, null)).toBeInstanceOf(ApiError);
+  });
+
+  it('reads what an answer cost from the usage block', () => {
+    expect(qwenUsageOf(chat('x'))).toEqual(counted);
+    expect(qwenUsageOf({ usage: { prompt_tokens: 10, completion_tokens: 30, completion_tokens_details: { reasoning_tokens: 20 } } })).toEqual({ input: 10, output: 30, thinking: 20, requests: 1 });
+    expect(qwenUsageOf({ choices: [] })).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
   });
 });
 
@@ -119,6 +131,20 @@ describe('QwenClient', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("retries this minute's rate limit after 5 s, but not a used-up daily quota or allowance", async () => {
+    vi.useFakeTimers();
+    const limited = fakeFetch({ status: 429, body: { error: { message: 'Requests rate limit exceeded' } } }, { status: 200, body: chat('fine') });
+    const pending = new QwenClient({ apiKey: 'k', fetchImpl: limited }).chat({ model: 'm', messages: [] });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(qwenResponseText(await pending).text).toBe('fine');
+    expect(limited).toHaveBeenCalledTimes(2);
+    for (const body of [{ error: { message: 'daily quota exhausted' } }, { error: { message: 'x', code: 'allowance' } }]) {
+      const fetchImpl = fakeFetch({ status: 429, body }, { status: 200, body: chat('fine') });
+      await expect(new QwenClient({ apiKey: 'k', fetchImpl }).chat({ model: 'm', messages: [] })).rejects.toBeInstanceOf(ApiError);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('drops response_format when the model refuses it', async () => {
     const fetchImpl = fakeFetch({ status: 400, body: { error: { message: "'response_format' is not supported by this model" } } }, { status: 200, body: chat('{}') });
     await new QwenClient({ apiKey: 'k', fetchImpl }).chat({ model: 'm', messages: [], response_format: { type: 'json_object' } }, undefined, { retries: 0 });
@@ -153,6 +179,8 @@ describe('descriptions from frames', () => {
       [14.2, 'visual', '不太确定。锅里有红色的东西。'],
     ]);
     expect(chunk.cues[2].priority).toBe(3);
+    // What the stretch cost comes with it, from the reply's own counts.
+    expect(chunk.usage).toEqual(counted);
     const sentBody = fetchImpl.calls[0].body;
     expect(sentBody.messages[1].content.filter((p) => p.type === 'image_url')).toHaveLength(2);
   });
@@ -169,6 +197,7 @@ describe('descriptions from frames', () => {
     const client = createClient('gemini', { apiKey: 'g', apiBase: 'https://generativelanguage.googleapis.com', model: 'gemini-2.5-flash' }, fetchImpl);
     const chunk = await describeFrames('gemini', client, { ...params, lang: 'en' });
     expect(chunk.cues.map((c) => c.standard)).toEqual(['A man dices chicken.']);
+    expect(chunk.usage).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
     const { url, body } = fetchImpl.calls[0];
     expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
     const parts = body.contents[0].parts;
@@ -182,15 +211,16 @@ describe('descriptions from frames', () => {
     const fetchImpl = fakeFetch({ status: 200, body: chat('{"time": 14.2, "confidence": "high", "answer": "盘子里是切好的鸡丁。"}') });
     const client = createClient('qwen', { apiKey: 'k' }, fetchImpl);
     const res = await askFrames('qwen', client, { meta: { title: 'T' }, time: 15, duration: 120, question: '盘子里是什么？', nearbyText: '', lang: 'zh-CN', frames });
-    expect(res).toEqual({ text: '在 0:14 处：盘子里是切好的鸡丁。', time: 14, confidence: 'high' });
+    expect(res).toEqual({ text: '在 0:14 处：盘子里是切好的鸡丁。', time: 14, confidence: 'high', usage: counted });
     expect(fetchImpl.calls[0].body.messages[0].content).toMatch(/"time": number, "confidence"/);
   });
 
   it('describes a marked moment again, at its old time', async () => {
     const old = cue(13, '一个女人在切菜。');
     const fetchImpl = fakeFetch({ status: 200, body: chat(JSON.stringify({ cues: [cue(12.2, '一个男人在切鸡肉。')] })) });
-    const fixed = await reviseFrames('qwen', createClient('qwen', { apiKey: 'k' }, fetchImpl), { meta: {}, duration: 120, lang: 'zh-CN', cue: old, characters: [], frames });
+    const { cue: fixed, usage: cost } = await reviseFrames('qwen', createClient('qwen', { apiKey: 'k' }, fetchImpl), { meta: {}, duration: 120, lang: 'zh-CN', cue: old, characters: [], frames });
     expect(fixed).toMatchObject({ start: 13, standard: '一个男人在切鸡肉。', revised: true });
+    expect(cost).toEqual(counted);
     expect(fetchImpl.calls[0].body.messages[1].content.at(-1).text).toMatch(/A viewer reported that this description, at 0:13 .* is wrong/);
   });
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -201,6 +201,20 @@ describe('listeners are wired to the checks', () => {
     }
     expect(source('src/content/index.js')).toContain('MSG.GET_SCRIPT');
     expect(source('src/content/announcer.js')).toContain('authorizeContentMessage');
+  });
+
+  it('keeps the SceneVoice Cloud device token out of content scripts, like the keys', () => {
+    for (const file of readdirSync(join(root, 'src/content'))) {
+      const text = source(join('src/content', file));
+      expect(text, file).not.toMatch(/cloudToken|CLOUD_API_BASE|scenevoice\.app/);
+      expect(text, file).not.toMatch(/from ['"][^'"]*cloud\.js['"]/);
+    }
+    // Only whether a token exists reaches a page, next to the keys; the token itself stays in the service worker.
+    expect(source('src/background/index.js')).toMatch(/cloud: Boolean\(local\.cloudToken\)/);
+    const manifest = JSON.parse(source('static/manifest.json'));
+    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*', 'https://api.scenevoice.app/*']);
+    // The relay is reached from the offscreen worker and the extension pages, never from a video page.
+    expect(source('src/offscreen/offscreen.js')).toContain("'cloud-get', 'cloud-put'");
   });
 
   it('preference helpers shared with content scripts use sync storage only', () => {

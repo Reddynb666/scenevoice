@@ -21,29 +21,33 @@ const accessLevels = [];
 let installed = [];
 /** chrome.storage.local, in memory. */
 const store = {};
+/** chrome.storage.sync: the synced settings. */
+const synced = {};
 /** Answers commands sent to the worker in the offscreen document. */
 let worker = () => undefined;
 const workerCalls = [];
 
 beforeAll(async () => {
   const copy = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  const area = (bag) => ({
+    setAccessLevel: async ({ accessLevel }) => accessLevels.push(accessLevel),
+    async get(key) {
+      if (key == null) return copy(bag);
+      const out = {};
+      for (const k of Array.isArray(key) ? key : [key]) if (k in bag) out[k] = copy(bag[k]);
+      return out;
+    },
+    async set(items) {
+      for (const [k, v] of Object.entries(items)) bag[k] = copy(v);
+    },
+    async remove(keys) {
+      for (const k of Array.isArray(keys) ? keys : [keys]) delete bag[k];
+    },
+  });
   globalThis.chrome = {
     storage: {
-      local: {
-        setAccessLevel: async ({ accessLevel }) => accessLevels.push(accessLevel),
-        async get(key) {
-          if (key == null) return copy(store);
-          const out = {};
-          for (const k of Array.isArray(key) ? key : [key]) if (k in store) out[k] = copy(store[k]);
-          return out;
-        },
-        async set(items) {
-          for (const [k, v] of Object.entries(items)) store[k] = copy(v);
-        },
-        async remove(keys) {
-          for (const k of Array.isArray(keys) ? keys : [keys]) delete store[k];
-        },
-      },
+      local: area(store),
+      sync: area(synced),
     },
     runtime: {
       id: ID,
@@ -396,5 +400,215 @@ describe('what a page may ask for', () => {
     for (let n = 0; n < 31; n += 1) replies.push(await deliver(stretch(n), tab));
     expect(replies.slice(0, 30).every((r) => r.status === 'ok')).toBe(true);
     expect(replies[30]).toEqual({ error: 'busy' });
+  });
+});
+
+describe('usage counted on this computer, and the daily limit', () => {
+  const BILI = 'bili:BV1GJ411x7h7';
+  const bilibili = { id: ID, origin: 'https://www.bilibili.com', url: `https://www.bilibili.com/video/BV1GJ411x7h7/`, tab: { id: 31, url: `https://www.bilibili.com/video/BV1GJ411x7h7/` }, frameId: 0 };
+  const chop = { start: 6, gap: 4, kind: 'visual', priority: 1, brief: 'A man dices chicken.', standard: 'A man dices chicken.', detailed: 'A man dices chicken.' };
+  const stretch = (start, end) => ({ type: MSG.GEN_FRAMES, videoId: BILI, lang: 'zh-CN', duration: 60, meta: {}, window: { start, end }, frames: [{ time: start + 1, data: '/9j/AAAA' }] });
+  const qwenUsage = { input: 3300, output: 240, thinking: 0, requests: 1 };
+  const geminiUsage = { input: 90000, output: 2000, thinking: 500, requests: 1 };
+  const today = () => store.usage;
+
+  beforeEach(() => {
+    for (const k of Object.keys(store)) delete store[k];
+    for (const k of Object.keys(synced)) delete synced[k];
+    store.local = { apiKey: 'gemini-key', qwenApiKey: 'qwen-secret-key', qwenModel: 'qwen3-vl-plus', model: 'gemini-2.5-flash' };
+    workerCalls.length = 0;
+    worker = (data) => {
+      if (data.cmd === 'frames') return { chunk: { cues: [chop], characters: [], videoType: '' }, model: 'qwen3-vl-plus', usage: qwenUsage };
+      if (data.cmd === 'ask') return { text: 'At 0:12: a plate.', time: 12, confidence: 'high', usage: geminiUsage, model: 'gemini-2.5-flash' };
+      if (data.cmd === 'revise') return { cue: null, usage: geminiUsage, model: 'gemini-2.5-flash' };
+      if (data.cmd === 'start') return { started: true, done: 0, total: 1, chunkStartedAt: 1, chunkMs: [] };
+      return { status: 'idle' };
+    };
+  });
+
+  it('adds every stretch, section, question and correction to today’s counter, per provider, with its length when known', async () => {
+    expect(await deliver(stretch(0, 12), bilibili)).toMatchObject({ status: 'ok' });
+    expect(today()).toMatchObject({ gemini: { requests: 0 }, qwen: { input: 3300, output: 240, requests: 1, seconds: 12 } });
+    expect(today().qwen.cost).toBeCloseTo(0.0057, 6);
+    expect(store[`script:${BILI}:zh-CN`].usage).toEqual(qwenUsage);
+
+    // A section of a YouTube video, from the job's event: Gemini's row, the section's own length.
+    const script = { version: 2, videoId: 'abcdefghijk', lang: 'en', duration: 570, cues: [], characters: [], completedUntil: 300, complete: false, model: 'gemini-2.5-flash', usage: geminiUsage };
+    await deliver({ type: MSG.JOB_EVENT, event: 'chunk', key: 'abcdefghijk:en', videoId: 'abcdefghijk', lang: 'en', script, model: 'gemini-2.5-flash', usage: geminiUsage, seconds: 300, done: 1, total: 2 }, offscreenPage);
+    expect(today().gemini).toMatchObject({ input: 90000, output: 2500, requests: 1, seconds: 300 });
+    expect(today().gemini.cost).toBeCloseTo(0.03325, 6);
+    // The tabs hear about the section, not about the tokens.
+    const event = chrome.tabs.sendMessage.mock.calls.at(-1)[1];
+    expect(event).toMatchObject({ event: 'chunk', cueCount: 0 });
+    expect(event).not.toHaveProperty('usage');
+
+    // A question and a correction: counted, their length estimated, and the counts kept out of the tab's reply.
+    const answer = await deliver({ type: MSG.ASK, params: { videoId: 'abcdefghijk', meta: {}, time: 12, duration: 60, question: 'What?', nearbyText: '', lang: 'en' } }, youtube);
+    expect(answer).toEqual({ text: 'At 0:12: a plate.', time: 12, confidence: 'high' });
+    expect(today().gemini).toMatchObject({ requests: 2, seconds: 300 + 900 });
+    store['script:abcdefghijk:en'] = { ...script, cues: [chop], complete: true };
+    const fixed = await deliver({ type: MSG.REVISE, videoId: 'abcdefghijk', lang: 'en', cue: { start: 6, kind: 'visual', standard: chop.standard }, meta: {}, duration: 60 }, youtube);
+    expect(fixed).toEqual({ status: 'removed' });
+    expect(today().gemini.requests).toBe(3);
+  });
+
+  it('refuses new jobs and stretches once the daily limit is reached, and still answers questions', async () => {
+    synced.settings = { dailyBudgetSeconds: 1800 };
+    store.usage = { day: new Date().toISOString().slice(0, 10), gemini: { input: 1, output: 1, requests: 2, seconds: 1500, cost: 0 }, qwen: { input: 1, output: 1, requests: 1, seconds: 288, cost: 0 }, cloud: { input: 0, output: 0, requests: 0, seconds: 0, cost: 0 } };
+    // 1788 seconds so far: one more stretch is allowed and takes it over the limit.
+    expect(await deliver(stretch(0, 12), bilibili)).toMatchObject({ status: 'ok' });
+    expect(await deliver(stretch(12, 24), bilibili)).toEqual({ error: 'budget' });
+    expect(await deliver({ type: MSG.GEN_START, videoId: 'abcdefghijk', duration: 600, meta: {}, lang: 'en' }, youtube)).toEqual({ error: 'budget' });
+    expect(workerCalls.filter((c) => c.cmd === 'start')).toEqual([]);
+    expect((await deliver({ type: MSG.ASK, params: { videoId: 'abcdefghijk', meta: {}, time: 12, duration: 60, question: 'What?', nearbyText: '', lang: 'en' } }, youtube)).text).toBe('At 0:12: a plate.');
+    // No limit, or a higher one: on it goes.
+    synced.settings = { dailyBudgetSeconds: 3600 };
+    expect((await deliver({ type: MSG.GEN_START, videoId: 'abcdefghijk', duration: 600, meta: {}, lang: 'en' }, youtube)).status).toBe('generating');
+    synced.settings = {};
+    expect(await deliver(stretch(24, 36), bilibili)).toMatchObject({ status: 'ok' });
+  });
+
+  it('starts the counter again on a new day', async () => {
+    synced.settings = { dailyBudgetSeconds: 1800 };
+    store.usage = { day: '2020-01-01', gemini: { input: 1, output: 1, requests: 2, seconds: 99999, cost: 0 } };
+    expect(await deliver(stretch(0, 12), bilibili)).toMatchObject({ status: 'ok' });
+    expect(today()).toMatchObject({ gemini: { seconds: 0 }, qwen: { seconds: 12, requests: 1 } });
+    expect(today().day).not.toBe('2020-01-01');
+  });
+
+  it('passes on when a used-up allowance resets, and keeps the key out of it', async () => {
+    worker = () => ({ error: 'allowance', detail: 'used up', resetAt: '2026-11-05T00:00:00Z' });
+    expect(await deliver(stretch(0, 12), bilibili)).toEqual({ error: 'allowance', detail: 'used up', resetAt: '2026-11-05T00:00:00Z' });
+    expect(today()).toBeUndefined();
+  });
+});
+
+describe('SceneVoice Cloud: the token where the key goes, and the shared cache', () => {
+  const VIDEO = 'abcdefghijk';
+  const KEY = `script:${VIDEO}:en`;
+  const TOKEN = `svd_${'0123456789abcdef'.repeat(2)}`;
+  const CLOUD = 'https://api.scenevoice.app';
+  const cue = (start, standard, extra = {}) => ({ start, gap: 3, kind: 'visual', priority: 1, onScreenText: '', confidence: 'high', brief: standard, standard, detailed: standard, ...extra });
+  const shared = (extra = {}) => ({ version: SCRIPT_VERSION, videoId: VIDEO, lang: 'en', duration: 600, cues: [cue(1, 'A door opens.')], characters: [], videoType: 'other', model: 'gemini-2.5-flash', completedUntil: 600, complete: true, source: 'cloud', ...extra });
+  const start = (extra = {}) => deliver({ type: MSG.GEN_START, videoId: VIDEO, duration: 600, meta: { title: 'Diner' }, lang: 'en', ...extra }, youtube);
+  const calls = (cmd) => workerCalls.filter((c) => c.cmd === cmd);
+
+  beforeEach(() => {
+    for (const k of Object.keys(store)) delete store[k];
+    for (const k of Object.keys(synced)) delete synced[k];
+    store.local = { cloudToken: TOKEN, cloudPlan: 'free' };
+    workerCalls.length = 0;
+    chrome.tabs.sendMessage.mockClear();
+    worker = (data) => {
+      if (data.cmd === 'cloud-get') return { script: null };
+      if (data.cmd === 'cloud-put') return { ok: true };
+      if (data.cmd === 'start') return { started: true, done: 0, total: 2, chunkStartedAt: 1, chunkMs: [], provider: data.provider };
+      return { status: 'idle' };
+    };
+  });
+
+  it('tells the pages only that a token exists, and that Cloud describes both sites', async () => {
+    const status = await deliver({ type: MSG.GET_STATUS }, youtube);
+    expect(status).toMatchObject({ hasKey: false, keys: { gemini: false, qwen: false, cloud: true }, providers: { youtube: 'cloud', bilibili: 'cloud' } });
+    expect(JSON.stringify(status)).not.toContain(TOKEN);
+    expect(JSON.stringify(await deliver({ type: MSG.GET_STATUS }, popup))).not.toContain(TOKEN);
+  });
+
+  it('asks the shared cache first, then starts the video job through the relay with the token in place of the key', async () => {
+    expect(await start()).toMatchObject({ status: 'generating', total: 2 });
+    expect(workerCalls.map((c) => c.cmd)).toEqual(['cloud-get', 'start']);
+    expect(workerCalls[0]).toMatchObject({ config: { apiKey: TOKEN, apiBase: CLOUD }, params: { videoId: VIDEO, lang: 'en' } });
+    expect(workerCalls[1]).toMatchObject({ provider: 'cloud', config: { apiKey: TOKEN, apiBase: CLOUD, model: '' }, params: { videoId: VIDEO, duration: 600, lang: 'en' } });
+    // A model picked through the relay is kept with the token.
+    store.local = { cloudToken: TOKEN, cloudModel: 'gemini-2.5-flash-lite' };
+    await start();
+    expect(calls('start').at(-1).config).toEqual({ apiKey: TOKEN, apiBase: CLOUD, model: 'gemini-2.5-flash-lite' });
+  });
+
+  it('loads what another SceneVoice user had described instead of starting a job, and keeps only a script that checks out', async () => {
+    worker = (data) => (data.cmd === 'cloud-get' ? { script: shared({ revised: true }) } : { status: 'idle' });
+    expect(await start()).toEqual({ status: 'ready', fromCloud: true });
+    expect(calls('start')).toEqual([]);
+    expect(store[KEY]).toMatchObject({ videoId: VIDEO, lang: 'en', provider: 'cloud', source: 'cloud', complete: true, cues: [cue(1, 'A door opens.')] });
+    expect(store[KEY]).not.toHaveProperty('revised');
+    // Saved, so the tab reads it like any script of its own.
+    expect((await deliver({ type: MSG.GET_SCRIPT, videoId: VIDEO, lang: 'en' }, youtube)).script.cues).toHaveLength(1);
+
+    // Another video's script, an older version, an unfinished one, or one for a different length: ignored, and the job starts.
+    for (const wrong of [shared({ videoId: 'zzzzzzzzzzz' }), shared({ version: SCRIPT_VERSION - 1 }), shared({ complete: false }), shared({ duration: 1200 }), { cues: 'x' }]) {
+      delete store[KEY];
+      workerCalls.length = 0;
+      worker = (data) => (data.cmd === 'cloud-get' ? { script: wrong } : data.cmd === 'start' ? { started: true, done: 0, total: 2, chunkStartedAt: 1, chunkMs: [] } : { status: 'idle' });
+      expect((await start()).status).toBe('generating');
+      expect(store[KEY]).toBeUndefined();
+      expect(workerCalls.map((c) => c.cmd)).toEqual(['cloud-get', 'start']);
+    }
+    // A relay that cannot be reached is not an error: the job starts as it would without the cache.
+    workerCalls.length = 0;
+    worker = (data) => (data.cmd === 'cloud-get' ? { error: 'network' } : data.cmd === 'start' ? { started: true, done: 0, total: 2, chunkStartedAt: 1, chunkMs: [] } : { status: 'idle' });
+    expect((await start()).status).toBe('generating');
+  });
+
+  it('leaves the cache alone when the listener regenerates, and with a key of their own', async () => {
+    await start({ force: true });
+    expect(workerCalls.map((c) => c.cmd)).toEqual(['start']);
+    workerCalls.length = 0;
+    store.local = { apiKey: 'gemini-key' };
+    await start();
+    expect(workerCalls.map((c) => c.cmd)).toEqual(['start']);
+    expect(workerCalls[0]).toMatchObject({ provider: 'gemini', config: { apiKey: 'gemini-key' } });
+    expect(JSON.stringify(workerCalls)).not.toContain(CLOUD);
+  });
+
+  it('shares a finished script, stripped of anything about this computer, only while sharing is on and only from Cloud jobs', async () => {
+    synced.settings = { shareDescriptions: true };
+    const usage = { input: 60000, output: 1500, thinking: 0, requests: 1 };
+    const finished = { ...shared(), cues: [cue(1, 'A door opens.', { revised: true }), cue(20, 'A dog runs.')], usage, createdAt: 5 };
+    delete finished.source;
+    const done = (provider) => deliver({ type: MSG.JOB_EVENT, event: 'done', key: `${VIDEO}:en`, videoId: VIDEO, lang: 'en', provider, script: finished, model: 'gemini-2.5-flash', usage, seconds: 300, done: 2, total: 2 }, offscreenPage);
+
+    await done('cloud');
+    await vi.waitFor(() => expect(calls('cloud-put')).toHaveLength(1));
+    const put = calls('cloud-put')[0];
+    expect(put).toMatchObject({ config: { apiKey: TOKEN, apiBase: CLOUD }, params: { videoId: VIDEO, lang: 'en' } });
+    expect(Object.keys(put.params.script).sort()).toEqual(['characters', 'complete', 'completedUntil', 'cues', 'duration', 'lang', 'model', 'usage', 'version', 'videoId', 'videoType']);
+    expect(put.params.script.cues).toEqual([cue(1, 'A door opens.'), cue(20, 'A dog runs.')]);
+    expect(JSON.stringify(put.params.script)).not.toMatch(/revised|createdAt|provider/);
+    // Saved here as Cloud's, and counted on Cloud's row, not Gemini's.
+    expect(store[KEY]).toMatchObject({ provider: 'cloud', complete: true });
+    expect(store.usage.cloud).toMatchObject({ requests: 1, seconds: 300, input: 60000, cost: 0 });
+    expect(store.usage.gemini.requests).toBe(0);
+    // The tabs hear "done", not the token.
+    const event = chrome.tabs.sendMessage.mock.calls.find(([, m]) => m.event === 'done')[1];
+    expect(JSON.stringify(event)).not.toContain(TOKEN);
+
+    // Sharing off: nothing is sent.
+    workerCalls.length = 0;
+    synced.settings = { shareDescriptions: false };
+    await done('cloud');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(calls('cloud-put')).toEqual([]);
+
+    // A Gemini job with the listener's own key: never shared, whatever the switch says.
+    synced.settings = { shareDescriptions: true };
+    await done('gemini');
+    await done(undefined);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(calls('cloud-put')).toEqual([]);
+    expect(store[KEY].provider).toBe('gemini');
+    expect(store.usage.gemini.requests).toBe(2);
+  });
+
+  it('opens the settings page at the Cloud block when Cloud is what is missing', async () => {
+    const created = [];
+    chrome.tabs.create = vi.fn(async (opts) => created.push(opts.url));
+    chrome.runtime.getURL = (path) => `${ORIGIN}/${path}`;
+    expect(await deliver({ type: MSG.OPEN_OPTIONS, provider: 'cloud' }, youtube)).toEqual({ ok: true });
+    expect(created).toEqual([`${ORIGIN}/options.html#cloud`]);
+    // With no token, Cloud chosen and no key: the tab is told so in Cloud's words (no-key with provider cloud).
+    store.local = {};
+    synced.settings = { youtubeProvider: 'cloud' };
+    expect(await start()).toEqual({ error: 'no-key' });
+    expect((await deliver({ type: MSG.GET_STATUS }, youtube)).providers.youtube).toBe('cloud');
   });
 });

@@ -10,11 +10,11 @@ Thank you for helping. SceneVoice exists for blind and low-vision viewers, so th
 ## Translating the interface
 
 1. Copy `scripts/locales/en.mjs` to `scripts/locales/<locale>.mjs`, using Chrome's locale name (`pt_BR`, `zh_TW`, `es`, `ja`…). Keep the keys in the same order, so the two files can be read side by side with a screen reader.
-2. Translate the values. Keep `$1`, `$2`… where they are (they are filled in at run time), and keep product names (SceneVoice, Gemini, Qwen, NVDA, JAWS, VoiceOver) as they are.
+2. Translate the values. Keep `$1`, `$2`… where they are (they are filled in at run time), and keep product names (SceneVoice, Gemini, Qwen, NVDA, JAWS, VoiceOver) as they are. `ext_name` must stay within 45 characters and `ext_description` within 132 (the stores' limits; a test checks).
 3. Run `npm run build`: it prints how much of the language is translated, and fails on a key English does not have or a placeholder that differs.
 4. Languages first translated by a machine (or an AI) are marked so in a comment at the top of their file until a native speaker who uses a screen reader has read them through. Please say in the pull request which it is.
 - No new permissions without a written justification in `PRIVACY.md`.
-- No analytics, no remote code, no network requests other than the Gemini API.
+- No analytics, no remote code, no network requests other than the Gemini API, Alibaba Cloud Model Studio and, only after the user presses *Start free*, the SceneVoice Cloud relay.
 
 ## Development
 
@@ -32,7 +32,7 @@ Load `dist/` as an unpacked extension. After changing the content script, reload
 Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOver (macOS), on a real YouTube video with dialogue.
 
 **Setup**
-- [ ] The settings page opens after install and focus is in the API key field (the Qwen key field in a Chinese browser); the screen reader reads the sentence saying what to paste, where to get it and what is free.
+- [ ] The welcome page opens after install with focus on its heading; *Hear a sample* reads the three sample descriptions one after another without cutting each other off; *Start free* either works or says plainly that it did not and points to the own-key path; *I have my own key* lands on the settings page with focus in the key field (the Qwen key field in a Chinese browser), and the screen reader reads the sentence saying what to paste, where to get it and what is free.
 - [ ] *Step-by-step guide, written for screen readers* opens the key guide at the right part; following it, a key can be created without sighted help (try both Gemini and Qwen).
 - [ ] Every control on the settings page is reachable with Tab and has a spoken name and state.
 - [ ] Saving a wrong key gives a spoken error; saving a right key says which model is in use. Where Gemini is not available, the error says so and suggests Qwen.

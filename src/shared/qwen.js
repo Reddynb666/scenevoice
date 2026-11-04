@@ -11,6 +11,7 @@
 
 import { DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL } from './constants.js';
 import { ApiError } from './errors.js';
+import { countedUsage } from './usage.js';
 
 /**
  * The chat completion request for a provider-neutral prompt (see frames.js):
@@ -56,18 +57,39 @@ export function qwenResponseText(body) {
   return { text, finishReason: finishReason === 'length' ? 'MAX_TOKENS' : finishReason };
 }
 
-/** An HTTP error from the compatible-mode API, as one of SceneVoice's error codes. Best effort (待确认). */
+/** What one reply cost, from its usage (zeros when the server sent none): see usage.js. */
+export function qwenUsageOf(body) {
+  const u = body?.usage || {};
+  return countedUsage({ input: u.prompt_tokens, output: u.completion_tokens, thinking: u.completion_tokens_details?.reasoning_tokens });
+}
+
+/**
+ * An HTTP error from the compatible-mode API, as one of SceneVoice's error
+ * codes. Best effort (待确认). 429 means this minute's limit ('rate-limited',
+ * retried) unless it says the day's quota is gone ('quota-daily'); no credit
+ * left stays 'quota'. The SceneVoice Cloud relay refuses a used-up allowance
+ * with code 'allowance'.
+ */
 export function classifyQwenHttp(status, body) {
   const err = body?.error && typeof body.error === 'object' ? body.error : body || {};
   const message = String(err.message || '');
   const code = String(err.code || err.type || '');
   const both = `${code} ${message}`;
+  if (code === 'allowance') {
+    const out = new ApiError('allowance', message, status);
+    const at = err.resetsAt || err.resetAt;
+    out.resetAt = typeof at === 'string' ? at : '';
+    return out;
+  }
   if (status === 401 || /invalid[_ ]?api[_ ]?key|InvalidApiKey|incorrect api key/i.test(both)) return new ApiError('bad-key', message, status);
   if (/data_inspection_failed|DataInspectionFailed|inappropriate content/i.test(both)) return new ApiError('blocked', message, status);
   if (/Arrearage|overdue|insufficient[_ ]?(quota|balance)|FreeTierOnly/i.test(both)) return new ApiError('quota', message, status);
   if (status === 403) return new ApiError('forbidden', message, status);
   if (status === 404 || /model[_ ]?not[_ ]?found|ModelNotFound|model .*(does not exist|not exist|not found)/i.test(both)) return new ApiError('model-not-found', message, status);
-  if (status === 429) return new ApiError('quota', message, status);
+  if (status === 429) {
+    if (/per.?day|daily/i.test(both)) return new ApiError('quota-daily', message, status);
+    return new ApiError('rate-limited', message, status);
+  }
   if (status === 400 && /(token|too long|exceed|maximum context|length)/i.test(message)) return new ApiError('too-long', message, status);
   if (status >= 500) return new ApiError('server', message, status);
   return new ApiError('request-failed', message || `HTTP ${status}`, status);
@@ -93,7 +115,8 @@ export class QwenClient {
 
   /**
    * A chat completion with retries: overloaded servers and network failures
-   * after 2 and 4 s, rate limits after 5 and 10 s. A request refused because of
+   * after 2 and 4 s, the minute's rate limit after 5 and 10 s. A used-up daily
+   * quota or allowance is not retried. A request refused because of
    * response_format is sent again without it.
    */
   async chat(body, signal, { retries = 2 } = {}) {
@@ -111,10 +134,10 @@ export class QwenClient {
           payload = rest;
           continue;
         }
-        const retryable = ['server', 'network'].includes(err.code) || (err.code === 'quota' && err.status === 429);
+        const retryable = ['server', 'network', 'rate-limited'].includes(err.code);
         if (!retryable || attempt >= retries) throw err;
         attempt += 1;
-        await sleep((err.code === 'quota' ? 5000 : 2000) * 2 ** (attempt - 1), signal);
+        await sleep((err.code === 'rate-limited' ? 5000 : 2000) * 2 ** (attempt - 1), signal);
       }
     }
   }

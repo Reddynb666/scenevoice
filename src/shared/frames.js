@@ -5,7 +5,7 @@
 // enforces the JSON with a schema, other models get `jsonShape` in words.
 // No browser APIs here, so everything is unit-testable.
 
-import { languageName, peopleText, scriptInstructions } from './gemini.js';
+import { cannotTellExample, hedgeExamples, languageName, peopleText, scriptInstructions } from './gemini.js';
 import { pickEvenly } from './coverage.js';
 import { formatTime } from './script.js';
 import { askHistoryText } from './ask.js';
@@ -60,7 +60,7 @@ const FRAMES_NOTE = [
   '- Still frames taken from the video while it plays, each labelled with its time in seconds from the start of the full video. You do not see the motion between frames, and you cannot hear the sound.',
   '- Describe only what the frames show. Do not invent what happened between two frames; when a change between frames is clear (someone has sat down, the place is different), say what is different now.',
   '- Give each description the "start" of the frame it is based on.',
-  '- You cannot hear when people speak: estimate "gap" from the picture (a person facing the camera with an open mouth is probably speaking), and use 3 when you cannot tell. The player corrects it from the subtitles when there are any.',
+  '- You cannot hear when people speak: estimate "gap" from the picture (a person facing the camera with an open mouth is probably speaking), and use 0 when you cannot tell. A gap of 0 means "no pause known": the player then waits for a pause it can measure from the subtitles, or pauses the video, instead of talking over speech. Never invent a pause.',
   '- Descriptions given just before these frames are listed in the request: do not say them again. When nothing new and important is visible, return an empty "cues" list.',
 ].join('\n');
 
@@ -113,7 +113,7 @@ export function framesAskPrompt({ meta, time, duration, question, nearbyText, hi
       'You are given still frames from the video, each labelled with its time, taken up to the moment they asked. You do not see the motion between frames and you cannot hear the sound.',
       'Base the answer on what the frames show, at or just before the moment they asked. Describe what is visible: do not guess what people feel or intend, do not judge, and name a person only if on-screen text gives the name.',
       'Quote any text on screen that bears on the question exactly as written.',
-      'If the frames do not show the answer, or you cannot see it clearly, say so plainly (for example "I can\'t tell from the picture", or in Chinese "画面上看不清") and set "confidence" to "low". Never invent details.',
+      `If the frames do not show the answer, or you cannot see it clearly, say so plainly (${cannotTellExample(lang)}) and set "confidence" to "low". Never invent details.`,
       '"time": the moment your answer is about, in seconds from the start of the full video: the time of the frame that shows it. SceneVoice says that moment before your answer, so do not put a time in "answer".',
       '"confidence": "high" when the answer is clearly visible, "medium" when part of it is inferred, "low" when you are not sure.',
       'The recent audio descriptions were written by an AI and can be wrong: check them against the picture, and do not repeat them as fact.',
@@ -151,7 +151,7 @@ export function framesRevisionPrompt({ meta, duration, cue, characters = [], lan
       `Look again, closely, at the frames above and write a corrected description of that moment: one cue, with "start" at ${cue.start}.`,
       '- Check every detail against the picture: people, actions, objects, colours, numbers and text. Leave out anything you cannot clearly see.',
       '- Do not repeat the reported description, and do not just reword it. Keep only what you can confirm in the picture.',
-      '- If you are still not sure, say so in the description ("appears to", "hard to see") and set "confidence" to "low".',
+      `- If you are still not sure, say so in the description (${hedgeExamples(lang)}) and set "confidence" to "low".`,
       '- If, looking again, nothing at that moment is worth describing, return an empty "cues" list.',
       peopleLine(characters),
       `Write in ${languageName(lang)}.`,

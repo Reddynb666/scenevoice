@@ -56,7 +56,7 @@ worker.onerror = (ev) => {
   pending.clear();
 };
 
-const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask', 'revise', 'frames']);
+const OFFSCREEN_CMDS = new Set(['start', 'abort', 'status', 'ask', 'revise', 'frames', 'cloud-get', 'cloud-put']);
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== MSG.OFFSCREEN) return false;
