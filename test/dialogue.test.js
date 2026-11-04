@@ -149,6 +149,33 @@ describe('fitCuesToDialogue', () => {
       // At 2x playback the same pause lasts half as long in real time.
       expect(fitCuesToDialogue([cue(11, 6, { priority: 1 })], talk, { rate: 2.5, playbackRate: 2 })[0]).toMatchObject({ start: 11, gap: 0 });
     });
+    it('judges a pause by its length in tenths, as chooseUtterance will see it, not by a hair more', () => {
+      // "A door opens." needs about 1.32 s; the pause at 14 measures 1.34 s before rounding and 1.3 s after.
+      // Speech 10-14, 15.64-16, 18-25: the hair-short pause at 14 is passed over for the one at 16.
+      const hair = [
+        { start: 10, end: 14 },
+        { start: 15.64, end: 16 },
+        { start: 18, end: 25 },
+      ];
+      const [moved] = fitCuesToDialogue([cue(11, 6, { priority: 1 })], hair);
+      expect(moved).toMatchObject({ start: 16, gap: 1.7 });
+      expect(chooseUtterance(moved, gaps)).toEqual({ text: 'A door opens.', needsPause: false });
+      // A cue already standing in that pause is not judged "fits, stay" on 1.34 and then refused on 1.3.
+      const [stayed] = fitCuesToDialogue([cue(14, 6, { priority: 1 })], hair);
+      expect(stayed).toMatchObject({ start: 16, gap: 1.7 });
+      expect(chooseUtterance(stayed, gaps)).toEqual({ text: 'A door opens.', needsPause: false });
+      // With no other pause in reach (speech 10-14, 15.64-20) it is not moved to a pause it cannot use.
+      const none = [
+        { start: 10, end: 14 },
+        { start: 15.64, end: 20 },
+      ];
+      const [left] = fitCuesToDialogue([cue(11, 6, { priority: 1 })], none);
+      expect(left).toMatchObject({ start: 11, gap: 0 });
+      expect(chooseUtterance(left, gaps)).toBeNull();
+      expect(chooseUtterance(left, pause).needsPause).toBe(true);
+      // Never a cue moved to a pause where chooseUtterance then refuses it.
+      for (const c of [moved, stayed]) expect(c.start === 11 || chooseUtterance(c, gaps) !== null).toBe(true);
+    });
     it('leaves less important visual cues where they are: they are skipped, not moved', () => {
       expect(fitCuesToDialogue([short(11, 6, { priority: 2 })], talk)[0]).toMatchObject({ start: 11, gap: 0 });
     });

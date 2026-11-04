@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DASHSCOPE_KEY, UPSTREAM_KEY, call, geminiAnswer, makeEnv, makeFetch, register, setPlan } from './helpers.js';
+import { handle } from '../src/worker.js';
+import { BASE, DASHSCOPE_KEY, UPSTREAM_KEY, call, geminiAnswer, makeEnv, makeFetch, register, setPlan } from './helpers.js';
 
 const GEN = '/v1beta/models/gemini-2.5-flash:generateContent';
 const QWEN = '/compatible-mode/v1/chat/completions';
@@ -195,13 +196,69 @@ describe('Gemini proxy: generateContent', () => {
     }
   });
 
-  it('requires a token and refuses bodies over 20 MB before reading them', async () => {
+  it('requires a token and refuses bodies over 20 MB by declared length', async () => {
     const env = makeEnv();
     const anon = await call(env, { method: 'POST', path: GEN, body: prompt });
     expect(anon.status).toBe(401);
     const token = await register(env);
     const big = await call(env, { method: 'POST', path: GEN, headers: { 'x-goog-api-key': token, 'content-length': String(21 * 1024 * 1024) }, body: prompt });
     expect(big.status).toBe(413);
+  });
+
+  it('drops a chunked body without Content-Length as soon as it passes 20 MB, before reading it all or forwarding', async () => {
+    const env = makeEnv();
+    const token = await register(env);
+    const fetch = makeFetch(() => ({ status: 200, body: geminiAnswer(1) }));
+    const CHUNKS = 40;
+    let pulled = 0;
+    let cancelled = false;
+    const stream = new ReadableStream({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > CHUNKS) controller.close();
+        else controller.enqueue(new Uint8Array(1024 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const request = new Request(`${BASE}${GEN}`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': token, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.7' },
+      body: stream,
+      duplex: 'half',
+    });
+    expect(request.headers.get('content-length')).toBeNull();
+    const res = await handle(request, env, undefined, { fetch, now: () => Date.parse('2026-11-04T10:00:00Z'), log: () => {} });
+    expect(res.status).toBe(413);
+    expect((await res.json()).error.status).toBe('INVALID_ARGUMENT');
+    expect(fetch.calls).toHaveLength(0);
+    // 21 chunks cross the limit; the rest of the 40 were never pulled.
+    expect(pulled).toBeGreaterThanOrEqual(21);
+    expect(pulled).toBeLessThan(CHUNKS);
+    expect(cancelled).toBe(true);
+    // Nothing was charged.
+    expect(await (await call(env, { path: '/v1/me', headers: { 'x-goog-api-key': token } })).json()).toMatchObject({ allowance: { usedToday: 0 } });
+  });
+
+  it('accepts a chunked body under the limit and forwards it whole', async () => {
+    const env = makeEnv();
+    const token = await register(env);
+    const fetch = makeFetch(() => ({ status: 200, body: geminiAnswer(100) }));
+    const text = JSON.stringify(prompt);
+    const stream = new ReadableStream({
+      start(controller) {
+        const bytes = new TextEncoder().encode(text);
+        controller.enqueue(bytes.slice(0, 7));
+        controller.enqueue(bytes.slice(7));
+        controller.close();
+      },
+    });
+    const request = new Request(`${BASE}${GEN}`, { method: 'POST', headers: { 'x-goog-api-key': token, 'content-type': 'application/json' }, body: stream, duplex: 'half' });
+    const res = await handle(request, env, undefined, { fetch, now: () => Date.parse('2026-11-04T10:00:00Z'), log: () => {} });
+    expect(res.status).toBe(200);
+    expect(fetch.calls).toHaveLength(1);
+    expect(new TextDecoder().decode(fetch.calls[0].init.body)).toBe(text);
   });
 
   it('answers 501 when the relay has no Gemini key', async () => {

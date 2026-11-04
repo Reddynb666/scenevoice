@@ -58,11 +58,27 @@ export function randomHex(bytes) {
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-/** A licence key: svl- plus three groups of four base32 characters (60 bits). */
-export function randomLicenceKey() {
-  const buf = crypto.getRandomValues(new Uint8Array(12));
-  const chars = [...buf].map((b) => BASE32[b % 32]);
+/** A licence key from 12 bytes: svl- plus three groups of four base32 characters (60 bits). */
+export function licenceKeyFromBytes(bytes) {
+  const chars = [...bytes.slice(0, 12)].map((b) => BASE32[b % 32]);
   return `svl-${chars.slice(0, 4).join('')}-${chars.slice(4, 8).join('')}-${chars.slice(8, 12).join('')}`;
+}
+
+/** A random licence key, for keys made by hand (scripts/make-license.mjs). */
+export function randomLicenceKey() {
+  return licenceKeyFromBytes(crypto.getRandomValues(new Uint8Array(12)));
+}
+
+/**
+ * The licence key for a Checkout session: HMAC-SHA256 of the session id under
+ * a server secret, so every delivery of the same session (retries, duplicate
+ * events, two deliveries at once) computes the same key instead of minting a
+ * second one, and nobody without the secret can predict a key from a session id.
+ */
+export async function licenceKeyForSession(secret, sessionId) {
+  const key = await crypto.subtle.importKey('raw', encoder.encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const digest = await crypto.subtle.sign('HMAC', key, encoder.encode(`licence:${sessionId}`));
+  return licenceKeyFromBytes(new Uint8Array(digest));
 }
 
 export function normaliseLicenceKey(raw) {
@@ -88,12 +104,15 @@ export function timingSafeEqual(a, b) {
 
 /**
  * Whether a request's Origin may use the relay. Requests from the extension
- * carry a chrome-extension:// (or moz-extension://) origin or none at all;
- * the project's own site is listed in ALLOWED_ORIGINS. Other web pages are
- * refused, so a page cannot spend a token it somehow learned.
+ * carry a chrome-extension:// (or moz-extension://) origin or none at all
+ * (as do curl and other non-browser clients); the project's own site is
+ * listed in ALLOWED_ORIGINS. Other web pages are refused, so a page cannot
+ * spend a token it somehow learned. The opaque origin "null" (sandboxed
+ * frames, file: pages) counts as a web page: a simple no-cors POST from one
+ * would otherwise register devices and use up the visitor's per-network quota.
  */
 export function originAllowed(origin, allowedList) {
-  if (!origin || origin === 'null') return true;
+  if (!origin) return true;
   if (/^(chrome|moz|safari-web)-extension:\/\//.test(origin)) return true;
   return allowedList.includes(origin);
 }

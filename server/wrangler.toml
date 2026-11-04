@@ -20,6 +20,8 @@ enabled = true
 #   DASHSCOPE_API_KEY      optional: enables /compatible-mode/* (mainland China)
 #   STRIPE_WEBHOOK_SECRET  optional: enables /webhooks/stripe
 #   ADMIN_TOKEN            optional: enables GET /admin/licenses/{session}
+#   LICENSE_KEY_SECRET     optional: licence keys are HMAC(secret, session id);
+#                          STRIPE_WEBHOOK_SECRET is used when this is unset
 [vars]
 # Seconds of video a device may have described per UTC day, by plan.
 FREE_SECONDS_PER_DAY = "3600"
@@ -28,7 +30,9 @@ PLUS_SECONDS_PER_DAY = "21600"
 # Regular expression (JavaScript) for the Gemini model names a free device may
 # use. Keep it anchored with $: image, TTS, live and native-audio variants of
 # the flash family cost far more than text, and are refused for free devices
-# whatever this says.
+# whatever this says. When both flash and flash-lite are listed the extension
+# picks plain flash; narrow the pattern to the lite family for the cheaper tier
+# (and raise OUTPUT_TOKEN_WEIGHT to 8). See "Cost model" in README.md.
 FREE_MODELS = "^gemini-\\d(\\.\\d)?-flash(-lite)?(-preview(-\\d{2}-\\d{2,4})?|-\\d{3})?$"
 # The same for DashScope (the model is read from the request body on the free plan).
 QWEN_FREE_MODELS = "^qwen\\d(\\.\\d)?-vl-(plus|flash)$"

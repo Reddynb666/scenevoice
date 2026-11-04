@@ -647,6 +647,26 @@ describe('settings page', () => {
     }
   });
 
+  it('names a description language outside the list in itself in the transcript intro, never by its code', async () => {
+    const cues = [{ start: 3, gap: 2, kind: 'visual', priority: 1, brief: 'Hon ler.', standard: 'Hon ler.', detailed: 'Hon ler.' }];
+    jsdom.reconfigure({ url: 'https://extension.test/transcript.html?v=abcdefghijk&lang=sv&title=Diner' });
+    URL.createObjectURL = vi.fn(() => 'blob:transcript');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const html = readFileSync(join(root, 'src', 'transcript', 'transcript.html'), 'utf8');
+      document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
+      fake = fakeChrome({ local: { 'script:abcdefghijk:sv': { version: 2, cues, model: 'gemini-test' } } });
+      globalThis.chrome = fake.chrome;
+      vi.resetModules();
+      await import('../src/transcript/transcript.js');
+      await vi.waitFor(() => expect($('#table').hidden).toBe(false));
+      expect($('#intro').textContent).toBe('1 descriptions · language svenska · model gemini-test');
+      expect($('#intro').textContent).not.toMatch(/\bsv\b/);
+    } finally {
+      jsdom.reconfigure({ url: 'http://localhost:3000/' });
+    }
+  });
+
   it('says that marks of wrong descriptions stay on this computer, and what a correction sends', async () => {
     await openPage('options');
     const items = [...document.querySelectorAll('ul.small li')].map((li) => li.textContent);
@@ -1048,12 +1068,37 @@ describe('welcome page (first run)', () => {
     expect(out.textContent).toBe('The video keeps playing; descriptions fit the pauses.');
     await vi.advanceTimersByTimeAsync(4000);
     expect(out.textContent).toBe('A woman with grey hair and a green apron lifts a fern out of its pot.');
+    // The 15-word line needs about 4.3 s at the default screen reader speed (1.6): not replaced at 4 s.
     await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('A woman with grey hair and a green apron lifts a fern out of its pot.');
+    await vi.advanceTimersByTimeAsync(400);
     expect(out.textContent).toBe('She shakes the soil from the roots over a newspaper.');
     await vi.advanceTimersByTimeAsync(4000);
     expect(out.textContent).toBe('That was the sample. Next: choose how descriptions are made.');
     expect(fake.sent.some((m) => m.type === MSG.SPEAK)).toBe(false);
     expect(realFetch === undefined || !vi.isMockFunction(realFetch) || realFetch.mock.calls.length === 0).toBe(true);
+  });
+
+  it('leaves each sample sentence in the live region for as long as the chosen screen reader speed needs', async () => {
+    // "Default speed" (1): the 15-word line takes about 6.5 s, the short ones keep the 4 s floor.
+    await openPage('welcome', { sync: { settings: { readerSpeed: 1 } } });
+    const out = $('#sampleOut');
+    vi.useFakeTimers();
+    $('#sample').click();
+    await flush();
+    expect(out.textContent).toBe('Title: How to repot a plant.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('The video keeps playing; descriptions fit the pauses.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('A woman with grey hair and a green apron lifts a fern out of its pot.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('A woman with grey hair and a green apron lifts a fern out of its pot.');
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(out.textContent).toBe('She shakes the soil from the roots over a newspaper.');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(out.textContent).toBe('She shakes the soil from the roots over a newspaper.');
+    await vi.advanceTimersByTimeAsync(400);
+    expect(out.textContent).toBe('That was the sample. Next: choose how descriptions are made.');
   });
 
   it('speaks the sample with the built-in voice when that is chosen, in Chinese for a Chinese interface, and keeps the live region quiet', async () => {
@@ -1139,6 +1184,8 @@ describe('welcome page (first run)', () => {
     expect(out.getAttribute('aria-live')).toBe('polite');
     expect(out.textContent).toMatch(/^标题：怎样给植物换盆。/);
     expect($('#sample').textContent).toBe('听一段示例');
+    // The privacy note is the Chinese policy, at its SceneVoice Cloud section.
+    expect($('#privacyLink').getAttribute('href')).toBe('https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md#scenevoice-cloud可选');
   });
 
   it('Start free gets a device token, keeps it with the keys, has Cloud describe both sites with sharing on, and says the allowance', async () => {

@@ -24,19 +24,24 @@ const LETTER = cue(11, 30, 1, 'She hands him the letter.');
 const DOOR = cue(2, 30, 1, 'A red door swings slowly open.');
 /** Nine words, 2.3 s, more than the 1.2 s pause at 14 but well within the model's 6 s. */
 const COAT = cue(13.8, 6, 2, 'A woman in a yellow coat crosses the road.');
+/** Three words, 0.92 s at the default speed: fits the 1.2 s pause at 14 at 1x, but at 2x that pause is worth 0.6 s. */
+const NOD = cue(11, 30, 1, 'He nods slowly.');
 
 const VIDEOS = {
   // Speech 10-14 and 15.5-20: the letter lands in speech, and the pause at 14 is too short for it at the default speed.
   speedRefitA: { captions: speech([10, 14], [15.5, 20]), script: script('speedRefitA', [LETTER]) },
   // Speech 10-14, 15.5-18 and 30-35: the coat comes due at 14 and must wait for the pause at 18.
   heldRefitBB: { captions: speech([10, 14], [15.5, 18], [30, 35]), script: script('heldRefitBB', [DOOR, COAT]) },
+  // Speech 10-14, 15.5-16 and 30-35: the nod sits at 14 at 1x; at 2x only the pause at 16, within its 5 s wait, has room.
+  rateRefitCC: { captions: speech([10, 14], [15.5, 16], [30, 35]), script: script('rateRefitCC', [NOD]) },
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fake;
 let said;
 let video;
-const playback = { paused: true };
+const playback = { paused: true, rate: 1 };
+let rateReads = 0;
 const listeners = [];
 const sender = () => ({ id: fake.chrome.runtime.id });
 const stored = () => fake.areas.sync.settings || {};
@@ -80,6 +85,17 @@ beforeAll(async () => {
   video = document.querySelector('video');
   Object.defineProperty(video, 'paused', { get: () => playback.paused, configurable: true });
   Object.defineProperty(video, 'currentTime', { value: 0, writable: true, configurable: true });
+  // Reads of the rate are counted: a re-fit reads it (fitOptions), the ratechange guard alone does not re-fit.
+  Object.defineProperty(video, 'playbackRate', {
+    get: () => {
+      rateReads += 1;
+      return playback.rate;
+    },
+    set: (r) => {
+      playback.rate = r;
+    },
+    configurable: true,
+  });
   video.pause = vi.fn(() => {
     playback.paused = true;
   });
@@ -175,5 +191,39 @@ describe('a description held back during another one', () => {
     expect(refit(27.5)).toMatchObject({ start: 27.5, gap: 2.2 });
     // Fitted again with the stale measured gap, it would never fit: the bug this guards against.
     expect(fitCuesToDialogue([{ ...fitted, start: 18.1 }], intervals, { rate: 1.6 })[0].gap).toBe(1.2);
+  });
+});
+
+describe('a change of playback rate', () => {
+  it('fits the cues to the dialogue again for the new rate', { timeout: 15000 }, async () => {
+    const info = vi.spyOn(console, 'info');
+    try {
+      await openVideo('rateRefitCC');
+      // Fitted at 1x: the nod sits in the pause at 14. The rate alone does not fit again.
+      rateReads = 0;
+      video.dispatchEvent(new Event('ratechange'));
+      await sleep(50);
+      expect(rateReads).toBe(1);
+
+      // The player goes to 2x: the guard reads the rate, then the re-fit does.
+      video.playbackRate = 2;
+      rateReads = 0;
+      video.dispatchEvent(new Event('ratechange'));
+      await sleep(50);
+      expect(rateReads).toBe(2);
+
+      // At 14 the pause is worth 0.6 s now: nothing is said there, and nothing is logged as skipped.
+      await playThrough(14);
+      await sleep(200);
+      expect(said()).not.toContain(NOD.brief);
+      expect(info.mock.calls.some(([line]) => String(line).includes('skipped: does not fit'))).toBe(false);
+      // Moved to the pause at 16, which has the room, it is said there instead.
+      await playThrough(16);
+      await vi.waitFor(() => expect(said()).toContain(NOD.brief), { timeout: 3000 });
+    } finally {
+      info.mockRestore();
+      video.playbackRate = 1;
+      video.dispatchEvent(new Event('ratechange'));
+    }
   });
 });

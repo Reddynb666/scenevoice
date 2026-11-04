@@ -24,7 +24,7 @@ server/
 
 ## Protocol v1
 
-Base URL: `CLOUD_API_BASE`. Plain JSON only; no streaming. Request bodies up to 20 MB (the extension sends up to six 640-pixel JPEG frames per request). Upstream calls time out after 300 s.
+Base URL: `CLOUD_API_BASE`. Plain JSON only; no streaming. Request bodies up to 20 MB (the extension sends up to six 640-pixel JPEG frames per request); a larger body is refused with 413 by its declared length, or, when it has none, the moment the bytes read pass the limit, so it is never buffered whole. Upstream calls time out after 300 s.
 
 The device token is the only credential. It is sent as `x-goog-api-key: <token>` (so the extension's `GeminiClient` works unchanged with `apiBase = CLOUD_API_BASE` and `apiKey = token`) or as `Authorization: Bearer <token>` (so `QwenClient` does too). The extension stores it like an API key: `chrome.storage.local`, trusted contexts only.
 
@@ -41,9 +41,9 @@ Errors use Google's JSON shape on `/v1beta/*` and on the relay's own `/v1/*` rou
 | `SCENEVOICE_LICENCE_NOT_FOUND` (404), `SCENEVOICE_LICENCE_FULL` (409) | licences |
 | `SCENEVOICE_UPSTREAM_TIMEOUT` (504), `SCENEVOICE_UPSTREAM_UNREACHABLE` (502) | the model did not answer |
 | `SCENEVOICE_NOT_CONFIGURED` (501) | the deployment lacks the secret that route needs |
-| `SCENEVOICE_ORIGIN` (403) | a web origin not in `ALLOWED_ORIGINS` |
+| `SCENEVOICE_ORIGIN` (403) | a web origin not in `ALLOWED_ORIGINS`, including the opaque origin `null` (sandboxed frames, `file:` pages); a request with no Origin header at all (curl, the extension's service worker) is allowed |
 
-Every authenticated response (and every proxied one) carries `x-scenevoice-plan`, `x-scenevoice-used-today`, `x-scenevoice-seconds-per-day` and `x-scenevoice-resets-at`. CORS exposes them.
+Every response from the device, licence and model routes (and every proxied answer) carries `x-scenevoice-plan`, `x-scenevoice-used-today`, `x-scenevoice-seconds-per-day` and `x-scenevoice-resets-at`; CORS exposes them. The shared-cache routes do not: `GET /v1/scripts/…` answers with the script alone and `PUT` answers 204 with only `x-scenevoice-stored`.
 
 ### Devices
 
@@ -114,6 +114,7 @@ npx wrangler secret put GEMINI_API_KEY          # required
 npx wrangler secret put DASHSCOPE_API_KEY       # mainland China only
 npx wrangler secret put STRIPE_WEBHOOK_SECRET   # when Stripe is set up
 npx wrangler secret put ADMIN_TOKEN             # for GET /admin/licenses/…; e.g. `openssl rand -hex 32`
+npx wrangler secret put LICENSE_KEY_SECRET      # optional: licence keys are derived from it; STRIPE_WEBHOOK_SECRET is used when unset
 
 # 3. settings: edit [vars] in wrangler.toml (allowances, ALLOWED_ORIGINS, FREE_MODELS,
 #    QWEN_FREE_MODELS, OUTPUT_TOKEN_WEIGHT, REQUESTS_PER_MINUTE, SCRIPT_PUTS_PER_DAY)
@@ -122,7 +123,7 @@ npx wrangler secret put ADMIN_TOKEN             # for GET /admin/licenses/…; e
 npm run deploy
 ```
 
-Custom domain: put the zone on Cloudflare, uncomment `routes` in `wrangler.toml` with the host you chose, deploy again, and set `CLOUD_API_BASE` in `src/shared/constants.js` to `https://<that host>` (the extension's manifest takes its host permission from the same constant). The relay serves no HTML, so the apex can stay on the project site.
+Custom domain: put the zone on Cloudflare, uncomment `routes` in `wrangler.toml` with the host you chose, deploy again, and set `CLOUD_API_BASE` in `src/shared/constants.js` to `https://<that host>`. The manifest does not read that constant: also change the host in `host_permissions` of `static/manifest.json` by hand, and the pinned values in `test/cloud.test.js`, `test/security.test.js` and `test/china.test.js` (and the host named in `PRIVACY.md` / `PRIVACY.zh-CN.md`, which `test/docs.test.js` checks against the manifest). The relay serves no HTML, so the apex can stay on the project site.
 
 Smoke test:
 
@@ -152,7 +153,7 @@ Gemini prices as of 2026-11-04 (input / output per million tokens): Gemini 3.8 F
 | 3.5 Flash-Lite | about $0.11 ($0.108 input + $0.03 to $0.05 output) |
 | 3.8 Flash | about $0.30 to $0.35 ($0.27 input + $0.04 to $0.08 output) |
 
-So a free device that uses its whole hour every day costs the operator $0.11 to $0.35 a day, and most devices use far less. The shared cache means a popular video is generated once; the Worker itself costs $5 a month plus fractions of a cent per million requests and KV operations. Google raises Gemini 3.x Flash prices on 2027-01-01; the default `FREE_MODELS` keeps free devices on the flash and flash-lite text families, and the extension prefers flash-lite when it is available.
+Which row applies is decided by the model list the relay returns: the default `FREE_MODELS` admits both the flash and flash-lite text families, and the extension picks the newest stable plain flash model from whatever it is offered (`chooseModel` in `src/shared/gemini.js` ranks flash above flash-lite for video quality). So with the default pattern a free device runs on 3.8 Flash, and one that uses its whole hour every day costs the operator about $0.30 to $0.35 a day; most devices use far less. To budget for the Flash-Lite row instead, restrict free devices to it, e.g. `FREE_MODELS = "^gemini-\\d(\\.\\d)?-flash-lite(-preview(-\\d{2}-\\d{2,4})?|-\\d{3})?$"`: the extension then has only lite to choose from, a full device-day costs about $0.11, and `OUTPUT_TOKEN_WEIGHT` should go to 8. The shared cache means a popular video is generated once; the Worker itself costs $5 a month plus fractions of a cent per million requests and KV operations. Google raises Gemini 3.x Flash prices on 2027-01-01, which is one reason to narrow the pattern then.
 
 The allowance is meant to bound that cost whatever a token sends, which is why output counts: an answer of 65 000 output tokens to a ten-token prompt costs the operator about as much as 50 minutes of video and is charged 3 250 of the 3 600 free seconds, not 1. `OUTPUT_TOKEN_WEIGHT` should track the output/input price ratio of the free models (5 for flash, 8 for flash-lite; raise it rather than lower it).
 
@@ -172,7 +173,7 @@ The code handles exactly this much, marked `OWNER TO FINISH` in `src/worker.js`:
 
 1. The owner creates Stripe Products and Prices for Plus (monthly / yearly) and organisation seats, and Checkout sessions with `metadata.plan` = `plus` or `org` and `metadata.seats` (default 1).
 2. A webhook endpoint pointing at `https://<host>/webhooks/stripe` for `checkout.session.completed` (and `checkout.session.async_payment_succeeded` for delayed payment methods). Its signing secret goes into `STRIPE_WEBHOOK_SECRET`. The Worker verifies `Stripe-Signature` (HMAC-SHA256 of `t.body`, 5-minute tolerance) with Web Crypto; no Stripe SDK.
-3. On a paid session the Worker creates a key `svl-XXXX-XXXX-XXXX`, stores `{plan, seats, used: 0, created, session}`, and answers `{"received":true,"licenseKey":"svl-…","plan":"plus","seats":1}`. A retried webhook gets the same key.
+3. On a paid session the Worker creates a key `svl-XXXX-XXXX-XXXX`, stores `{plan, seats, used: 0, created, session}`, and answers `{"received":true,"licenseKey":"svl-…","plan":"plus","seats":1}`. The key is derived from the session id (HMAC-SHA256 under `LICENSE_KEY_SECRET`, or `STRIPE_WEBHOOK_SECRET` when that is not set), so a retried or duplicated delivery, even two arriving at once, yields the same key and one record, and a delivery that comes after an activation leaves the seats already taken alone. Set `LICENSE_KEY_SECRET` if you expect to rotate the webhook secret; the `session:<id>` index still answers old sessions either way.
 4. Delivering the key is the owner's part: the Checkout success page (on the owner's site, server side) calls `GET /admin/licenses/{CHECKOUT_SESSION_ID}` with `Authorization: Bearer <ADMIN_TOKEN>` and shows or emails the key. Never expose `ADMIN_TOKEN` to a browser.
 5. Refunds, cancellations and seat changes are not automated: delete or edit the licence record with `wrangler kv key …` (the key's record is at `LICENSES/<key>`, the session index at `LICENSES/session:<id>`). The plan is read from the licence record on every authenticated request, so a deleted record drops each device on it to the free plan at that device's next request (within about a minute, KV being eventually consistent), and an edited `plan` is followed the same way.
 

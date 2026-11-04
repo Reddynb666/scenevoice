@@ -243,8 +243,9 @@ kbd {
   color: var(--link);
 }
 
-.button[aria-disabled="true"] {
-  cursor: not-allowed;
+/* A store that is not open yet: plain text in the row, not a link, so nothing to focus. */
+.button.placeholder {
+  cursor: default;
   background: transparent;
   color: var(--text);
   border-style: dashed;
@@ -256,6 +257,11 @@ kbd {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin: 1rem 0;
+}
+
+/* The hidden attribute must win over display: flex (the "Hear it" row is hidden until script.js runs). */
+[hidden] {
+  display: none !important;
 }
 
 /* The sample transcript: a bordered panel so low-vision readers find it. */

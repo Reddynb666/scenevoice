@@ -9,6 +9,7 @@ import { allowanceMinutes, registerDevice } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
 import { bindSettings } from '../shared/form.js';
 import { cloudRegisterMessage, interfaceLocale, localizeDocument, t } from '../shared/i18n.js';
+import { estimateSeconds } from '../shared/script.js';
 import { classifySender } from '../shared/sender.js';
 import { voiceTestMessage } from '../shared/settings.js';
 import { getLocal, getSettings, setLocal, setSettings } from '../shared/storage.js';
@@ -27,8 +28,15 @@ function sampleLang() {
   return candidates.find((code) => code && SAMPLE_DESCRIPTIONS[code]) || 'en';
 }
 
-/** Between sample sentences in the live region: long enough for a screen reader to finish the one before. */
+/**
+ * Between sample sentences in the live region: at least this long, and longer
+ * when the sentence needs it at the chosen screen reader speed (the longest
+ * line is 15 words, over six seconds at the "Default speed" setting). The
+ * region is replaced each time, so a write that lands early cuts the sentence
+ * before, or is dropped, depending on the screen reader.
+ */
 const SAMPLE_GAP_MS = 4000;
+const sampleGap = (text, readerSpeed) => Math.max(SAMPLE_GAP_MS, Math.ceil((estimateSeconds(text, readerSpeed) + 0.5) * 1000));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let sampleRun = 0;
 /** The id of the built-in-voice sample now speaking (its TTS events carry it), or '' when none is. */
@@ -81,7 +89,7 @@ async function playSample() {
   for (const [i, text] of texts.entries()) {
     if (run !== sampleRun) return;
     out.textContent = text;
-    if (i < texts.length - 1) await wait(SAMPLE_GAP_MS);
+    if (i < texts.length - 1) await wait(sampleGap(text, settings.readerSpeed));
   }
 }
 
@@ -167,6 +175,10 @@ async function init() {
   // Gemini needs Google, which mainland China cannot reach: a Chinese browser starts at the Qwen key.
   $('ownKey').href = chinese() ? 'options.html#qwen' : 'options.html#gemini';
   $('tryBilibiliItem').hidden = !chinese();
+  // The privacy note in the reader's language. GitHub's anchor for the heading
+  // "SceneVoice Cloud（可选）" drops the full-width parentheses; if it ever misses, the
+  // page opens at the top, which is still the right document.
+  if (chinese()) $('privacyLink').href = 'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md#scenevoice-cloud可选';
 
   const local = await getLocal();
   if (local.cloudToken) {

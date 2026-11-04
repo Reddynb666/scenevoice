@@ -137,7 +137,10 @@ function fitOne(cue, intervals, maxShift, margin) {
   else if (i < intervals.length) {
     // A gap of 0 is "no pause known" (frames mode: the model cannot hear), so
     // the captions decide; any other estimate stays the upper bound.
-    const measured = Math.max(0, intervals[i].start - start - margin);
+    // Rounded to tenths here, not only when stored: every decision below must
+    // see the same number chooseUtterance will see, or a pause of 1.34 s is
+    // judged long enough and then, stored as 1.3, found too short.
+    const measured = Math.round(Math.max(0, intervals[i].start - start - margin) * 10) / 10;
     gap = cue.gap > 0 ? Math.min(gap, measured) : measured;
   }
   return { start, gap };
@@ -154,7 +157,8 @@ function laterPause(cue, intervals, wait, room, margin) {
     if (end - cue.start > wait) break;
     const next = intervals[i + 1];
     // After the last caption the captions say nothing: keep to the model's estimate.
-    const gap = next ? next.start - end - margin : cue.gap;
+    // Tenths, as stored: a pause that only fits before rounding is passed over.
+    const gap = Math.round((next ? next.start - end - margin : cue.gap) * 10) / 10;
     if (gap >= room) return { start: end, gap };
   }
   return null;

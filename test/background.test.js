@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MSG, SCRIPT_VERSION } from '../src/shared/constants.js';
+import { localDay } from '../src/shared/usage.js';
 
 const ID = 'abcdefghijklmnopqrstuvwxyzabcdef';
 const ORIGIN = `chrome-extension://${ID}`;
@@ -443,14 +444,19 @@ describe('usage counted on this computer, and the daily limit', () => {
     expect(event).toMatchObject({ event: 'chunk', cueCount: 0 });
     expect(event).not.toHaveProperty('usage');
 
-    // A question and a correction: counted, their length estimated, and the counts kept out of the tab's reply.
+    // A question and a correction: counted at their clip length (askClip(12, 60) is 0..16, revisionClip(6, 60) is 0..18),
+    // not at the tokens a video link costs, and the counts kept out of the tab's reply.
     const answer = await deliver({ type: MSG.ASK, params: { videoId: 'abcdefghijk', meta: {}, time: 12, duration: 60, question: 'What?', nearbyText: '', lang: 'en' } }, youtube);
     expect(answer).toEqual({ text: 'At 0:12: a plate.', time: 12, confidence: 'high' });
-    expect(today().gemini).toMatchObject({ requests: 2, seconds: 300 + 900 });
+    expect(today().gemini).toMatchObject({ requests: 2, seconds: 300 + 16 });
     store['script:abcdefghijk:en'] = { ...script, cues: [chop], complete: true };
     const fixed = await deliver({ type: MSG.REVISE, videoId: 'abcdefghijk', lang: 'en', cue: { start: 6, kind: 'visual', standard: chop.standard }, meta: {}, duration: 60 }, youtube);
     expect(fixed).toEqual({ status: 'removed' });
-    expect(today().gemini.requests).toBe(3);
+    expect(today().gemini).toMatchObject({ requests: 3, seconds: 300 + 16 + 18 });
+    // A question from pictures (Qwen on Bilibili) is counted on that model's row, at the stretch the pictures span.
+    const pictures = [12.4, 16, 20, 24.6].map((time) => ({ time, data: '/9j/AAAA' }));
+    expect((await deliver({ type: MSG.ASK, params: { videoId: BILI, meta: {}, time: 25, duration: 60, question: 'What?', nearbyText: '', lang: 'zh-CN', frames: pictures } }, bilibili)).text).toBe('At 0:12: a plate.');
+    expect(today().qwen).toMatchObject({ requests: 2, seconds: 12 + 13 });
 
     // A job that failed after a billed reply it could not read: counted too, on the row of the model that answered.
     await deliver({ type: MSG.JOB_EVENT, event: 'error', key: 'abcdefghijk:en', videoId: 'abcdefghijk', lang: 'en', provider: 'gemini', code: 'truncated', detail: '', usage: geminiUsage, model: 'gemini-2.5-flash' }, offscreenPage);
@@ -459,13 +465,13 @@ describe('usage counted on this computer, and the daily limit', () => {
     // A stretch whose reply was billed but unreadable: the cost comes back with the error and is counted.
     worker = () => ({ error: 'truncated', detail: '', usage: qwenUsage });
     expect(await deliver(stretch(12, 24), bilibili)).toMatchObject({ error: 'truncated' });
-    expect(today().qwen).toMatchObject({ requests: 2, input: 6600 });
+    expect(today().qwen).toMatchObject({ requests: 3, input: 3300 + 90000 + 3300 });
   });
 
   it('refuses new jobs and stretches once the daily limit is reached, and still answers questions', async () => {
     const usual = worker;
     synced.settings = { dailyBudgetSeconds: 1800 };
-    store.usage = { day: new Date().toISOString().slice(0, 10), gemini: { input: 1, output: 1, requests: 2, seconds: 1500, cost: 0 }, qwen: { input: 1, output: 1, requests: 1, seconds: 288, cost: 0 }, cloud: { input: 0, output: 0, requests: 0, seconds: 0, cost: 0 } };
+    store.usage = { day: localDay(), gemini: { input: 1, output: 1, requests: 2, seconds: 1500, cost: 0 }, qwen: { input: 1, output: 1, requests: 1, seconds: 288, cost: 0 }, cloud: { input: 0, output: 0, requests: 0, seconds: 0, cost: 0 } };
     // 1788 seconds so far: one more stretch is allowed and takes it over the limit.
     expect(await deliver(stretch(0, 12), bilibili)).toMatchObject({ status: 'ok' });
     expect(await deliver(stretch(12, 24), bilibili)).toEqual({ error: 'budget' });
@@ -573,6 +579,39 @@ describe('SceneVoice Cloud: the token where the key goes, and the shared cache',
     workerCalls.length = 0;
     worker = (data) => (data.cmd === 'cloud-get' ? { error: 'network' } : data.cmd === 'start' ? { started: true, done: 0, total: 2, chunkStartedAt: 1, chunkMs: [] } : { status: 'idle' });
     expect((await start()).status).toBe('generating');
+  });
+
+  it('closes the offscreen document a minute after a cache hit, as after any other request', async () => {
+    vi.useFakeTimers();
+    const closeDocument = vi.fn(async () => {});
+    const usual = chrome.offscreen.closeDocument;
+    chrome.offscreen.closeDocument = closeDocument;
+    try {
+      // The document is opened for the lookup only: no job starts, so nothing else would close it.
+      worker = (data) => (data.cmd === 'cloud-get' ? { script: shared() } : { jobs: [], inFlight: 0, waiting: 0 });
+      expect(await start()).toEqual({ status: 'ready', fromCloud: true });
+      expect(closeDocument).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(closeDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      chrome.offscreen.closeDocument = usual;
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a model the relay switched to out of the Gemini key’s own setting', async () => {
+    store.local = { apiKey: 'k', model: 'gemini-2.5-pro', cloudToken: TOKEN };
+    const switched = (provider, reason = 'model-not-found') => deliver({ type: MSG.JOB_EVENT, event: 'model', key: `${VIDEO}:en`, videoId: VIDEO, lang: 'en', provider, model: 'gemini-2.5-flash-lite', reason }, offscreenPage);
+    // A Cloud job's model is the relay's choice: nothing of it is written down here.
+    await switched('cloud');
+    expect(store.local).toEqual({ apiKey: 'k', model: 'gemini-2.5-pro', cloudToken: TOKEN });
+    // The tabs still hear about the switch.
+    expect(chrome.tabs.sendMessage.mock.calls.at(-1)[1]).toMatchObject({ event: 'model', model: 'gemini-2.5-flash-lite', reason: 'model-not-found' });
+    // The listener's own Gemini key: a model it cannot use any more is replaced for good, an overloaded one only skipped.
+    await switched('gemini', 'server');
+    expect(store.local.model).toBe('gemini-2.5-pro');
+    await switched('gemini');
+    expect(store.local.model).toBe('gemini-2.5-flash-lite');
   });
 
   it('leaves the cache alone when the listener regenerates, and with a key of their own', async () => {

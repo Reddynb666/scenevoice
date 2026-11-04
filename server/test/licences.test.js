@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseStripeSignature, signForStripe, verifyStripeSignature } from '../src/stripe.js';
-import { normaliseLicenceKey, randomLicenceKey } from '../src/util.js';
+import { licenceKeyForSession, normaliseLicenceKey, randomLicenceKey } from '../src/util.js';
 import { call, geminiAnswer, makeEnv, makeFetch, register } from './helpers.js';
 
 const SECRET = 'whsec_test_secret_for_the_relay';
@@ -30,6 +30,15 @@ describe('licence keys', () => {
     expect(normaliseLicenceKey('svl-abcd-efgh')).toBe('');
     expect(normaliseLicenceKey('svl-abc1-efgh-2345')).toBe('');
     expect(normaliseLicenceKey(42)).toBe('');
+  });
+
+  it('are derived from a Checkout session the same way every time, in the same shape, and differ by session and secret', async () => {
+    const key = await licenceKeyForSession(SECRET, 'cs_test_1');
+    expect(key).toMatch(/^svl-[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}$/);
+    expect(await licenceKeyForSession(SECRET, 'cs_test_1')).toBe(key);
+    expect(await licenceKeyForSession(SECRET, 'cs_test_2')).not.toBe(key);
+    expect(await licenceKeyForSession('whsec_other', 'cs_test_1')).not.toBe(key);
+    expect(normaliseLicenceKey(key.toLowerCase())).toBe(key);
   });
 });
 
@@ -151,6 +160,44 @@ describe('POST /webhooks/stripe', () => {
     const token = await register(env);
     const act = await call(env, { method: 'POST', path: '/v1/licenses/activate', headers: { 'x-goog-api-key': token }, body: { licenseKey: body.licenseKey } });
     expect((await act.json()).plan).toBe('org');
+  });
+
+  it('gives two deliveries of the same session that arrive at once a single key', async () => {
+    const env = makeEnv({ STRIPE_WEBHOOK_SECRET: SECRET });
+    const event = checkoutEvent('cs_test_dup', { plan: 'plus', seats: '3' });
+    const [a, b] = await Promise.all([postWebhook(env, event), postWebhook(env, { ...event, type: 'checkout.session.async_payment_succeeded' })]);
+    const keyA = (await a.json()).licenseKey;
+    const keyB = (await b.json()).licenseKey;
+    expect(keyA).toBe(keyB);
+    expect([...env.LICENSES.map.keys()].filter((k) => k.startsWith('svl-'))).toEqual([keyA]);
+    expect(await env.LICENSES.get('session:cs_test_dup')).toBe(keyA);
+    expect(await env.LICENSES.get(keyA, 'json')).toMatchObject({ plan: 'plus', seats: 3, used: 0 });
+  });
+
+  it('keeps the seats already taken when a session is delivered again after an activation', async () => {
+    const env = makeEnv({ STRIPE_WEBHOOK_SECRET: SECRET });
+    const key = (await (await postWebhook(env, checkoutEvent('cs_test_late', { plan: 'org', seats: '5' }))).json()).licenseKey;
+    const token = await register(env);
+    await call(env, { method: 'POST', path: '/v1/licenses/activate', headers: { 'x-goog-api-key': token }, body: { licenseKey: key } });
+    expect((await env.LICENSES.get(key, 'json')).used).toBe(1);
+    // With the index present the record is not touched...
+    expect((await (await postWebhook(env, checkoutEvent('cs_test_late', { plan: 'org', seats: '5' }))).json()).licenseKey).toBe(key);
+    expect((await env.LICENSES.get(key, 'json')).used).toBe(1);
+    // ...and even if the index were lost, the derived key finds the record and does not reset it.
+    await env.LICENSES.delete('session:cs_test_late');
+    const again = await (await postWebhook(env, checkoutEvent('cs_test_late', { plan: 'org', seats: '5' }))).json();
+    expect(again).toMatchObject({ received: true, licenseKey: key, plan: 'org', seats: 5 });
+    expect((await env.LICENSES.get(key, 'json')).used).toBe(1);
+    expect(await env.LICENSES.get('session:cs_test_late')).toBe(key);
+    expect([...env.LICENSES.map.keys()].filter((k) => k.startsWith('svl-'))).toHaveLength(1);
+  });
+
+  it('uses LICENSE_KEY_SECRET for the key when set, so the webhook secret can rotate without changing keys', async () => {
+    const withOwn = makeEnv({ STRIPE_WEBHOOK_SECRET: SECRET, LICENSE_KEY_SECRET: 'licence-key-secret' });
+    const key = (await (await postWebhook(withOwn, checkoutEvent('cs_test_6'))).json()).licenseKey;
+    expect(key).toBe(await licenceKeyForSession('licence-key-secret', 'cs_test_6'));
+    const without = makeEnv({ STRIPE_WEBHOOK_SECRET: SECRET });
+    expect((await (await postWebhook(without, checkoutEvent('cs_test_6'))).json()).licenseKey).toBe(await licenceKeyForSession(SECRET, 'cs_test_6'));
   });
 
   it('defaults to plus with one seat', async () => {

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEDGE_WORDS, LANGUAGES, RTL_LANGUAGES, UNCERTAIN_LEAD } from '../src/shared/constants.js';
 import { isDescriptionLanguage, resolveLanguage } from '../src/shared/storage.js';
+import { nativeName } from '../src/shared/language.js';
 import { buildAskRequest, cannotTellExample, hedgeExamples, languageName, scriptInstructions } from '../src/shared/gemini.js';
 import { framesAskPrompt, framesRevisionPrompt } from '../src/shared/frames.js';
 import { fakeChrome } from './fake-chrome.js';
@@ -188,5 +189,20 @@ describe('the page carries the description language', () => {
     ui.lang = 'en';
     expect(answer.getAttribute('lang')).toBe('en');
     expect(ui.overlay.getAttribute('lang')).toBe('en');
+  });
+});
+
+describe('nativeName says a language in itself', () => {
+  it('uses the list first, by the full tag or its base', () => {
+    expect(nativeName('zh-CN')).toBe('简体中文');
+    expect(nativeName('en')).toBe('English');
+    expect(nativeName('pt-BR')).toBe(nativeName('pt'));
+  });
+
+  it('asks the browser for a language outside the list, and keeps the code only when nothing names it', () => {
+    expect(nativeName('sv')).toBe('svenska');
+    expect(nativeName('sv-SE')).toBe('svenska');
+    expect(nativeName('xx')).toBe('xx');
+    expect(nativeName('')).toBe('');
   });
 });

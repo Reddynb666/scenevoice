@@ -3,7 +3,7 @@
 // must stay out of every step that does not upload, and the two store uploads
 // must not depend on each other. Plain text checks: the repository has no YAML
 // parser and the files are small.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -20,6 +20,19 @@ function steps(yaml) {
 const workflows = ['.github/workflows/ci.yml', '.github/workflows/release.yml'];
 
 describe('workflows', () => {
+  it('pins every action in every workflow to a commit SHA, with the tag in a comment (SECURITY.md says so)', () => {
+    const files = readdirSync(join(root, '.github/workflows')).filter((f) => /\.ya?ml$/.test(f));
+    expect(files).toEqual(expect.arrayContaining(['ci.yml', 'pages.yml', 'release.yml']));
+    for (const file of files) {
+      const uses = read(join('.github/workflows', file)).split('\n').map((l) => l.match(/^\s*(?:- )?uses:\s*(\S+)(.*)$/)).filter(Boolean);
+      expect(uses.length, `${file} uses at least one action`).toBeGreaterThan(0);
+      for (const [line, ref, rest] of uses) {
+        expect(ref, `${file}: ${line.trim()} is a floating tag`).toMatch(/^[\w.-]+\/[\w.-]+(?:\/[\w./-]+)?@[0-9a-f]{40}$/);
+        expect(rest, `${file}: ${line.trim()} needs the tag in a comment`).toMatch(/^ # v\d+\.\d+\.\d+\s*$/);
+      }
+    }
+  });
+
   it('runs every piped build step under bash, so a failed size check fails the step', () => {
     for (const file of workflows) {
       const piped = steps(read(file)).filter((s) => /\|\s*tee\b/.test(s));

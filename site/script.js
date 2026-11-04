@@ -205,4 +205,8 @@
   window.addEventListener('pagehide', function () { stop(false); });
 
   setButtons();
+  // The buttons are hidden in the HTML and shown only now, once they do something:
+  // without this script (or with a broken sample block) a visitor never meets a dead button.
+  var row = doc.getElementById('hear-buttons');
+  if (row) row.hidden = false;
 })();

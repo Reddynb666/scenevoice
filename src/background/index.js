@@ -25,6 +25,7 @@ import { effectiveProvider, inputModeFor, providerFor } from '../shared/provider
 import { applyCorrections, cueRef, findCueIndex, replaceCue } from '../shared/revision.js';
 import { speechOptions } from '../shared/voices.js';
 import { cleanAskHistory } from '../shared/ask.js';
+import { askClip, revisionClip } from '../shared/gemini.js';
 import { budgetReached, recordUsage, todaysUsage } from '../shared/usage.js';
 
 // Content scripts share the YouTube (or Bilibili) process and must not read the
@@ -301,7 +302,7 @@ async function broadcast(msg) {
  * saved script, or null when there is none or the relay cannot be reached.
  */
 async function fetchSharedScript(config, { videoId, lang, duration }) {
-  const reply = await offscreen({ cmd: 'cloud-get', config, params: { videoId, lang } }).catch(() => null);
+  const reply = await workerRequest({ cmd: 'cloud-get', config, params: { videoId, lang } }).catch(() => null);
   if (!reply || reply.error || !reply.script) return null;
   if (!cloudScriptOk(reply.script, { videoId, lang, duration })) return null;
   return saveJobScript(videoId, lang, adoptCloudScript(reply.script));
@@ -342,7 +343,7 @@ async function shareScript(videoId, lang, script) {
   const { config } = providerConfig(local, 'cloud');
   const shared = shareableScript(script);
   if (!config || !shared) return;
-  offscreen({ cmd: 'cloud-put', config, params: { videoId, lang, script: shared } })
+  workerRequest({ cmd: 'cloud-put', config, params: { videoId, lang, script: shared } })
     .then((reply) => {
       if (reply?.error) console.warn('[SceneVoice] could not share the descriptions', reply.error, reply.detail || '');
     })
@@ -360,7 +361,12 @@ async function stopGeneration({ videoId, lang }) {
   return offscreen({ cmd: 'abort', key: jobKey(videoId, lang) });
 }
 
-/** A request to the worker that is not a job (a question, a description made again). */
+/**
+ * A request to the worker that is not a job (a question, a description made
+ * again, a stretch of frames, the Cloud shared cache). Counted as busy while it
+ * runs, and the idle close is scheduled when it ends, so a document opened
+ * only for a cache lookup is closed like any other.
+ */
 async function workerRequest(data) {
   busyRequests += 1;
   try {
@@ -371,22 +377,32 @@ async function workerRequest(data) {
   }
 }
 
-/** A worker reply for the tab: its usage counted here and left out, with the model that answered. */
-async function counted(provider, reply) {
+/**
+ * A worker reply for the tab: its usage counted here and left out, with the
+ * model that answered. `seconds` is the length of video the request looked at
+ * (the clip, or the span of the pictures), so a question is counted against the
+ * daily limit at its length, not at the tokens a video link costs.
+ */
+async function counted(provider, reply, seconds) {
   const { usage, model, ...rest } = reply || {};
-  if (usage) await countUsage(provider, usage, { model });
+  if (usage) await countUsage(provider, usage, { model, seconds });
   return rest;
 }
+
+/** The length of a clip { start, end } in seconds. */
+const clipLength = ({ start, end }) => end - start;
+/** The stretch of video a set of pictures spans, at least one second. */
+const framesSpan = (frames) => Math.max(1, Math.ceil(frames.at(-1).time - frames[0].time));
 
 async function ask(params, sender) {
   const { config, error, mode, provider } = await setupFor(sender);
   if (error) return { error };
   const history = cleanAskHistory(params?.history);
-  if (mode !== 'frames') return counted(provider, await workerRequest({ cmd: 'ask', config, params: { ...params, history } }));
+  if (mode !== 'frames') return counted(provider, await workerRequest({ cmd: 'ask', config, params: { ...params, history } }), clipLength(askClip(params?.time, params?.duration)));
   // Pictures of the last 20 seconds, as many as one request takes (Gemini gets a 24-second clip).
   const frames = sanitizeFrames(params?.frames, { max: frameLimit(config) });
   if (!frames.length) return { error: 'frames-missing' };
-  return counted(provider, await workerRequest({ cmd: 'ask', mode, provider, config, params: { ...params, history, meta: cleanMeta(params?.meta), frames } }));
+  return counted(provider, await workerRequest({ cmd: 'ask', mode, provider, config, params: { ...params, history, meta: cleanMeta(params?.meta), frames } }), framesSpan(frames));
 }
 
 /**
@@ -420,6 +436,7 @@ async function revise({ videoId, lang, cue, meta, duration, frames: sent }, send
   const reply = await counted(
     provider,
     frames ? await workerRequest({ cmd: 'revise', mode, provider, config, params: { ...params, meta: cleanMeta(meta), frames } }) : await workerRequest({ cmd: 'revise', config, params }),
+    frames ? framesSpan(frames) : clipLength(revisionClip(old.start, params.duration)),
   );
   if (reply.error) {
     await inTurn(jobKey(videoId, lang), () => addFeedback(videoId, lang, { ...mark, status: 'failed', error: reply.error })).catch(() => {});
@@ -503,7 +520,9 @@ async function onJobEvent(ev) {
   if (event === 'model') {
     console.info(`[SceneVoice] switched to ${ev.model} (${ev.reason})`);
     // A model this key cannot use any more is replaced for good; an overloaded one is only skipped this time.
-    if (ev.reason === 'model-not-found') await setLocal({ model: ev.model }).catch(() => {});
+    // For a key of the listener's own only: a Cloud job's model is the relay's choice ('' = automatic, listed
+    // per job and remembered by the worker for the session), and must not overwrite the Gemini key's setting.
+    if (ev.reason === 'model-not-found' && provider === 'gemini') await setLocal({ model: ev.model }).catch(() => {});
   }
   const { type, script, usage, ...rest } = ev;
   await broadcast({ ...rest, type: MSG.GEN_EVENT, cueCount: saved?.cues?.length ?? null, completedUntil: saved?.completedUntil ?? null });

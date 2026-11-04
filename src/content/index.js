@@ -104,7 +104,7 @@ function main() {
   let beginSeq = 0;
   /** Stretches of speech in the current video, from its captions; null when unknown. */
   let dialogue = null;
-  /** The reading speed and playback rate the cues were last fitted to the dialogue with (fitOptions), or null. */
+  /** The reading speed and playback rate the cues were last fitted to the dialogue with (fitOptions), or null. A change in either fits them again. */
   let fittedWith = null;
   /** The caption lines themselves, to leave out on-screen text the viewer hears anyway. */
   let captionLines = [];
@@ -1312,6 +1312,12 @@ function main() {
     });
     video.addEventListener('ended', () => {
       if (current()) finishLive(video);
+    });
+    // At 2x a pause passes twice as fast: a cue placed for 1x may no longer fit the pause chosen
+    // for it while a longer one within reach would. Compared with what the last fit used, like
+    // the reading speed: a player that re-sets the same rate (an ad, a reload) changes nothing.
+    video.addEventListener('ratechange', () => {
+      if (current() && script && dialogue && fittedWith && fittedWith.playbackRate !== (video.playbackRate || 1)) scheduleCues();
     });
   }
 

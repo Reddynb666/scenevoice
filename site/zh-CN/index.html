@@ -4,11 +4,16 @@
   site/check.mjs 会比对。文字是为中文读屏用户单独写的，不是英文页的逐句翻译。
 
   需要所有者填写的地方（搜索“FILL IN”）：
-    1. 商店链接，在“安装”一节：data-store="chrome"、data-store="edge"、data-store="gitee" 的三个 <a>。
-       把 href="#" 换成真实地址，删掉 aria-disabled="true"，并把“……（即将上线）”改成商店名。
+    1. 商店链接，在“安装”一节：data-store="chrome"、data-store="edge"、data-store="gitee" 的三个 <span>。
+       把每个 <span> 改成 <a class="button" href="https://…" data-store="…">，去掉 placeholder 这个 class，
+       并把“……（即将上线）”改成商店名。同时改掉“安装”一节第一段里“商店版本正在准备”和
+       “Edge 加载项和 Gitee 镜像上线后”那两句；真正提交商店审核后也要再改一次。
     2. 联系邮箱，在“面向机构与创作者”一节：带 data-contact 的 mailto: 链接。
     3. 盲人测试者名单，在页脚（data-testers）。
-    4. 站点地址：如果从 GitHub Pages 搬到自己的域名，要同时改 <link rel="canonical">、hreflang、og:url、og:image 和 JSON-LD 里的 url。
+    4. 站点地址：如果从 GitHub Pages 搬到自己的域名，要同时改 <link rel="canonical">、hreflang、og:url、og:image、
+       twitter:image 和 JSON-LD 里的 url。
+    5. 社交分享图：assets/og.svg 是可编辑的源文件；分享预览实际显示的是 assets/og.png（1200×630），
+       用 `python3 scripts/make_og.py` 从 SVG 渲染出来。改过 SVG 之后要重新跑一次。
 -->
 <html lang="zh-CN" dir="ltr">
 <head>
@@ -29,11 +34,16 @@
 <meta property="og:title" content="SceneVoice 声景 — YouTube 和哔哩哔哩的口述影像">
 <meta property="og:description" content="任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。免费、开源。">
 <meta property="og:url" content="https://reddynb666.github.io/scenevoice/zh-CN/">
-<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.svg">
+<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="SceneVoice：任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:locale:alternate" content="en_US">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta name="twitter:image:alt" content="SceneVoice：任何 YouTube 或哔哩哔哩视频的口述影像，放进对白空隙，用你自己的读屏朗读。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0b4a8f">
 <script type="application/ld+json">
@@ -52,7 +62,7 @@
   "accessibilityControl": ["fullKeyboardControl"],
   "accessibilityHazard": "none",
   "license": "https://github.com/reddynb666/scenevoice/blob/main/LICENSE",
-  "codeRepository": "https://github.com/reddynb666/scenevoice",
+  "sameAs": "https://github.com/reddynb666/scenevoice",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -99,10 +109,12 @@
   <section id="hear" aria-labelledby="hear-heading">
     <h2 id="hear-heading">先听听看</h2>
     <p>下面是三条示例口述，按 SceneVoice 实际的放法：先是一句对白，空隙里跟一条描述。你平时用什么听，就按哪个按钮；读到的文字也会同步显示在下面。</p>
-    <div class="button-row">
+    <!-- script.js 读到示例数据之前先藏起来：没有脚本，这两个按钮按了也没反应。 -->
+    <div class="button-row" id="hear-buttons" hidden>
       <button type="button" class="button" id="hear-sr" aria-describedby="hear-sr-help">用我的读屏听</button>
       <button type="button" class="button secondary" id="hear-tts" aria-describedby="hear-tts-help">用浏览器的语音听</button>
     </div>
+    <noscript><p>这两个按钮需要 JavaScript。示例文字就在下面，可以直接用读屏来读。</p></noscript>
     <p id="hear-sr-help">每出现一行，读屏就读一行。SceneVoice 默认就是这样工作的。</p>
     <p id="hear-tts-help">改用浏览器自带的语音朗读。它朗读期间，下面的文字不会再交给读屏播报，两个声音不会抢着说。需要 JavaScript，并且浏览器要支持语音合成。</p>
     <p id="sample-status" class="status" role="status" aria-live="polite"></p>
@@ -150,13 +162,13 @@
 
   <section id="install" aria-labelledby="install-heading">
     <h2 id="install-heading">安装</h2>
-    <p>支持 Chrome、Edge、Brave 等 Chromium 内核浏览器，116 及以上版本。商店版本正在审核；在此之前，GitHub 或 Gitee 上的发布包在这些浏览器里都能用。中国大陆用户建议走 Edge 加载项或 Gitee。</p>
+    <p>支持 Chrome、Edge、Brave 等 Chromium 内核浏览器，116 及以上版本。商店版本正在准备；在此之前，GitHub 上的发布包在这些浏览器里都能用。Edge 加载项和 Gitee 镜像上线后，中国大陆用户建议从那里安装。</p>
     <div class="button-row">
       <!-- FILL IN: 商店链接，见文件顶部说明。 -->
-      <a class="button" href="#" data-store="chrome" aria-disabled="true">Chrome 应用商店（即将上线）</a>
-      <a class="button" href="#" data-store="edge" aria-disabled="true">Edge 加载项（即将上线）</a>
+      <span class="button placeholder" data-store="chrome">Chrome 应用商店（即将上线）</span>
+      <span class="button placeholder" data-store="edge">Edge 加载项（即将上线）</span>
       <a class="button" href="https://github.com/reddynb666/scenevoice/releases" data-store="github">GitHub Releases</a>
-      <a class="button" href="#" data-store="gitee" aria-disabled="true">Gitee 镜像，中国大陆（即将上线）</a>
+      <span class="button placeholder" data-store="gitee">Gitee 镜像，中国大陆（即将上线）</span>
     </div>
     <p>用发布包安装：下载 zip 并解压，打开 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>），开启开发者模式，点“加载已解压的扩展程序”，选中解压后的文件夹。之后会打开欢迎页：先听一段示例，再选“自己的密钥”，设置页就会在 Key 输入框打开（SceneVoice 云端开放后也会在那里提供）。完整步骤和申请免费 Key 的方法见<a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md#安装">中文说明</a>。</p>
   </section>
@@ -186,7 +198,7 @@
       <li><strong>只有你选的模型能看到请求。</strong> 用自己的 Key 时，请求只发给阿里云百炼（通义千问）或谷歌的 Gemini API，按它们各自的条款处理，不经过任何第三方；用 SceneVoice 云端时，请求先到中转，再由中转转发给模型，不做记录。用通义千问的中国大陆地址，数据不出境。</li>
       <li><strong>一切都在你的电脑上，随时可以删。</strong> 口述、纠错记录和设置都存在本地，设置页能看到存了什么，一键全部删除。</li>
     </ul>
-    <p>完整的<a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" hreflang="en">隐私政策</a>（英文）列出了每一个请求和每一项权限，以及为什么需要。</p>
+    <p>完整的<a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md">隐私政策</a>列出了每一个请求和每一项权限，以及为什么需要（<a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" hreflang="en" lang="en">English</a>）。</p>
   </section>
 
   <section id="organisations" aria-labelledby="organisations-heading">
@@ -209,7 +221,7 @@
       <li><a href="https://github.com/reddynb666/scenevoice#readme" hreflang="en">英文说明（README）</a></li>
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CHANGELOG.md" hreflang="en">更新日志</a></li>
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CONTRIBUTING.md" hreflang="en">参与贡献，含读屏测试清单</a></li>
-      <li><a href="../assets/logo.png">图标，128×128 像素</a>，以及<a href="../assets/og.svg">社交分享图</a></li>
+      <li><a href="../assets/logo.png">图标，128×128 像素</a>，以及<a href="../assets/og.png">社交分享图，1200×630 像素</a>（<a href="../assets/og.svg">SVG 源文件</a>）</li>
     </ul>
   </section>
 
@@ -220,7 +232,7 @@
     <ul>
       <li><a href="https://github.com/reddynb666/scenevoice">GitHub</a></li>
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/LICENSE">MIT 协议</a></li>
-      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" hreflang="en">隐私政策</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md">隐私政策</a></li>
       <li><a href="../" hreflang="en" lang="en">English</a></li>
     </ul>
     <!-- FILL IN: 测试者名单，须经本人同意。 -->

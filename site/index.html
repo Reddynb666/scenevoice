@@ -4,14 +4,20 @@
   (same sections, same ids, same order; site/check.mjs compares them).
 
   THINGS THE OWNER FILLS IN (search for "FILL IN"):
-    1. Store links, in the "Install" section: the <a> elements with data-store="chrome",
-       data-store="edge" and data-store="gitee". For each one, replace href="#" with the real
-       address, delete aria-disabled="true", and change the visible text from "… (coming soon)"
-       to the store's name.
+    1. Store links, in the "Install" section: the <span> elements with data-store="chrome",
+       data-store="edge" and data-store="gitee". For each one, change the <span> into
+       <a class="button" href="https://…" data-store="…">, drop the "placeholder" class and
+       change the visible text from "… (coming soon)" to the store's name. Then reword the
+       first paragraph of that section ("Store listings are on the way …"); update it too once
+       a listing has actually been submitted.
     2. Contact address, in the "For organisations" section: the mailto: link (data-contact).
     3. Names of the blind testers, in the footer (data-testers).
     4. SITE URL: if the site moves from GitHub Pages to a domain of its own, update the
-       <link rel="canonical">, the hreflang alternates, og:url, og:image and the JSON-LD url.
+       <link rel="canonical">, the hreflang alternates, og:url, og:image, twitter:image and
+       the JSON-LD url.
+    5. SOCIAL CARD: assets/og.svg is the editable source; assets/og.png (1200 by 630, what
+       the share previews actually show) is rendered from it with `python3 scripts/make_og.py`.
+       Re-run that after changing the SVG.
 -->
 <html lang="en" dir="ltr">
 <head>
@@ -32,11 +38,16 @@
 <meta property="og:title" content="SceneVoice — audio description for YouTube and Bilibili">
 <meta property="og:description" content="Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.">
 <meta property="og:url" content="https://reddynb666.github.io/scenevoice/">
-<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.svg">
+<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
 <meta property="og:locale" content="en_US">
 <meta property="og:locale:alternate" content="zh_CN">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta name="twitter:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0b4a8f">
 <script type="application/ld+json">
@@ -54,7 +65,7 @@
   "accessibilityControl": ["fullKeyboardControl"],
   "accessibilityHazard": "none",
   "license": "https://github.com/reddynb666/scenevoice/blob/main/LICENSE",
-  "codeRepository": "https://github.com/reddynb666/scenevoice",
+  "sameAs": "https://github.com/reddynb666/scenevoice",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -101,10 +112,12 @@
   <section id="hear" aria-labelledby="hear-heading">
     <h2 id="hear-heading">Hear it</h2>
     <p>Three sample descriptions, the way SceneVoice places them: a line of dialogue, then a description in the pause. Pick whichever voice you listen with; the words also appear below as they are spoken.</p>
-    <div class="button-row">
+    <!-- Hidden until script.js has read the sample data: without it the buttons would do nothing. -->
+    <div class="button-row" id="hear-buttons" hidden>
       <button type="button" class="button" id="hear-sr" aria-describedby="hear-sr-help">Hear it with your screen reader</button>
       <button type="button" class="button secondary" id="hear-tts" aria-describedby="hear-tts-help">Hear it with the browser's voice</button>
     </div>
+    <noscript><p>The buttons need JavaScript. The sample text is below and your screen reader can read it as it is.</p></noscript>
     <p id="hear-sr-help">Your screen reader reads each line as it appears. This is how SceneVoice works by default.</p>
     <p id="hear-tts-help">The browser's built-in voice speaks instead. While it speaks, the lines below are not announced, so two voices never talk at once. Needs JavaScript and a browser with speech synthesis.</p>
     <p id="sample-status" class="status" role="status" aria-live="polite"></p>
@@ -152,13 +165,13 @@
 
   <section id="install" aria-labelledby="install-heading">
     <h2 id="install-heading">Install</h2>
-    <p>Works in Chrome, Edge, Brave and other Chromium browsers, version 116 or newer. Store listings are being reviewed; until they are live, the GitHub release works in every one of these browsers.</p>
+    <p>Works in Chrome, Edge, Brave and other Chromium browsers, version 116 or newer. Store listings are on the way; until they are live, the GitHub release works in every one of these browsers.</p>
     <div class="button-row">
       <!-- FILL IN: store links. See the note at the top of this file. -->
-      <a class="button" href="#" data-store="chrome" aria-disabled="true">Chrome Web Store (coming soon)</a>
-      <a class="button" href="#" data-store="edge" aria-disabled="true">Edge Add-ons (coming soon)</a>
+      <span class="button placeholder" data-store="chrome">Chrome Web Store (coming soon)</span>
+      <span class="button placeholder" data-store="edge">Edge Add-ons (coming soon)</span>
       <a class="button" href="https://github.com/reddynb666/scenevoice/releases" data-store="github">GitHub Releases</a>
-      <a class="button" href="#" data-store="gitee" aria-disabled="true">Gitee, for mainland China (coming soon)</a>
+      <span class="button placeholder" data-store="gitee">Gitee, for mainland China (coming soon)</span>
     </div>
     <p>From a GitHub release: download the zip, unzip it, open <code>chrome://extensions</code>, turn on Developer mode, choose "Load unpacked" and pick the unzipped folder. The welcome page then opens: hear a sample, then choose “My own key” and the settings page opens at the key field (SceneVoice Cloud will be offered there once it is live). The <a href="https://github.com/reddynb666/scenevoice#install">README</a> has the full steps, including how to get a free key.</p>
   </section>
@@ -211,7 +224,7 @@
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md" hreflang="zh-CN">README, in Chinese</a></li>
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CHANGELOG.md">Changelog</a></li>
       <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CONTRIBUTING.md">Contributing, with the screen reader test checklist</a></li>
-      <li><a href="assets/logo.png">Logo, 128 by 128 pixels</a> and the <a href="assets/og.svg">social card</a></li>
+      <li><a href="assets/logo.png">Logo, 128 by 128 pixels</a> and the <a href="assets/og.png">social card, 1200 by 630 pixels</a> (<a href="assets/og.svg">SVG source</a>)</li>
     </ul>
   </section>
 

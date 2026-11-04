@@ -48,14 +48,15 @@ Examples of what counts:
   service-worker start. Content scripts cannot read that area; they ask the
   service worker for a description script by message. Nothing secret goes to
   `storage.sync`.
-- **Keys travel only in request headers** (`x-goog-api-key` for Gemini,
-  `Authorization: Bearer` for Qwen and the SceneVoice Cloud device token),
-  never in a URL, and never enter a web page.
+- **Keys travel only in request headers** (`x-goog-api-key` for Gemini and for
+  the SceneVoice Cloud device token sent to the relay, `Authorization: Bearer`
+  for Qwen), never in a URL, and never enter a web page.
 - **All model requests are made by the offscreen document's worker**, from an
   extension origin. The content script never calls a model; the service
   worker never does either (Chrome stops it after 30 s). `host_permissions`
-  name only the two model hosts; any other address needs the user to type it
-  and grant an optional host permission for that single origin.
+  name only the two model hosts and the optional SceneVoice Cloud relay
+  (`api.scenevoice.app`); any other address needs the user to type it and
+  grant an optional host permission for that single origin.
 - **The content script runs in the isolated world** and injects no script into
   the page. There is no `externally_connectable` and no
   `web_accessible_resources`, so pages cannot message the extension or load
@@ -82,8 +83,10 @@ Examples of what counts:
 
 - The extension has no runtime dependencies; `package.json` lists only build
   and test tools, locked by `package-lock.json` and updated by Dependabot.
-- GitHub Actions are pinned to commit SHAs; the CI and release jobs run with
-  `contents: read` (the release job alone may write a GitHub Release).
+- GitHub Actions are pinned to commit SHAs in every workflow (CI, release and
+  Pages; `test/workflows.test.js` fails on a floating tag); the CI and release
+  jobs run with `contents: read` (the release job alone may write a GitHub
+  Release).
 - The store credentials (Chrome Web Store refresh token, Edge API key) are
   step-scoped in the release workflow: only the two upload steps and the step
   that checks they are set see them, never `npm ci`, `pip`, the end-to-end

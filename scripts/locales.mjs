@@ -39,6 +39,21 @@ for (const locale of files) TABLES[locale] = (await import(pathToFileURL(join(di
 /** Every language shipped, core first. */
 export const LOCALES = Object.keys(TABLES);
 
+/**
+ * The _locales folders the build writes, as [folder, locale]: one per language
+ * file, plus a bare parent folder (zh, pt) for every regional locale whose
+ * parent has no file of its own, written from the first such locale in LOCALES
+ * order (core first, then alphabetical: zh from zh_CN, pt from pt_BR). Chrome
+ * resolves a browser locale through its parents and then default_locale
+ * (pt_PT → pt → en), never through a sibling region, so without the parent
+ * folder a Portuguese (Portugal) or Hong Kong browser would get English.
+ */
+export const LOCALE_FOLDERS = LOCALES.map((l) => [l, l]);
+for (const locale of LOCALES) {
+  const base = locale.split('_')[0];
+  if (base !== locale && !LOCALE_FOLDERS.some(([folder]) => folder === base)) LOCALE_FOLDERS.push([base, locale]);
+}
+
 /** { key: { locale: text } }, in the order of en.mjs. */
 export const STRINGS = {};
 for (const key of Object.keys(TABLES.en)) STRINGS[key] = {};

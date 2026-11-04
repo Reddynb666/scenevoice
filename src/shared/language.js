@@ -40,6 +40,26 @@ export function isRealLanguage(base) {
 }
 
 /**
+ * A language's name in itself, for the popup's note and the transcript's intro:
+ * from the list ("zh-CN" → "简体中文", "pt-BR" → by its base "pt"), else as the
+ * browser names the base language ("sv-SE" → "svenska": the region is not part
+ * of which language the descriptions come in), and the code itself when it has
+ * no name (a private-use tag, or a runtime without Intl.DisplayNames).
+ */
+export function nativeName(code) {
+  const tag = String(code || '');
+  const base = tag.split('-')[0];
+  const listed = LANGUAGES.find((l) => l.code === tag) || LANGUAGES.find((l) => l.code === base);
+  if (listed) return listed.name;
+  if (!base || typeof Intl === 'undefined' || typeof Intl.DisplayNames !== 'function') return tag;
+  try {
+    return new Intl.DisplayNames([tag], { type: 'language' }).of(base) || tag;
+  } catch {
+    return tag;
+  }
+}
+
+/**
  * Whether descriptions can be written in this language: one with its own
  * tables, or any real language (the model writes it; SceneVoice then falls
  * back to the English tables for the "Not certain." lead and the like). The

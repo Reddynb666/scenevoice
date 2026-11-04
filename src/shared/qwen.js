@@ -57,10 +57,17 @@ export function qwenResponseText(body) {
   return { text, finishReason: finishReason === 'length' ? 'MAX_TOKENS' : finishReason };
 }
 
-/** What one reply cost, from its usage (zeros when the server sent none): see usage.js. */
+/**
+ * What one reply cost, from its usage (zeros when the server sent none): see usage.js.
+ * DashScope already counts reasoning_tokens inside completion_tokens (unlike
+ * Gemini, whose candidatesTokenCount excludes thinking), so the reasoning
+ * share is taken out of the output to keep the convention usage.js sums and prices.
+ */
 export function qwenUsageOf(body) {
   const u = body?.usage || {};
-  return countedUsage({ input: u.prompt_tokens, output: u.completion_tokens, thinking: u.completion_tokens_details?.reasoning_tokens });
+  const reasoning = Number(u.completion_tokens_details?.reasoning_tokens) || 0;
+  const completion = Number(u.completion_tokens) || 0;
+  return countedUsage({ input: u.prompt_tokens, output: Math.max(0, completion - reasoning), thinking: reasoning });
 }
 
 /**

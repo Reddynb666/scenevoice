@@ -28,6 +28,55 @@ import { runAsk, runGeneration, runRevision } from '../shared/generation.js';
 /** @type {Map<string, {done:number,total:number,chunkStartedAt:number,chunkMs:number[],controller:AbortController,videoId:string,lang:string,provider:string}>} */
 const jobs = new Map();
 
+// ---------- the model a key chose ----------
+// A config that names no model ('' = automatic: every SceneVoice Cloud config,
+// and a Gemini key left on the default) makes the client list the key's models
+// before its first request (generation.js ensureModel). A client is made per
+// request, so without this every stretch, question and correction would list
+// first: two relay round trips for one description, and a round trip of
+// latency added to each. The model a key ended up with is remembered here for
+// the session, per address and key, and forgotten when a request says it is
+// gone, so the next one lists again. The offscreen document is closed when
+// idle, so nothing here outlives a sitting or a change of plan.
+
+/** @type {Map<string, string>} model by `${apiBase}|${apiKey}` */
+const chosenModels = new Map();
+const chosenKey = (config) => `${config?.apiBase || ''}|${config?.apiKey || ''}`;
+
+/** The config with the remembered model filled in, when it names none and one is remembered. */
+function seeded(config) {
+  if (config?.model) return config;
+  const model = chosenModels.get(chosenKey(config));
+  return model ? { ...config, model } : config;
+}
+
+/** Keep the model the client has now (after ensureModel or a switch) for the next request with this key. */
+function remember(config, client) {
+  if (client?.model) chosenModels.set(chosenKey(config), client.model);
+}
+
+/** Forget the remembered model when a request found it gone, so the next request lists again. */
+function forgetIfGone(config, err) {
+  if (err?.code === 'model-not-found' || err?.code === 'no-model') chosenModels.delete(chosenKey(config));
+}
+
+/**
+ * Run one request with a client made by `make` from the config (model filled
+ * in from memory when it names none); on success the model is remembered and
+ * returned with the reply, and a model found gone is forgotten.
+ */
+async function withClient(make, config, run) {
+  const client = make(seeded(config));
+  try {
+    const reply = await run(client);
+    remember(config, client);
+    return { ...reply, model: client.model || '' };
+  } catch (err) {
+    forgetIfGone(config, err);
+    throw err;
+  }
+}
+
 /** What a job's events and replies say about it; `provider` so the service worker can count and share its work. */
 const jobInfo = (job) => ({ done: job.done, total: job.total, chunkStartedAt: job.chunkStartedAt, chunkMs: job.chunkMs, provider: job.provider });
 
@@ -67,7 +116,7 @@ function start({ key, provider, config, params, script, force, newJobsAllowed })
   const mine = () => jobs.get(key) === job;
   self.postMessage({ event: 'started', key, videoId: job.videoId, lang: job.lang, ...jobInfo(job) });
 
-  const client = new GeminiClient(config);
+  const client = new GeminiClient(seeded(config));
   runGeneration({
     client,
     videoId: params.videoId,
@@ -77,10 +126,13 @@ function start({ key, provider, config, params, script, force, newJobsAllowed })
     script: force ? null : script,
     signal: controller.signal,
     onModel: (model, reason) => {
-      if (mine()) self.postMessage({ event: 'model', key, videoId: job.videoId, lang: job.lang, model, reason });
+      // The service worker keeps a model this key cannot use any more, for the key's own provider only.
+      if (mine()) self.postMessage({ event: 'model', key, videoId: job.videoId, lang: job.lang, model, reason, provider: job.provider });
     },
     onChunk: (sc, { done, total, usage, seconds }) => {
       if (!mine()) return;
+      // A section came back: the model that made it is the one to use next with this key.
+      remember(config, client);
       const now = Date.now();
       if (job.chunkStartedAt) job.chunkMs.push(now - job.chunkStartedAt);
       job.done = done;
@@ -97,6 +149,7 @@ function start({ key, provider, config, params, script, force, newJobsAllowed })
       }
     })
     .catch((err) => {
+      forgetIfGone(config, err);
       if (!mine()) return;
       const code = err instanceof ApiError ? err.code : 'unknown';
       // What was billed before the job ended (a reply that could not be read, a section cut short) goes with the event, to be counted.
@@ -177,67 +230,60 @@ function status({ key }) {
 /** A failed request as a reply: the error, when the allowance resets, and what the request cost when it was billed anyway. */
 const failure = (err) => ({ error: err instanceof ApiError ? err.code : 'unknown', detail: err?.detail || String(err?.message || ''), ...(err?.resetAt ? { resetAt: err.resetAt } : {}), ...(err?.usage ? { usage: err.usage } : {}) });
 
+/** A client for frames requests, or Gemini by video link, from a config (see withClient). */
+const framesClient = (provider) => (config) => createClient(provider, config);
+const linkClient = (config) => new GeminiClient(config);
+
 /** Answer a question. Replies { text, time, confidence, usage, model }. */
 function ask({ mode, provider, config, params }) {
-  return inTurn(mode === 'frames' ? provider : 'gemini', async () => {
-    if (mode === 'frames') {
-      const client = createClient(provider, config);
-      return { ...(await askFrames(provider, client, params)), model: client.model || '' };
-    }
-    const client = new GeminiClient(config);
-    return { ...(await runAsk(client, params)), model: client.model || '' };
-  });
+  return inTurn(mode === 'frames' ? provider : 'gemini', () =>
+    mode === 'frames' ? withClient(framesClient(provider), config, (client) => askFrames(provider, client, params)) : withClient(linkClient, config, (client) => runAsk(client, params)),
+  );
 }
 
 /** Describe one moment again. Replies { cue, usage, model }, where cue is null when there is nothing there to describe. */
 function revise({ mode, provider, config, params }) {
-  return inTurn(mode === 'frames' ? provider : 'gemini', async () => {
-    if (mode === 'frames') {
-      const client = createClient(provider, config);
-      return { ...(await reviseFrames(provider, client, params)), model: client.model || '' };
-    }
-    const client = new GeminiClient(config);
-    return { ...(await runRevision(client, params)), model: client.model || '' };
-  });
+  return inTurn(mode === 'frames' ? provider : 'gemini', () =>
+    mode === 'frames' ? withClient(framesClient(provider), config, (client) => reviseFrames(provider, client, params)) : withClient(linkClient, config, (client) => runRevision(client, params)),
+  );
 }
 
 /** Describe one stretch of video from its frames. Replies { chunk, model, usage }. */
 function frames({ provider, config, params }) {
-  return inTurn(provider, async () => {
-    const client = createClient(provider, config);
-    const { usage, ...chunk } = await describeFrames(provider, client, params);
-    return { chunk, model: client.model || '', usage };
-  });
+  return inTurn(provider, () =>
+    withClient(framesClient(provider), config, async (client) => {
+      const { usage, ...chunk } = await describeFrames(provider, client, params);
+      return { chunk, usage };
+    }),
+  );
 }
 
 // ---------- SceneVoice Cloud shared cache ----------
 // Text only. The service worker checks what comes back (shared/cloud.js
-// cloudScriptOk) before saving it; this only fetches.
+// cloudScriptOk) before saving it; this only fetches. The requests take a lane
+// of their own ('cloud-cache'): the idle check (status) then sees one in flight,
+// and a cache lookup never waits behind two Cloud sections.
 
 /** The worker's own fetch, looked up at call time so tests can stand in for it. */
 const cloudFetch = (input, init) => fetch(input, init);
 
 /** The script another SceneVoice user finished for this video, or null. Replies { script } or { error, detail }. */
-async function cloudGet({ config, params }) {
-  try {
+function cloudGet({ config, params }) {
+  return inTurn('cloud-cache', async () => {
     const { status, body } = await cloudRequest(cloudFetch, scriptGetPath(params?.videoId, params?.lang), { token: config?.apiKey || '' });
     if (status === 404) return { script: null };
     if (status < 200 || status >= 300) return { error: 'request-failed', detail: `HTTP ${status}` };
     return { script: body };
-  } catch (err) {
-    return failure(err);
-  }
+  });
 }
 
 /** Put a finished script into the shared cache. Replies { ok } or { error, detail }; the caller only logs a failure. */
-async function cloudPut({ config, params }) {
-  try {
+function cloudPut({ config, params }) {
+  return inTurn('cloud-cache', async () => {
     const { status, body } = await cloudRequest(cloudFetch, scriptPath(params?.videoId, params?.lang), { method: 'PUT', token: config?.apiKey || '', body: params?.script });
     if (status < 200 || status >= 300) return { error: 'request-failed', detail: String(body?.error?.message || `HTTP ${status}`) };
     return { ok: true };
-  } catch (err) {
-    return failure(err);
-  }
+  });
 }
 
 // No chrome.runtime listener here. offscreen.js creates this worker and is the

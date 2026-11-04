@@ -89,7 +89,11 @@ describe('Qwen requests', () => {
 
   it('reads what an answer cost from the usage block', () => {
     expect(qwenUsageOf(chat('x'))).toEqual(counted);
-    expect(qwenUsageOf({ usage: { prompt_tokens: 10, completion_tokens: 30, completion_tokens_details: { reasoning_tokens: 20 } } })).toEqual({ input: 10, output: 30, thinking: 20, requests: 1 });
+    // DashScope counts reasoning inside completion_tokens; usage.js adds thinking to output, so it is taken out here.
+    expect(qwenUsageOf({ usage: { prompt_tokens: 10, completion_tokens: 30, completion_tokens_details: { reasoning_tokens: 20 } } })).toEqual({ input: 10, output: 10, thinking: 20, requests: 1 });
+    expect(qwenUsageOf({ usage: { prompt_tokens: 10, completion_tokens: 30 } })).toEqual({ input: 10, output: 30, thinking: 0, requests: 1 });
+    // A malformed breakdown larger than the whole never makes the output negative.
+    expect(qwenUsageOf({ usage: { prompt_tokens: 10, completion_tokens: 30, completion_tokens_details: { reasoning_tokens: 45 } } })).toEqual({ input: 10, output: 0, thinking: 45, requests: 1 });
     expect(qwenUsageOf({ choices: [] })).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
   });
 });

@@ -69,6 +69,11 @@ export function pageIssues(dom, rel) {
   if (!doc.title.trim()) push('empty <title>');
   if (!doc.querySelector('meta[name="description"]')?.content.trim()) push('no meta description');
   if (!doc.querySelector('meta[property="og:title"]')) push('no Open Graph title');
+  // Share previews (X, Facebook, LinkedIn, Slack, WeChat) render PNG/JPEG/WebP only, never SVG.
+  const ogImage = doc.querySelector('meta[property="og:image"]')?.content || '';
+  if (!/^https:\/\/.+\.(png|jpe?g|webp)$/i.test(ogImage)) push(`og:image must be an absolute https PNG/JPEG/WebP, not "${ogImage}"`);
+  if (!doc.querySelector('meta[property="og:image:alt"]')?.content.trim()) push('no og:image:alt');
+  if ((doc.querySelector('meta[name="twitter:image"]')?.content || '') !== ogImage) push('twitter:image differs from og:image');
 
   const h1s = doc.querySelectorAll('h1');
   if (h1s.length !== 1) push(`${h1s.length} <h1> elements`);
@@ -88,12 +93,8 @@ export function pageIssues(dom, rel) {
     const name = accessibleName(a);
     if (!name) push(`link without text: ${a.outerHTML.slice(0, 80)}`);
     if (href == null || href === '') { push(`link without href: "${name}"`); continue; }
-    if (href === '#') {
-      // A store that is not open yet. It must say so and be marked for assistive tech.
-      if (!a.hasAttribute('data-store')) push(`dead "#" link: "${name}"`);
-      if (a.getAttribute('aria-disabled') !== 'true') push(`placeholder link "${name}" lacks aria-disabled`);
-      continue;
-    }
+    // "#" scrolls to the top and moves the focus start point there: a trap for keyboard users.
+    if (href === '#') { push(`dead "#" link: "${name}"`); continue; }
     if (href.startsWith('#')) {
       if (!doc.getElementById(href.slice(1))) push(`fragment ${href} has no target ("${name}")`);
     } else if (!/^(https?:|mailto:)/.test(href)) {
@@ -106,6 +107,18 @@ export function pageIssues(dom, rel) {
     if (!accessibleName(b)) push(`button without a name: ${b.outerHTML.slice(0, 80)}`);
     if (!b.getAttribute('type')) push(`button without type: "${accessibleName(b)}"`);
   }
+
+  // A store is either a real link or plain text saying "coming soon": never a focusable dead end.
+  for (const s of doc.querySelectorAll('[data-store]')) {
+    const store = s.getAttribute('data-store');
+    const isLink = s.tagName === 'A' && /^https:\/\//.test(s.getAttribute('href') || '');
+    const isPlaceholder = s.tagName === 'SPAN' && s.classList.contains('placeholder') && !s.hasAttribute('tabindex');
+    if (!isLink && !isPlaceholder) push(`store "${store}" is neither an https link nor a span.placeholder`);
+  }
+
+  // The "Hear it" buttons only work with script.js: hidden until it runs, and said so without it.
+  if (!doc.querySelector('#hear-buttons[hidden]')) push('#hear-buttons is not hidden before script.js runs');
+  if (!doc.querySelector('#hear noscript')?.textContent.trim()) push('#hear has no <noscript> note');
 
   for (const img of doc.querySelectorAll('img')) {
     if (!img.hasAttribute('alt')) push(`image without alt: ${img.getAttribute('src')}`);
@@ -134,6 +147,7 @@ export function pageIssues(dom, rel) {
     if (ld['@type'] !== 'SoftwareApplication') push('JSON-LD is not a SoftwareApplication');
     if (ld.applicationCategory !== 'Accessibility') push('JSON-LD applicationCategory is not Accessibility');
     if (ld.offers?.price !== '0') push('JSON-LD offer is not free');
+    if ('codeRepository' in ld) push('JSON-LD uses codeRepository (a SoftwareSourceCode property) on a SoftwareApplication; use sameAs');
   } catch (e) {
     push(`JSON-LD missing or invalid: ${e.message}`);
   }

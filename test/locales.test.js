@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CORE_LOCALES, LOCALES, SPOKEN_KEYS, STRINGS, TABLES, coverage, strayKeys } from '../scripts/locales.mjs';
+import { CORE_LOCALES, LOCALES, LOCALE_FOLDERS, SPOKEN_KEYS, STRINGS, TABLES, coverage, strayKeys } from '../scripts/locales.mjs';
 import { COMMANDS } from '../src/shared/constants.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,6 +62,22 @@ describe('interface strings', () => {
       expect(TABLES[l].ext_description.length, `${l} ext_description`).toBeLessThanOrEqual(132);
       expect(TABLES[l].ext_description, `${l} names Bilibili`).toMatch(/Bilibili|哔哩哔哩/);
     }
+  });
+
+  it('writes a bare parent folder for every regional locale, so pt-PT and zh-HK browsers do not get English', () => {
+    // Chrome resolves pt_PT → pt → default_locale and never tries pt_BR; the
+    // build therefore writes _locales/pt from pt_BR (and zh from zh_CN, the
+    // core locale, not zh_TW), and each folder's ui_lang names its source.
+    const folders = Object.fromEntries(LOCALE_FOLDERS);
+    for (const locale of LOCALES) {
+      expect(folders[locale], `${locale} folder`).toBe(locale);
+      const base = locale.split('_')[0];
+      expect(folders[base], `${base} folder for ${locale}`).toBeTruthy();
+      expect(LOCALES, `${base} folder written from a shipped locale`).toContain(folders[base]);
+    }
+    expect(folders.zh).toBe('zh_CN');
+    expect(folders.pt).toBe('pt_BR');
+    expect(new Set(LOCALE_FOLDERS.map(([f]) => f)).size, 'no folder written twice').toBe(LOCALE_FOLDERS.length);
   });
 
   it('translates every string into Chinese', () => {

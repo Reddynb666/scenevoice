@@ -215,11 +215,13 @@ npm run dev          # 修改后自动重新构建
 
 - `src/content/` —— 运行在 YouTube 页面和 B 站视频页：跟踪播放、实时区域、播放器按钮、提问对话框，以及 `generator.js`：页面这一侧的生成接口（启动、停止、提问；进度以消息形式送回）。和网站有关的部分在平台适配器 `youtube.js`、`bilibili.js` 里（由 `platforms.js` 选择）；`frames.js` 为需要发送画面的模型截取播放中的视频画面。
 - `src/background/` —— 后台 Service Worker：语音合成、快捷键、给弹出面板的状态、缓存管理，以及生成任务的枢纽（启动任务、保存每段结果、通知各标签页）。它自己不调用 Gemini：Chrome 会终止 fetch 超过 30 秒还没响应的 Service Worker，而视频请求经常超过 30 秒。
-- `src/offscreen/` —— 隐藏页面及其 web worker，Gemini 请求真正在这里发出（`worker.js` 维护任务列表，`offscreen.js` 负责和 Service Worker 之间的消息）。
-- `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、调度、缓存、设置。每个网站用哪个模型、模型是打开视频链接还是接收画面，在 `providers.js` 里；`qwen.js` 是通义千问客户端，`frames.js` 是基于画面的提示词，`describe.js` 用任一模型执行它们，`coverage.js` 记录视频哪些部分已经有口述。
-- `src/popup/`、`src/options/` —— 工具栏弹出面板和设置页。
+- `src/offscreen/` —— 隐藏页面及其 web worker，模型请求真正在这里发出：Gemini、通义千问，或 SceneVoice Cloud 的中转（包括它的共享缓存读写）（`worker.js` 维护任务列表，`offscreen.js` 负责和 Service Worker 之间的消息）。
+- `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、缓存、设置。每个网站用哪个模型（Gemini、通义千问还是 SceneVoice Cloud）、模型是打开视频链接还是接收画面，在 `providers.js` 里；`qwen.js` 是通义千问客户端，`cloud.js` 是中转自身的接口（设备令牌、额度、许可证，以及脚本哪些部分可以共享），`usage.js` 是每日计数、价格和每日上限，`language.js` 决定哪些语言代码可以作为口述语言，`scheduler.js` 决定什么可以打断什么，`frames.js` 是基于画面的提示词，`describe.js` 用任一模型执行它们，`coverage.js` 记录视频哪些部分已经有口述。
+- `src/popup/`、`src/options/`、`src/transcript/`、`src/guide/`、`src/welcome/` —— 工具栏弹出面板、设置页、文字稿页、API 密钥指南，以及首次使用时打开的欢迎页（先听一段示例，再选“免费开始”或自己的密钥）。
 - `scripts/locales/` —— 全部界面文字，每种界面语言一个文件（`en.mjs` 为基准）；构建时生成 `_locales/`。
 - `test/` —— 单元测试，以及 `test/e2e/e2e.py`：在无头 Chromium 里驱动真实扩展，对接假 YouTube 页面和模拟 Gemini API（127 项检查，含 axe 无障碍扫描）。
+- `server/` —— SceneVoice Cloud 参考中转，一个 Cloudflare Worker，自带 README（协议说明）和 `server/test/` 下的测试；尚未部署。
+- `site/` —— 项目网站（英文 + 简体中文，无需构建）；`site/check.mjs` 是它的无障碍门禁。
 
 发布前用读屏软件测试的清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)，其中也列出了 B 站的人工检查项。
 

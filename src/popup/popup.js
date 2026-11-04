@@ -3,6 +3,7 @@ import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, interfaceLocale, localizeDocument, t } from '../shared/i18n.js';
 import { generationProgressLabels, liveProgressLabels, typeAdjustedText } from '../shared/labels.js';
+import { nativeName } from '../shared/language.js';
 import { voiceTestMessage } from '../shared/settings.js';
 import { platformOfUrl } from '../shared/platforms.js';
 import { getSettings, resolveLanguage } from '../shared/storage.js';
@@ -23,18 +24,6 @@ function fillLanguages(select) {
     o.lang = l.code;
     if (RTL_LANGUAGES.includes(l.code)) o.dir = 'rtl';
     select.append(o);
-  }
-}
-
-/** A language's name in itself: from the list, else as the browser names it ("sv" → "svenska"). */
-function nativeName(code) {
-  const base = code.split('-')[0];
-  const listed = LANGUAGES.find((l) => l.code === code) || LANGUAGES.find((l) => l.code === base);
-  if (listed) return listed.name;
-  try {
-    return new Intl.DisplayNames([code], { type: 'language' }).of(code) || code;
-  } catch {
-    return code;
   }
 }
 

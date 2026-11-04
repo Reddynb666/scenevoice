@@ -19,12 +19,12 @@ import {
   corsHeaders,
   errorBody,
   jsonResponse,
+  licenceKeyForSession,
   nextUtcMidnight,
   normaliseLicenceKey,
   originAllowed,
   parseAllowedOrigins,
   randomHex,
-  randomLicenceKey,
   sha256Hex,
   timingSafeEqual,
   utcDay,
@@ -368,17 +368,39 @@ async function readJson(c, maxBytes = MAX_SMALL_BODY_BYTES) {
   }
 }
 
-/** Reads a model request body as bytes without looking inside it. */
+/**
+ * Reads a model request body as bytes without looking inside it. A declared
+ * length over the limit is refused outright; a body without one (chunked) is
+ * read chunk by chunk and dropped the moment it passes the limit, so an
+ * oversized upload never sits in memory next to other people's requests.
+ */
 async function readRawBody(c) {
   const declared = Number(c.request.headers.get('content-length'));
   if (declared > MAX_BODY_BYTES) return { error: fail(c, 413, 'Request body is larger than 20 MB') };
-  let bytes;
+  if (!c.request.body) return { bytes: new Uint8Array(0) };
+  const chunks = [];
+  let total = 0;
+  const reader = c.request.body.getReader();
   try {
-    bytes = await c.request.arrayBuffer();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return { error: fail(c, 413, 'Request body is larger than 20 MB') };
+      }
+      chunks.push(value);
+    }
   } catch {
     return { error: fail(c, 400, 'Could not read the request body') };
   }
-  if (bytes.byteLength > MAX_BODY_BYTES) return { error: fail(c, 413, 'Request body is larger than 20 MB') };
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return { bytes };
 }
 
@@ -779,11 +801,20 @@ async function stripeWebhook(c) {
   if (session.payment_status === 'unpaid') return jsonResponse({ received: true, pending: true });
   const existing = await store.getLicenceKeyForSession(c.env, sessionId);
   if (existing) return jsonResponse({ received: true, licenseKey: existing });
+  // The key is a function of the session, so two deliveries that both miss the
+  // index above (Stripe retries, completed and async_payment_succeeded arriving
+  // together) converge on one record instead of minting two activatable keys.
+  const key = await licenceKeyForSession(c.env.LICENSE_KEY_SECRET || c.env.STRIPE_WEBHOOK_SECRET, sessionId);
+  const stored = await store.getLicence(c.env, key);
+  if (stored) {
+    // A late re-delivery after an activation: keep the seats already taken, just restore the index.
+    await store.putLicenceKeyForSession(c.env, sessionId, key);
+    return jsonResponse({ received: true, licenseKey: key, plan: stored.plan, seats: stored.seats });
+  }
   const meta = session.metadata || {};
   const plan = meta.plan === 'org' ? 'org' : 'plus';
   const seatsRaw = parseInt(meta.seats, 10);
   const seats = Number.isInteger(seatsRaw) && seatsRaw > 0 && seatsRaw <= 10000 ? seatsRaw : 1;
-  const key = randomLicenceKey();
   await store.putLicence(c.env, key, { plan, seats, used: 0, created: new Date(c.now).toISOString(), session: sessionId });
   await store.putLicenceKeyForSession(c.env, sessionId, key);
   return jsonResponse({ received: true, licenseKey: key, plan, seats });

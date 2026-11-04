@@ -4,20 +4,21 @@
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-/** Model calls waiting to be answered by the test, in the order they were made. */
+/** Model calls waiting to be answered by the test, in the order they were made, with the client each was given. */
 const calls = [];
-const hold = (provider) => (p, client, params) => new Promise((resolve, reject) => calls.push({ provider: provider || p, params, resolve, reject }));
+const hold = (provider) => (p, client, params) => new Promise((resolve, reject) => calls.push({ provider: provider || p, client, params, resolve, reject }));
 
 vi.mock('../src/shared/describe.js', () => ({
-  createClient: (provider, config) => ({ provider, model: config?.model || `${provider}-model` }),
+  // A config that names no model ('') gives a client with none, as the real adapters do until ensureModel lists one.
+  createClient: (provider, config) => ({ provider, model: config?.model ?? `${provider}-model` }),
   describeFrames: vi.fn(hold()),
   askFrames: vi.fn(hold()),
   reviseFrames: vi.fn(hold()),
 }));
 vi.mock('../src/shared/generation.js', () => ({
   runGeneration: vi.fn(() => new Promise(() => {})),
-  runAsk: vi.fn((client, params) => new Promise((resolve, reject) => calls.push({ provider: 'gemini', params, resolve, reject }))),
-  runRevision: vi.fn((client, params) => new Promise((resolve, reject) => calls.push({ provider: 'gemini', params, resolve, reject }))),
+  runAsk: vi.fn((client, params) => new Promise((resolve, reject) => calls.push({ provider: 'gemini', client, params, resolve, reject }))),
+  runRevision: vi.fn((client, params) => new Promise((resolve, reject) => calls.push({ provider: 'gemini', client, params, resolve, reject }))),
 }));
 
 const posted = [];
@@ -129,6 +130,89 @@ describe('requests wait their turn', () => {
     send({ cmd: 'start', key: 'v:en', provider: 'gemini', config: { apiKey: 'k', model: 'gemini-2.5-flash' }, params: { videoId: 'v', lang: 'en', duration: 60 } });
     await settle();
     expect(posted.find((m) => m.event === 'error')).toMatchObject({ key: 'v:en', code: 'bad-json', provider: 'gemini', usage, model: 'gemini-2.5-flash' });
+  });
+});
+
+describe('the model a key chose is remembered for the session', () => {
+  const CLOUD = 'https://api.scenevoice.app';
+  const token = { apiKey: 'svd_token', apiBase: CLOUD, model: '' };
+  const cloud = (start, config = token) => ({ cmd: 'frames', provider: 'cloud', config, params: { window: { start, end: start + 12 }, frames: [] } });
+
+  it('lists once: the next request with no model named starts with the model the first ended up with, until it is found gone', async () => {
+    const first = send(cloud(0));
+    await settle();
+    // Made with no model: the adapter lists the key's models before this request (ensureModel) and keeps one.
+    expect(calls[0].client.model).toBe('');
+    calls[0].client.model = 'gemini-2.5-flash-lite';
+    calls[0].resolve({ cues: [], characters: [], videoType: '', usage });
+    await settle();
+    expect(reply(first)).toMatchObject({ model: 'gemini-2.5-flash-lite', usage });
+
+    // The next stretch, and a question, start with that model: nothing to list.
+    const second = send(cloud(12));
+    const ask = send({ cmd: 'ask', mode: 'frames', provider: 'cloud', config: token, params: { question: 'What?' } });
+    await settle();
+    expect(calls.slice(1).map((c) => c.client.model)).toEqual(['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite']);
+    calls[2].resolve({ text: 'x', time: 1, confidence: 'high', usage });
+    await settle();
+    expect(reply(ask)).toMatchObject({ model: 'gemini-2.5-flash-lite' });
+
+    // Another key, or a config that names a model, is not touched by it.
+    const { ApiError } = await import('../src/shared/errors.js');
+    const slowDown = () => new ApiError('rate-limited', 'slow down', 429);
+    send(cloud(0, { ...token, apiKey: 'svd_other' }));
+    await settle();
+    expect(calls[3].client.model).toBe('');
+    calls[3].reject(slowDown());
+    send(cloud(0, { ...token, model: 'gemini-2.5-flash' }));
+    await settle();
+    expect(calls[4].client.model).toBe('gemini-2.5-flash');
+    calls[4].reject(slowDown());
+    await settle();
+
+    // The model is gone (the relay narrowed its list): forgotten, and the next request lists again.
+    calls[1].reject(new ApiError('model-not-found', 'gone', 404));
+    await settle();
+    expect(reply(second)).toMatchObject({ error: 'model-not-found' });
+    send(cloud(24));
+    await settle();
+    expect(calls[5].client.model).toBe('');
+    calls[5].reject(slowDown());
+    await settle();
+  });
+
+  it('seeds a job with it, keeps the model a job ended up with, and says which provider switched model', async () => {
+    const { runGeneration } = await import('../src/shared/generation.js');
+    const key = { apiKey: 'svd_job', apiBase: CLOUD, model: '' };
+    const seededWith = [];
+    runGeneration.mockImplementationOnce(async ({ client, onModel, onChunk }) => {
+      seededWith.push(client.model);
+      client.model = 'gemini-2.5-flash';
+      // The first model was gone for this key: switched, and the service worker told which provider's job it was.
+      client.model = 'gemini-2.5-flash-lite';
+      onModel('gemini-2.5-flash-lite', 'model-not-found');
+      await onChunk({ complete: false, cues: [], completedUntil: 300 }, { done: 1, total: 2, usage, seconds: 300 });
+      return new Promise(() => {});
+    });
+    send({ cmd: 'start', key: 'job:en', provider: 'cloud', config: key, params: { videoId: 'job', lang: 'en', duration: 600 } });
+    await settle();
+    expect(seededWith).toEqual(['']);
+    expect(posted.find((m) => m.event === 'model')).toMatchObject({ key: 'job:en', model: 'gemini-2.5-flash-lite', reason: 'model-not-found', provider: 'cloud' });
+    expect(posted.find((m) => m.event === 'chunk')).toMatchObject({ key: 'job:en', model: 'gemini-2.5-flash-lite', provider: 'cloud' });
+    // A stretch of pictures with the same token starts with the model the job ended up with; a second job too.
+    send(cloud(0, key));
+    runGeneration.mockImplementationOnce(({ client }) => {
+      seededWith.push(client.model);
+      return new Promise(() => {});
+    });
+    send({ cmd: 'start', key: 'job2:en', provider: 'cloud', config: key, params: { videoId: 'job2', lang: 'en', duration: 600 } });
+    await settle();
+    expect(calls.at(-1).client.model).toBe('gemini-2.5-flash-lite');
+    expect(seededWith).toEqual(['', 'gemini-2.5-flash-lite']);
+    calls.at(-1).resolve({ cues: [], characters: [], videoType: '', usage });
+    send({ cmd: 'abort', key: 'job:en' });
+    send({ cmd: 'abort', key: 'job2:en' });
+    await settle();
   });
 });
 

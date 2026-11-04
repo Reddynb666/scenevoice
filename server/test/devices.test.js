@@ -109,7 +109,21 @@ describe('plain pages and CORS', () => {
       expect(res.status, origin).toBe(200);
       if (origin) expect(res.headers.get('access-control-allow-origin')).toBe(origin);
     }
-    expect(await call(env, { path: '/healthz', headers: { origin: 'https://evil.example' } })).toHaveProperty('status', 403);
+    for (const origin of ['https://evil.example', 'null']) {
+      const res = await call(env, { path: '/healthz', headers: { origin } });
+      expect(res.status, origin).toBe(403);
+      expect((await res.json()).error.details[0].reason).toBe('SCENEVOICE_ORIGIN');
+    }
+  });
+
+  it('refuses the opaque origin "null" before it can register a device or count against the network', async () => {
+    // A sandboxed iframe can send a simple (no-preflight) text/plain POST with Origin: null.
+    const env = makeEnv();
+    const res = await call(env, { method: 'POST', path: '/v1/devices', headers: { origin: 'null', 'content-type': 'text/plain' }, body: '{}' });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    expect(env.DEVICES.map.size).toBe(0);
+    expect([...env.USAGE.map.keys()].filter((k) => k.startsWith('ip:'))).toHaveLength(0);
   });
 
   it('answers preflight with the headers the two clients send', async () => {

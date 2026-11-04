@@ -9,7 +9,7 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statS
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
-import { CORE_LOCALES, LOCALES, SPOKEN_KEYS, STRINGS, coverage, strayKeys } from './locales.mjs';
+import { CORE_LOCALES, LOCALES, LOCALE_FOLDERS, SPOKEN_KEYS, STRINGS, coverage, strayKeys } from './locales.mjs';
 import { RTL_LANGUAGES } from '../src/shared/constants.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,8 +21,9 @@ const args = new Set(process.argv.slice(2));
 
 /**
  * Messages written into every _locales folder by writeLocales() rather than
- * translated: ui_lang is the folder's language as a BCP 47 tag and ui_dir its
- * direction, which shared/i18n.js puts on <html>. Not in the locale files, so
+ * translated: ui_lang is the language of the folder's strings as a BCP 47 tag
+ * (pt-BR in the pt folder) and ui_dir its direction, which shared/i18n.js puts
+ * on <html>. Not in the locale files, so
  * the completeness checks leave them out.
  */
 const GENERATED_KEYS = new Set(['ui_lang', 'ui_dir']);
@@ -79,10 +80,12 @@ function checkStrings() {
 }
 
 function writeLocales() {
-  // Chrome looks for zh_TW, then zh, then the default: a Chinese locale with no
-  // file of its own gets the Simplified interface rather than English.
-  const folders = [...LOCALES.map((l) => [l, l]), ...(LOCALES.includes('zh') ? [] : [['zh', 'zh_CN']])];
-  for (const [folder, locale] of folders) {
+  // One folder per language file, plus a bare parent folder for every regional
+  // locale (zh from zh_CN, pt from pt_BR): Chrome looks for zh_HK, then zh,
+  // then the default, never a sibling region, so a Chinese or Portuguese
+  // browser locale with no file of its own gets that interface rather than
+  // English. The list is LOCALE_FOLDERS in locales.mjs.
+  for (const [folder, locale] of LOCALE_FOLDERS) {
     const out = {};
     for (const [key, v] of Object.entries(STRINGS)) {
       let message = v[locale] ?? v.en;
@@ -95,10 +98,11 @@ function writeLocales() {
     }
     // Which language this folder's strings are in, for the pages' <html lang>
     // and dir (shared/i18n.js): @@ui_locale is the browser's locale, which may
-    // have no folder here and then gets English. Generated, so the locale
-    // files themselves need not carry it.
-    out.ui_lang = { message: folder === 'zh' ? 'zh-CN' : folder.replace('_', '-') };
-    out.ui_dir = { message: RTL_LANGUAGES.includes(folder) ? 'rtl' : 'ltr' };
+    // have no folder here and then gets English. The source locale's tag, not
+    // the folder's: the pt folder holds Brazilian Portuguese, so it says pt-BR.
+    // Generated, so the locale files themselves need not carry it.
+    out.ui_lang = { message: locale.replace('_', '-') };
+    out.ui_dir = { message: RTL_LANGUAGES.includes(folder.split('_')[0]) ? 'rtl' : 'ltr' };
     const dir = join(dist, '_locales', folder);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'messages.json'), `${JSON.stringify(out, null, 2)}\n`);

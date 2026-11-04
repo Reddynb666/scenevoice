@@ -1,9 +1,9 @@
 // A readable page of every description for one video: for reviewing, for braille
 // readers, and for sharing with the person who asked for the video to be described.
 
-import { LANGUAGES } from '../shared/constants.js';
 import { getScript } from '../shared/cache.js';
 import { localizeDocument, t } from '../shared/i18n.js';
+import { nativeName } from '../shared/language.js';
 import { videoPageUrl } from '../shared/platforms.js';
 import { formatTime } from '../shared/script.js';
 
@@ -84,8 +84,8 @@ async function init() {
     $('download').removeAttribute('href');
     return;
   }
-  const langName = LANGUAGES.find((l) => l.code === lang)?.name || lang;
-  $('intro').textContent = t('transcript_intro', String(script.cues.length), langName, script.model || '?');
+  // Any real language can be a description language: named in itself, never by its bare code.
+  $('intro').textContent = t('transcript_intro', String(script.cues.length), nativeName(lang), script.model || '?');
   $('table').hidden = false;
   render();
   $('detail').addEventListener('change', render);

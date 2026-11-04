@@ -85,6 +85,83 @@ describe('site: accessibility', () => {
       expect($(dom, '#sample-status').textContent).toBe('');
     }
   });
+
+  it('the "Hear it" buttons are hidden until script.js runs, and a noscript note says so', () => {
+    for (const rel of PAGES) {
+      const raw = loadPage(rel);
+      expect($(raw, '#hear-buttons').hidden).toBe(true);
+      expect($(raw, '#hear noscript').textContent).toMatch(/JavaScript/);
+      // The CSS must not undo the attribute: .button-row is display: flex.
+      expect(readFileSync(new URL('./styles.css', import.meta.url), 'utf8')).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important/);
+      const live = openPage(rel);
+      expect($(live, '#hear-buttons').hidden).toBe(false);
+    }
+  });
+
+  it('a broken sample block leaves the buttons hidden rather than live and dead', () => {
+    const dom = loadPage('index.html', { url: BASE });
+    dom.window.document.getElementById('sample-data').textContent = '{not json';
+    dom.window.eval(scriptSource);
+    expect($(dom, '#hear-buttons').hidden).toBe(true);
+  });
+
+  it('stores that are not open yet are plain text, never links to "#"; the only store link is GitHub', () => {
+    for (const rel of PAGES) {
+      const dom = loadPage(rel);
+      expect(dom.window.document.querySelectorAll('a[href="#"]').length).toBe(0);
+      const stores = [...dom.window.document.querySelectorAll('[data-store]')];
+      expect(stores.map((s) => s.getAttribute('data-store'))).toEqual(['chrome', 'edge', 'github', 'gitee']);
+      for (const s of stores) {
+        if (s.tagName === 'A') expect(s.getAttribute('href')).toMatch(/^https:\/\/github\.com\//);
+        else {
+          expect(s.tagName).toBe('SPAN');
+          expect(s.classList.contains('placeholder')).toBe(true);
+          expect(s.hasAttribute('tabindex')).toBe(false);
+        }
+      }
+      expect(stores.filter((s) => s.tagName === 'A').map((s) => s.getAttribute('data-store'))).toEqual(['github']);
+    }
+  });
+
+  it('the install paragraph does not claim a store review or a Gitee release that do not exist yet', () => {
+    const install = (rel) => $(loadPage(rel), '#install p').textContent;
+    expect(install('index.html')).toMatch(/Store listings are on the way/);
+    expect(install('index.html')).not.toMatch(/being reviewed/);
+    expect(install('zh-CN/index.html')).toMatch(/商店版本正在准备/);
+    expect(install('zh-CN/index.html')).not.toMatch(/正在审核|GitHub 或 Gitee|建议走/);
+    expect(install('zh-CN/index.html')).toMatch(/Edge 加载项和 Gitee 镜像上线后/);
+  });
+
+  it('share previews get a PNG card with its size, on both pages; the Chinese page links the Chinese privacy policy', () => {
+    for (const rel of PAGES) {
+      const doc = loadPage(rel).window.document;
+      const meta = (sel) => doc.querySelector(sel)?.getAttribute('content');
+      expect(meta('meta[property="og:image"]')).toBe('https://reddynb666.github.io/scenevoice/assets/og.png');
+      expect(meta('meta[name="twitter:image"]')).toBe('https://reddynb666.github.io/scenevoice/assets/og.png');
+      expect(meta('meta[property="og:image:type"]')).toBe('image/png');
+      expect([meta('meta[property="og:image:width"]'), meta('meta[property="og:image:height"]')]).toEqual(['1200', '630']);
+      expect(meta('meta[name="twitter:image:alt"]')).toBe(meta('meta[property="og:image:alt"]'));
+      const ld = JSON.parse(doc.querySelector('script[type="application/ld+json"]').textContent);
+      expect(ld.sameAs).toBe('https://github.com/reddynb666/scenevoice');
+      expect(ld.codeRepository).toBeUndefined();
+    }
+    // The PNG is 1200 by 630 (IHDR width and height), as the meta tags promise.
+    const png = readFileSync(new URL('./assets/og.png', import.meta.url));
+    expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+
+    const zh = loadPage('zh-CN/index.html').window.document;
+    const privacy = [...zh.querySelectorAll('a')].filter((a) => /PRIVACY/.test(a.getAttribute('href')));
+    expect(privacy.map((a) => a.getAttribute('href'))).toEqual([
+      'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md',
+      'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md',
+      'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md',
+    ]);
+    expect(privacy[1].getAttribute('hreflang')).toBe('en');
+    expect(privacy[1].getAttribute('lang')).toBe('en');
+    const en = loadPage('index.html').window.document;
+    for (const a of en.querySelectorAll('a[href*="PRIVACY"]')) expect(a.getAttribute('href')).toMatch(/\/PRIVACY\.md$/);
+  });
 });
 
 describe('site: "Hear it" sample', () => {
