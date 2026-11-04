@@ -25,9 +25,17 @@ const jobs = new Map();
 
 const jobInfo = (job) => ({ done: job.done, total: job.total, chunkStartedAt: job.chunkStartedAt, chunkMs: job.chunkMs });
 
+/**
+ * Jobs that may run at once. Each one is a long video request against the
+ * listener's own key; many tabs (or a page full of embedded players) must not
+ * be able to start a dozen of them.
+ */
+const MAX_JOBS = 2;
+
 function start({ key, config, params, script, force }) {
   const existing = jobs.get(key);
   if (existing && !force) return { already: true, ...jobInfo(existing) };
+  if (!existing && jobs.size >= MAX_JOBS) return { error: 'busy' };
   if (existing) existing.controller.abort();
 
   const controller = new AbortController();

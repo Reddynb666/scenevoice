@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { LOCALES, STRINGS } from '../scripts/locales.mjs';
+import { CORE_LOCALES, LOCALES, STRINGS, TABLES, coverage, strayKeys } from '../scripts/locales.mjs';
 import { COMMANDS } from '../src/shared/constants.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -18,11 +18,22 @@ function walk(dir) {
 
 describe('interface strings', () => {
   it('has English and Simplified Chinese for every string, with the same placeholders', () => {
-    expect(LOCALES).toEqual(['en', 'zh_CN']);
+    expect(CORE_LOCALES).toEqual(['en', 'zh_CN']);
+    expect(LOCALES.slice(0, 2)).toEqual(CORE_LOCALES);
     for (const [key, v] of Object.entries(STRINGS)) {
-      for (const l of LOCALES) expect(v[l]?.trim(), `${l}: ${key}`).toBeTruthy();
-      const placeholders = LOCALES.map((l) => (v[l].match(/\$\d/g) || []).sort().join());
-      expect(new Set(placeholders).size, `placeholders: ${key}`).toBe(1);
+      for (const l of CORE_LOCALES) expect(v[l]?.trim(), `${l}: ${key}`).toBeTruthy();
+      const reference = (v.en.match(/\$\d/g) || []).sort().join();
+      for (const l of LOCALES) if (v[l]) expect((v[l].match(/\$\d/g) || []).sort().join(), `placeholders in ${l}: ${key}`).toBe(reference);
+    }
+  });
+
+  it('ships other languages only when they are nearly complete, with no stale keys', () => {
+    for (const l of LOCALES) {
+      expect(strayKeys(l), `${l} keys English does not have`).toEqual([]);
+      if (!CORE_LOCALES.includes(l)) expect(coverage(l), `${l} coverage`).toBeGreaterThanOrEqual(0.9);
+      // Keys follow the order of en.mjs, so the files can be read side by side.
+      const order = Object.keys(TABLES.en).filter((k) => k in TABLES[l]);
+      expect(Object.keys(TABLES[l]), `${l} key order`).toEqual(order);
     }
   });
 

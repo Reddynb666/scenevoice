@@ -202,7 +202,7 @@ npm run dev          # 修改后自动重新构建
 - `src/offscreen/` —— 隐藏页面及其 web worker，Gemini 请求真正在这里发出（`worker.js` 维护任务列表，`offscreen.js` 负责和 Service Worker 之间的消息）。
 - `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、调度、缓存、设置。每个网站用哪个模型、模型是打开视频链接还是接收画面，在 `providers.js` 里；`qwen.js` 是通义千问客户端，`frames.js` 是基于画面的提示词，`describe.js` 用任一模型执行它们，`coverage.js` 记录视频哪些部分已经有口述。
 - `src/popup/`、`src/options/` —— 工具栏弹出面板和设置页。
-- `scripts/locales.mjs` —— 全部界面文字的中英文；构建时生成 `_locales/`。
+- `scripts/locales/` —— 全部界面文字，每种界面语言一个文件（`en.mjs` 为基准）；构建时生成 `_locales/`。
 - `test/` —— 单元测试，以及 `test/e2e/e2e.py`：在无头 Chromium 里驱动真实扩展，对接假 YouTube 页面和模拟 Gemini API（127 项检查，含 axe 无障碍扫描）。
 
 发布前用读屏软件测试的清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)，其中也列出了 B 站的人工检查项。

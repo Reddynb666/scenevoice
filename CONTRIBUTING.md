@@ -5,7 +5,14 @@ Thank you for helping. SceneVoice exists for blind and low-vision viewers, so th
 ## Ground rules
 
 - Blind and low-vision users are the experts. If you are sighted, test with a screen reader and the monitor off before you open a pull request, and ask for a review from someone who uses one daily.
-- Every user-visible string lives in `scripts/locales.mjs` in both English and Simplified Chinese. The build fails if a string is missing in either language.
+- Every user-visible string lives in `scripts/locales/<language>.mjs`, one file per language; `en.mjs` is the reference and `zh_CN.mjs` must be complete too (the build fails otherwise). Other languages may be partial and fall back to English.
+
+## Translating the interface
+
+1. Copy `scripts/locales/en.mjs` to `scripts/locales/<locale>.mjs`, using Chrome's locale name (`pt_BR`, `zh_TW`, `es`, `ja`…). Keep the keys in the same order, so the two files can be read side by side with a screen reader.
+2. Translate the values. Keep `$1`, `$2`… where they are (they are filled in at run time), and keep product names (SceneVoice, Gemini, Qwen, NVDA, JAWS, VoiceOver) as they are.
+3. Run `npm run build`: it prints how much of the language is translated, and fails on a key English does not have or a placeholder that differs.
+4. Languages first translated by a machine (or an AI) are marked so in a comment at the top of their file until a native speaker who uses a screen reader has read them through. Please say in the pull request which it is.
 - No new permissions without a written justification in `PRIVACY.md`.
 - No analytics, no remote code, no network requests other than the Gemini API.
 

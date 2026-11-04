@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LOCALES, STRINGS } from './locales.mjs';
+import { CORE_LOCALES, LOCALES, STRINGS, coverage, strayKeys } from './locales.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -21,7 +21,11 @@ function walk(dir) {
   });
 }
 
-/** Every key used in source must exist in every locale; fail the build otherwise. */
+/**
+ * Every key used in source must exist in English and Chinese (the core
+ * languages); fail the build otherwise. Other languages may be partial (they
+ * fall back to English) but must not hold stale keys or different placeholders.
+ */
 function checkStrings() {
   const used = new Set();
   for (const file of walk(join(root, 'src')).concat(join(root, 'static', 'manifest.json'))) {
@@ -31,27 +35,32 @@ function checkStrings() {
     for (const m of text.matchAll(/__MSG_([a-z0-9_]+)__/g)) used.add(m[1]);
   }
   // Keys built dynamically.
-  for (const p of ['announce_detail_', 'announce_mode_', 'announce_density_']) for (const k of Object.keys(STRINGS)) if (k.startsWith(p)) used.add(k);
+  for (const p of ['announce_detail_', 'announce_mode_', 'announce_density_', 'status_fallback_', 'opt_next_']) for (const k of Object.keys(STRINGS)) if (k.startsWith(p)) used.add(k);
   const problems = [];
   for (const key of used) {
     if (key.startsWith('@@')) continue;
     if (!STRINGS[key]) problems.push(`missing string: ${key}`);
-    else for (const l of LOCALES) if (!STRINGS[key][l]) problems.push(`missing ${l}: ${key}`);
+    else for (const l of CORE_LOCALES) if (!STRINGS[key][l]) problems.push(`missing ${l}: ${key}`);
   }
   for (const [key, v] of Object.entries(STRINGS)) {
-    const counts = LOCALES.map((l) => (v[l]?.match(/\$\d/g) || []).sort().join());
-    if (new Set(counts).size > 1) problems.push(`placeholder mismatch: ${key}`);
+    const reference = (v.en.match(/\$\d/g) || []).sort().join();
+    for (const l of LOCALES) {
+      if (v[l] && (v[l].match(/\$\d/g) || []).sort().join() !== reference) problems.push(`placeholder mismatch in ${l}: ${key}`);
+    }
   }
+  for (const l of LOCALES) for (const key of strayKeys(l)) problems.push(`${l} has a key English does not: ${key}`);
   if (problems.length) {
     console.error(problems.join('\n'));
     process.exit(1);
   }
+  const partial = LOCALES.filter((l) => !CORE_LOCALES.includes(l)).map((l) => `${l} ${Math.round(coverage(l) * 100)}%`);
+  if (partial.length) console.log(`Interface languages besides English and Chinese: ${partial.join(', ')} (the rest falls back to English)`);
 }
 
 function writeLocales() {
-  // Chrome looks for zh_TW, then zh, then the default: give Traditional Chinese
-  // readers the Simplified interface rather than English until zh_TW exists.
-  const folders = [...LOCALES.map((l) => [l, l]), ['zh', 'zh_CN']];
+  // Chrome looks for zh_TW, then zh, then the default: a Chinese locale with no
+  // file of its own gets the Simplified interface rather than English.
+  const folders = [...LOCALES.map((l) => [l, l]), ...(LOCALES.includes('zh') ? [] : [['zh', 'zh_CN']])];
   for (const [folder, locale] of folders) {
     const out = {};
     for (const [key, v] of Object.entries(STRINGS)) {

@@ -15,7 +15,7 @@ import { parseTimedText, speechIntervals } from '../src/shared/dialogue.js';
 import { sanitizeFrames } from '../src/shared/frames.js';
 import { errorMessage } from '../src/shared/i18n.js';
 import { bilibiliIdFromUrl, parseBilibiliVideoId, platformOfUrl, platformOfVideoId, videoPageUrl } from '../src/shared/platforms.js';
-import { inputModeFor, providerFor } from '../src/shared/providers.js';
+import { effectiveProvider, inputModeFor, providerFor } from '../src/shared/providers.js';
 import { authorizeBackgroundMessage, classifySender, platformOfSender } from '../src/shared/sender.js';
 import { normalizeSettings } from '../src/shared/settings.js';
 import { resolveLanguage } from '../src/shared/storage.js';
@@ -65,6 +65,15 @@ describe('which model describes each site', () => {
     expect(providerFor({ youtubeProvider: 'qwen' }, 'youtube')).toBe('qwen');
     expect(providerFor({ bilibiliProvider: 'gpt' }, 'bilibili')).toBe('qwen');
     expect(providerFor({}, 'somewhere')).toBe('gemini');
+  });
+
+  it('uses the one key there is, whichever site it is', () => {
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: true })).toBe('qwen');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'bilibili', { gemini: true, qwen: false })).toBe('gemini');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'bilibili', { gemini: true, qwen: true })).toBe('qwen');
+    // No key at all: the chosen one, which is what the listener is asked for.
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: false })).toBe('gemini');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', null)).toBe('gemini');
   });
 
   it('opens the video by its link only for Gemini on YouTube; everything else is sent frames', () => {

@@ -21,7 +21,7 @@ import { CueScheduler, mayInterrupt, pickOne } from '../shared/scheduler.js';
 import { fitCuesToDialogue, parseTimedText, speechIntervals } from '../shared/dialogue.js';
 import { dropTextHeardInCaptions } from '../shared/onscreen.js';
 import { resolveVideoType, typeAdjustments } from '../shared/videotype.js';
-import { inputModeFor, providerFor } from '../shared/providers.js';
+import { effectiveProvider, inputModeFor, providerFor } from '../shared/providers.js';
 import { progressMilestone } from '../shared/progress.js';
 import { ASK_HISTORY_MAX } from '../shared/ask.js';
 import { Announcer } from './announcer.js';
@@ -43,7 +43,7 @@ const LATE_WAIT = 10;
 const PRESS_AGAIN_MS = 3000;
 /** Errors after which pressing the shortcut again may well work: said with how to carry on. */
 const RESUMABLE_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
-const PASSING_FRAME_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable']);
+const PASSING_FRAME_ERRORS = new Set(['quota', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable', 'busy']);
 
 function main() {
   const platform = platformFor(location.href);
@@ -104,6 +104,10 @@ function main() {
   let hintedFor = null;
   let tickCount = 0;
   let shortcuts = {};
+  /** Which keys are saved ({ gemini, qwen }), from the service worker; null until asked. */
+  let keys = null;
+  /** The video for which "only the other key is set, so that model describes" has been said. */
+  let fallbackSaidFor = null;
   let started = false;
   let dead = false;
   const timers = [];
@@ -131,8 +135,10 @@ function main() {
   const announcer = new Announcer(() => settings);
   const ui = new PageUI({ onToggle: () => toggle(), platform });
 
-  /** The model that describes videos on this site, and whether it is sent frames. */
-  const provider = () => providerFor(settings, platform.id);
+  /** The model that describes videos on this site (the one whose key is set), and whether it is sent frames. */
+  const provider = () => effectiveProvider(settings, platform.id, keys);
+  /** Whether that is not the chosen model, because only the other key is set. */
+  const providerFellBack = () => provider() !== providerFor(settings, platform.id);
   const framesMode = () => inputModeFor(provider(), platform.id) === 'frames';
   /** An error in words, in the terms of the provider in use. */
   const errorText = (code) => errorMessage(code, provider());
@@ -172,6 +178,7 @@ function main() {
     const res = await send({ type: MSG.GET_STATUS });
     if (res?.error === 'extension-reloaded') return die();
     shortcuts = res?.shortcuts || {};
+    if (res?.keys) keys = res.keys;
     ui.setButtonState(settings.enabled, shortcut('toggle-descriptions'));
     return undefined;
   }
@@ -187,8 +194,19 @@ function main() {
       die();
       return false;
     }
+    if (res?.keys) keys = res.keys;
     return Boolean(res?.keys ? res.keys[provider()] : res?.hasKey);
   }
+
+  /** Open the settings page at the key field this site needs. */
+  const openSettingsForKey = () => send({ type: MSG.OPEN_OPTIONS, provider: provider() });
+
+  /**
+   * Start describing without being asked only in a page the viewer is using:
+   * never in an embedded player that has not been played, or a page full of
+   * hidden players could have this key describe them all.
+   */
+  const canAutoStart = () => !isFrame || shouldHandle();
 
   /**
    * One cached description script. The cache lives in chrome.storage.local,
@@ -356,7 +374,7 @@ function main() {
       announceType();
       // A previous run stopped part-way (tab closed, quota): carry on where it left off.
       // From frames, only while descriptions are on: pictures are taken as the video plays.
-      if (!cached.complete && (!framesMode() || settings.enabled)) generate({ quiet: true });
+      if (!cached.complete && (!framesMode() || settings.enabled) && canAutoStart()) generate({ quiet: true });
       return undefined;
     }
     status = 'none';
@@ -374,7 +392,7 @@ function main() {
         return undefined;
       }
     }
-    if (settings.autoGenerate && settings.enabled && (await hasKey()) && id === videoId && l === lang) {
+    if (settings.autoGenerate && settings.enabled && canAutoStart() && (await hasKey()) && id === videoId && l === lang) {
       generate();
       return undefined;
     }
@@ -601,8 +619,13 @@ function main() {
       status = 'error';
       errorCode = 'no-key';
       feedback(errorText('no-key'));
-      send({ type: MSG.OPEN_OPTIONS });
+      openSettingsForKey();
       return undefined;
+    }
+    // Only the other model's key is set: say once per video which model describes.
+    if (providerFellBack() && fallbackSaidFor !== id && !quiet) {
+      fallbackSaidFor = id;
+      announcer.status(t(`status_fallback_${provider()}`));
     }
     if (isAdShowing() && !quiet) feedback(t('status_waiting_for_ad'));
     const v = await waitForVideo(id);
@@ -691,7 +714,7 @@ function main() {
     if (code === 'extension-reloaded' || !chrome.runtime?.id) return die();
     console.warn('[SceneVoice] generation failed', code, detail || '');
     feedback(errorWithNextStep(code));
-    if (code === 'no-key' || code === 'bad-key') send({ type: MSG.OPEN_OPTIONS });
+    if (code === 'no-key' || code === 'bad-key') openSettingsForKey();
     return undefined;
   }
 
@@ -1232,7 +1255,11 @@ function main() {
       die();
       return { text: errorText('extension-reloaded'), time: null };
     }
-    if (!res || res.error || !res.text) return { text: errorText(res?.error || 'unknown'), time: null };
+    if (!res || res.error || !res.text) {
+      // The message says the settings page is opening: make it true.
+      if (res?.error === 'no-key' || res?.error === 'bad-key') openSettingsForKey();
+      return { text: errorText(res?.error || 'unknown'), time: null };
+    }
     if (askHistory.videoId !== videoId) askHistory = { videoId, items: [] };
     askHistory.items = [...askHistory.items, { question, answer: res.text }].slice(-ASK_HISTORY_MAX);
     return { text: res.text, time: Number.isFinite(res.time) ? res.time : null };
@@ -1252,7 +1279,9 @@ function main() {
     }
     // No prepared description for this moment: ask the model directly.
     if (!(await hasKey())) {
-      if (!dead) feedback(errorText('no-key'));
+      if (dead) return;
+      feedback(errorText('no-key'));
+      openSettingsForKey();
       return;
     }
     const id = videoId;
@@ -1365,7 +1394,7 @@ function main() {
     if (dead || id !== videoId || l !== lang) return undefined;
     if (!res || res.error) {
       feedback(t('report_failed', errorText(res?.error || 'unknown')));
-      if (res?.error === 'no-key' || res?.error === 'bad-key') send({ type: MSG.OPEN_OPTIONS });
+      if (res?.error === 'no-key' || res?.error === 'bad-key') openSettingsForKey();
       return undefined;
     }
     await reloadScript();

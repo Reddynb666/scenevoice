@@ -144,7 +144,7 @@ async function loadModels({ announce }) {
   }
   select.value = current;
   select.disabled = !models.length;
-  if (announce) setStatus(statusEl, models.length ? t('opt_key_ok', current) : errorMessage('no-model'), models.length ? 'good' : 'bad');
+  if (announce) setStatus(statusEl, models.length ? `${t('opt_key_ok', current)} ${await nextStep('gemini')}` : errorMessage('no-model'), models.length ? 'good' : 'bad');
 }
 
 /** An address the user typed for an API: https, or http on this computer. */
@@ -183,7 +183,7 @@ async function testQwen() {
   setStatus(statusEl, t('opt_key_testing'));
   try {
     await new QwenClient({ apiKey: local.qwenApiKey, apiBase: local.qwenApiBase, model: local.qwenModel }).test();
-    setStatus(statusEl, t('opt_key_ok', local.qwenModel), 'good');
+    setStatus(statusEl, `${t('opt_key_ok', local.qwenModel)} ${await nextStep('qwen')}`, 'good');
   } catch (err) {
     setStatus(statusEl, errorMessage(err instanceof ApiError ? err.code : 'unknown', 'qwen'), 'bad');
   }
@@ -210,7 +210,9 @@ function initQwen(local) {
       $('qwenApiKey').focus();
       return;
     }
+    const before = await getLocal();
     await setLocal({ qwenApiKey: key, qwenModel: $('qwenModel').value.trim() || DEFAULT_QWEN_MODEL });
+    await adoptProviderIfOnlyKey('qwen', before);
     await testQwen();
   });
   $('qwenApiKey').addEventListener('keydown', (e) => {
@@ -371,7 +373,9 @@ async function init() {
       $('apiKey').focus();
       return;
     }
+    const before = await getLocal();
     await setLocal({ apiKey: key, model: '' });
+    await adoptProviderIfOnlyKey('gemini', before);
     await loadModels({ announce: true });
   });
   $('apiKey').addEventListener('keydown', (e) => {
@@ -433,9 +437,31 @@ async function init() {
     await renderCache();
   });
 
-  // No key yet: start where one goes. In Chinese, at the Qwen key: Gemini needs Google,
-  // which mainland China cannot reach (the Gemini key is one heading up).
-  if (!local.apiKey && !local.qwenApiKey) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
+  // Sent here for a particular key (options.html#qwen): start in that field.
+  // Otherwise, with no key yet, start where one goes: in Chinese, at the Qwen key,
+  // since Gemini needs Google, which mainland China cannot reach.
+  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey' }[location.hash];
+  if (wanted) $(wanted).focus();
+  else if (!local.apiKey && !local.qwenApiKey) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
+}
+
+/**
+ * The first key saved describes every site, until the other key is added: a
+ * listener with one key is never told to get the other (the service worker
+ * falls back the same way; this keeps the settings page truthful).
+ */
+async function adoptProviderIfOnlyKey(provider, local) {
+  const other = provider === 'gemini' ? local.qwenApiKey : local.apiKey;
+  if (other) return;
+  await setSettings({ youtubeProvider: provider, bilibiliProvider: provider }).catch(onSaveError);
+}
+
+/** What to do now that a key works: the site that key's model usually describes, and the shortcut. */
+async function nextStep(provider) {
+  const site = provider === 'qwen' ? 'bilibili' : 'youtube';
+  const commands = await chrome.commands.getAll().catch(() => []);
+  const key = commands.find((c) => c.name === 'toggle-descriptions')?.shortcut;
+  return key ? t(`opt_next_${site}`, key) : t(`opt_next_${site}_button`);
 }
 
 init();

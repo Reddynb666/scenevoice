@@ -200,7 +200,7 @@ Layout:
 - `src/offscreen/` — the offscreen document and its web worker, where the Gemini requests actually run (`worker.js` keeps the job list; `offscreen.js` bridges it to the service worker).
 - `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, scheduler, cache, settings. Which model a site uses and whether it opens the video link or is sent frames is in `providers.js`; `qwen.js` is the Qwen client, `frames.js` the prompts built from frames, `describe.js` runs them with either model, and `coverage.js` tracks which parts of a video are described.
 - `src/popup/`, `src/options/` — toolbar popup and settings page.
-- `scripts/locales.mjs` — every user-facing string in English and Chinese; the build generates `_locales/`.
+- `scripts/locales/` — every user-facing string, one file per interface language (`en.mjs` is the reference); the build generates `_locales/`.
 - `test/` — unit tests, and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (127 checks, including axe accessibility scans).
 
 Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md), which also lists the manual checks for Bilibili.

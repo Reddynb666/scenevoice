@@ -63,12 +63,18 @@ let current = null;
 /** From the service worker: which keys exist ({ gemini, qwen }), or only whether the Gemini key does. */
 let keyStatus = null;
 
-/** Ask for a key when the model this tab's site uses has none. */
+/**
+ * Ask for a key when the model this tab's site uses has none. Away from a
+ * video any key will do, and the key asked for is the one this listener's
+ * language suggests (Gemini cannot be reached from mainland China).
+ */
 function renderKeyBanner() {
-  const provider = current?.supported && current.provider ? current.provider : 'gemini';
-  const has = keyStatus?.keys ? keyStatus.keys[provider] : keyStatus?.hasKey;
+  const onVideo = Boolean(current?.supported && current.provider);
+  const keys = keyStatus?.keys;
+  const has = keys ? (onVideo ? keys[current.provider] : keys.gemini || keys.qwen) : keyStatus?.hasKey;
   $('keyBanner').hidden = Boolean(has);
-  $('setupBody').textContent = provider === 'qwen' ? t('popup_setup_body_qwen') : t('popup_setup_body');
+  const wantsQwen = onVideo ? current.provider === 'qwen' : chrome.i18n.getUILanguage().startsWith('zh');
+  $('setupBody').textContent = wantsQwen ? t('popup_setup_body_qwen') : t('popup_setup_body');
 }
 
 function render(state) {
@@ -100,16 +106,15 @@ function render(state) {
     gen.hidden = false;
     gen.textContent = state.cueCount ? t('popup_regenerate') : t('popup_generate');
     switch (state.status) {
+      // While work is going on, the status (a live region) says so once; the
+      // numbers that change every second are in the progress box, which a
+      // screen reader does not read out by itself.
       case 'live':
-        text = state.describedUpTo > 0
-          ? t('popup_live_up_to', String(state.cueCount || 0), formatTime(state.describedUpTo))
-          : t('popup_live', String(state.cueCount || 0));
+        text = t('popup_live_state');
         gen.hidden = true;
         break;
       case 'generating':
-        text = state.total > 1
-          ? t('status_progress_percent', String(state.percent || 0), String(Math.min(state.done + 1, state.total)), String(state.total))
-          : t('status_progress_percent_single', String(state.percent || 0));
+        text = t('popup_generating_state');
         gen.hidden = true;
         break;
       case 'ready':
@@ -176,7 +181,15 @@ async function act(action) {
     window.close();
     return;
   }
+  const focused = document.activeElement;
   render(await tabRequest({ type: MSG.TAB_ACTION, action }));
+  // The button pressed may have given way to its counterpart (Create → Stop, Stop → Create):
+  // keep keyboard focus on that one rather than let it fall to the page.
+  if (focused && focused !== document.body && focused.hidden) {
+    const next = [$('stop'), $('generate'), $('videoStatus')].find((el) => el && !el.hidden);
+    if (next === $('videoStatus')) next.tabIndex = -1;
+    next?.focus();
+  }
 }
 
 /** Speed is the built-in voice's rate, or the speed SceneVoice assumes for the screen reader. */

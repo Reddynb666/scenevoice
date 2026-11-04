@@ -20,7 +20,7 @@ import { addFeedback, cacheInfo, clearCache, deleteScript, getFeedback, getScrip
 import { mergeFramesChunk, newFramesScript, recentCues } from '../shared/coverage.js';
 import { sanitizeFrames } from '../shared/frames.js';
 import { platformOfVideoId } from '../shared/platforms.js';
-import { inputModeFor, providerFor } from '../shared/providers.js';
+import { effectiveProvider, inputModeFor, providerFor } from '../shared/providers.js';
 import { applyCorrections, cueRef, findCueIndex, replaceCue } from '../shared/revision.js';
 import { speechOptions } from '../shared/voices.js';
 import { cleanAskHistory } from '../shared/ask.js';
@@ -102,16 +102,28 @@ async function ensureOffscreen() {
   await creating;
 }
 
+/** Longest wait for the offscreen document's answer (it times out its own worker sooner). */
+const OFFSCREEN_REPLY_MS = 660000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
 /** Send a command to the worker in the offscreen document. */
 async function offscreen(data) {
   await ensureOffscreen();
-  const reply = await chrome.runtime.sendMessage({ type: MSG.OFFSCREEN, data }).catch(() => undefined);
+  const send = () => withTimeout(chrome.runtime.sendMessage({ type: MSG.OFFSCREEN, data }).catch(() => undefined), OFFSCREEN_REPLY_MS);
+  const reply = await send();
   if (reply !== undefined) return reply;
   // No answer: the document was closed between the check and the message (idle
   // clean-up), or its script has not finished loading. Give it a moment and try once more.
   await new Promise((r) => setTimeout(r, 300));
   await ensureOffscreen();
-  return chrome.runtime.sendMessage({ type: MSG.OFFSCREEN, data }).catch(() => undefined);
+  return send();
 }
 
 /** Close the offscreen document once nothing has run in it for a while. */
@@ -151,16 +163,44 @@ function providerConfig(local, provider) {
   return { config: { apiKey: local.apiKey, apiBase: local.apiBase, model: local.model } };
 }
 
+/** Which keys are set, and nothing else about them. */
+const keysOf = (local) => ({ gemini: Boolean(local.apiKey), qwen: Boolean(local.qwenApiKey) });
+
 /**
  * The provider for the tab that asks, from its site (never from the message)
- * and the settings, how it takes the video, and its config.
+ * and the settings, how it takes the video, and its config. With only one key
+ * saved, that key's model describes every site (effectiveProvider).
  * @returns {Promise<{platform: string, provider: string, mode: 'video'|'frames', config?: object, error?: string}>}
  */
 async function setupFor(sender) {
   const platform = platformOfSender(sender, chrome.runtime.id) || 'youtube';
-  const provider = providerFor(await getSettings(), platform);
-  const { config, error } = providerConfig(await getLocal(), provider);
+  const local = await getLocal();
+  const provider = effectiveProvider(await getSettings(), platform, keysOf(local));
+  const { config, error } = providerConfig(local, provider);
   return { platform, provider, mode: inputModeFor(provider, platform), config, error };
+}
+
+/** Longest video a job is started for (a day-long stream is not a video to describe ahead). */
+const MAX_DURATION = 12 * 3600;
+
+/** A video id of the sender's own site, with a language SceneVoice writes. */
+function ownVideo(videoId, lang, platform) {
+  return typeof videoId === 'string' && platformOfVideoId(videoId) === platform && LANGUAGE_CODES.has(lang);
+}
+
+/** The site of the tab a message came from (the popup and the options page count as YouTube). */
+const senderPlatform = (sender) => platformOfSender(sender, chrome.runtime.id) || 'youtube';
+
+/** Frame requests a tab may make per minute: a normal stretch is 12 seconds, so about 5, plus retries. */
+const FRAMES_PER_MINUTE = 30;
+const framesLog = new Map();
+
+function overFramesLimit(tabId) {
+  const now = Date.now();
+  const recent = (framesLog.get(tabId) || []).filter((at) => now - at < 60000);
+  recent.push(now);
+  framesLog.set(tabId, recent);
+  return recent.length > FRAMES_PER_MINUTE;
 }
 
 /** Most frames one request carries: the per-computer limit for Qwen (待确认), at most 12. */
@@ -214,7 +254,9 @@ async function broadcast(msg) {
 }
 
 async function startGeneration({ videoId, duration, meta, lang, force }, sender) {
-  const { config, error, mode } = await setupFor(sender);
+  const { config, error, mode, platform } = await setupFor(sender);
+  // A tab starts jobs only for videos of its own site, of a length a video can have.
+  if (!ownVideo(videoId, lang, platform) || !Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION) return { error: 'unknown' };
   if (error) return { error };
   // Only a model that opens the video link describes ahead of playback; the others are sent frames.
   if (mode !== 'video') return { error: 'provider-unsupported' };
@@ -322,6 +364,8 @@ async function describeStretch(msg, sender) {
   if (platformOfVideoId(videoId) !== setup.platform) return { error: 'unknown' };
   if (setup.error) return { error: setup.error };
   if (setup.mode !== 'frames') return { error: 'provider-unsupported' };
+  // A page cannot make the key pay for more than the video it is playing.
+  if (overFramesLimit(sender?.tab?.id ?? -1)) return { error: 'busy' };
   const frames = sanitizeFrames(msg.frames, { max: frameLimit(setup.config) });
   if (!frames.length) return { error: 'frames-missing' };
   const saved = await getScript(videoId, lang);
@@ -368,6 +412,23 @@ async function onJobEvent(ev) {
 
 // ---------- messages ----------
 
+/**
+ * Open the settings page. Named a provider, it opens at that provider's key
+ * field (options.html#gemini / #qwen), so a listener sent there for a missing
+ * key lands on the field to fill, not at the top of a long page.
+ */
+async function openOptions(provider) {
+  if (provider === 'gemini' || provider === 'qwen') {
+    try {
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#${provider}`) });
+      return;
+    } catch {
+      // Fall back to the plain settings page.
+    }
+  }
+  await chrome.runtime.openOptionsPage();
+}
+
 async function shortcuts() {
   const out = {};
   for (const c of await chrome.commands.getAll()) if (c.shortcut) out[c.name] = c.shortcut;
@@ -379,20 +440,33 @@ async function handle(msg, sender) {
   switch (msg?.type) {
     case MSG.GET_STATUS: {
       const local = await getLocal();
-      // Only whether each key exists: never the key itself.
-      return { hasKey: Boolean(local.apiKey), keys: { gemini: Boolean(local.apiKey), qwen: Boolean(local.qwenApiKey) }, model: local.model, shortcuts: await shortcuts() };
+      const keys = keysOf(local);
+      const settings = await getSettings();
+      // Only whether each key exists: never the key itself. `providers` is the
+      // model that will describe each site, given the keys there are.
+      return {
+        hasKey: keys.gemini,
+        keys,
+        providers: { youtube: effectiveProvider(settings, 'youtube', keys), bilibili: effectiveProvider(settings, 'bilibili', keys) },
+        model: local.model,
+        shortcuts: await shortcuts(),
+      };
     }
     case MSG.GET_SCRIPT:
+      if (!ownVideo(msg.videoId, msg.lang, senderPlatform(sender))) return { script: null };
       return { script: await getScript(msg.videoId, msg.lang) };
     case MSG.DELETE_SCRIPT:
+      if (!ownVideo(msg.videoId, msg.lang, senderPlatform(sender))) return { error: 'unknown' };
       await stopGeneration(msg).catch(() => {});
       await deleteScript(msg.videoId, msg.lang);
       return { ok: true };
     case MSG.GEN_START:
       return startGeneration(msg, sender);
     case MSG.GEN_STOP:
+      if (!ownVideo(msg.videoId, msg.lang, senderPlatform(sender))) return { stopped: false };
       return stopGeneration(msg);
     case MSG.GEN_STATUS:
+      if (!ownVideo(msg.videoId, msg.lang, senderPlatform(sender))) return { status: 'idle' };
       return generationStatus(msg);
     case MSG.ASK:
       return ask(msg.params, sender);
@@ -412,7 +486,7 @@ async function handle(msg, sender) {
     case MSG.GET_VOICES:
       return { voices: (await chrome.tts.getVoices()).map((v) => ({ name: v.voiceName, lang: v.lang })) };
     case MSG.OPEN_OPTIONS:
-      await chrome.runtime.openOptionsPage();
+      await openOptions(msg.provider);
       return { ok: true };
     case MSG.CACHE_INFO:
       return cacheInfo();

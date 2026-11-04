@@ -20,6 +20,10 @@ const HIDDEN_STYLE = [
   'border:0',
 ].join(';');
 
+/** Delay before a live region is filled, and the gap kept before the next write. */
+const WRITE_DELAY_MS = 30;
+const WRITE_GAP_MS = 60;
+
 function makeRegion(politeness) {
   const el = document.createElement('div');
   el.setAttribute('aria-live', politeness);
@@ -53,6 +57,8 @@ export class Announcer {
     this.host.append(...this.polite, ...this.assertive);
     this.flip = 0;
     this.pending = null; // { id, resolve, timer }
+    /** Texts waiting to be written to a live region, oldest first. */
+    this.writes = [];
     this.writeTimer = null;
     this.seq = 0;
     this.mount();
@@ -72,20 +78,35 @@ export class Announcer {
     if (this.host.parentNode !== parent) parent.appendChild(this.host);
   }
 
-  /** Put text into a live region without waiting for speech. */
+  /**
+   * Put text into a live region without waiting for speech. Writes are made one
+   * after the other: two messages in quick succession ("Descriptions loaded",
+   * then what the video type changed) are both read, not only the last.
+   */
   announceToScreenReader(text, urgent) {
+    this.writes.push({ text, urgent });
+    this.drainWrites();
+  }
+
+  drainWrites() {
+    if (this.writeTimer || !this.writes.length) return;
     this.mount();
-    clearTimeout(this.writeTimer);
+    const { text, urgent } = this.writes.shift();
     const pair = urgent ? this.assertive : this.polite;
     const region = pair[this.flip % 2];
     const other = pair[(this.flip + 1) % 2];
     this.flip += 1;
     other.textContent = '';
     region.textContent = '';
-    // A short delay makes screen readers notice the change reliably.
+    // A short delay makes screen readers notice the change reliably; the next
+    // write waits a little longer, so that each change is seen on its own.
     this.writeTimer = setTimeout(() => {
       region.textContent = text;
-    }, 30);
+      this.writeTimer = setTimeout(() => {
+        this.writeTimer = null;
+        this.drainWrites();
+      }, WRITE_GAP_MS);
+    }, WRITE_DELAY_MS);
   }
 
   /**
@@ -165,6 +186,8 @@ export class Announcer {
     const wasTts = this.pending && this.getSettings().output === 'tts';
     this.finish();
     clearTimeout(this.writeTimer);
+    this.writeTimer = null;
+    this.writes = [];
     if (wasTts) sendSafe({ type: MSG.STOP_SPEAKING });
     for (const r of [...this.polite, ...this.assertive]) r.textContent = '';
   }

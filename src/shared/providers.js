@@ -21,6 +21,18 @@ export function providerFor(settings, platform) {
   return PROVIDERS.includes(chosen) ? chosen : DEFAULT_SETTINGS[key];
 }
 
+/**
+ * The provider that actually describes a site: the chosen one when its key is
+ * set, otherwise the other one when only that key is set. A listener with one
+ * key is never told to get the other. `keys` is { gemini, qwen } (booleans);
+ * without it the chosen provider stands.
+ */
+export function effectiveProvider(settings, platform, keys) {
+  const chosen = providerFor(settings, platform);
+  if (!keys || keys[chosen]) return chosen;
+  return PROVIDERS.find((p) => p !== chosen && keys[p]) || chosen;
+}
+
 /** 'video' when the provider can open the video by its link, otherwise 'frames'. */
 export function inputModeFor(provider, platform) {
   return provider === 'gemini' && platform === 'youtube' ? 'video' : 'frames';

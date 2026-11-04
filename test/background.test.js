@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MSG } from '../src/shared/constants.js';
+import { MSG, SCRIPT_VERSION } from '../src/shared/constants.js';
 
 const ID = 'abcdefghijklmnopqrstuvwxyzabcdef';
 const ORIGIN = `chrome-extension://${ID}`;
@@ -279,10 +279,23 @@ describe('descriptions from frames (Bilibili, Qwen)', () => {
     expect(JSON.stringify(await deliver(stretch(0, 12), bilibili))).not.toContain('qwen-secret-key');
   });
 
-  it('asks for the Qwen key when there is none, and sends nothing', async () => {
-    store.local = { apiKey: 'gemini-key' };
+  it('asks for a key when there is none at all, and sends nothing', async () => {
+    store.local = { apiKey: '', qwenApiKey: '' };
     expect(await deliver(stretch(0, 12), bilibili)).toEqual({ error: 'no-key' });
     expect(workerCalls).toEqual([]);
+  });
+
+  it('describes with Gemini when only the Gemini key is set, rather than ask for a Qwen key', async () => {
+    store.local = { apiKey: 'gemini-key' };
+    const reply = await deliver(stretch(0, 12), bilibili);
+    expect(reply.status).toBe('ok');
+    expect(workerCalls[0].provider).toBe('gemini');
+    expect(workerCalls[0].config.apiKey).toBe('gemini-key');
+    const status = await deliver({ type: MSG.GET_STATUS }, bilibili);
+    expect(status.providers).toEqual({ youtube: 'gemini', bilibili: 'gemini' });
+    // With a Qwen key only, Qwen describes YouTube too.
+    store.local = { qwenApiKey: 'qwen-secret-key' };
+    expect((await deliver({ type: MSG.GET_STATUS }, youtube)).providers).toEqual({ youtube: 'qwen', bilibili: 'qwen' });
   });
 
   it('refuses frames that are not pictures, a page that is not a Bilibili video, and another site’s video id', async () => {
@@ -320,5 +333,68 @@ describe('descriptions from frames (Bilibili, Qwen)', () => {
     expect(await deliver({ ...mark, frames: [frame(5), frame(7)] }, bilibili)).toEqual({ status: 'revised', cue: fixed });
     expect(workerCalls.at(-1)).toMatchObject({ cmd: 'revise', mode: 'frames', provider: 'qwen', params: { frames: [frame(5), frame(7)], cue: chop } });
     expect(store[KEY].cues).toEqual([fixed]);
+  });
+});
+
+describe('what a page may ask for', () => {
+  const bilibili = {
+    id: ID,
+    origin: 'https://www.bilibili.com',
+    url: 'https://www.bilibili.com/video/BV1GJ411x7h7/',
+    tab: { id: 21, url: 'https://www.bilibili.com/video/BV1GJ411x7h7/' },
+    frameId: 0,
+  };
+
+  beforeEach(() => {
+    for (const k of Object.keys(store)) delete store[k];
+    store.local = { apiKey: 'gemini-key', qwenApiKey: 'qwen-secret-key' };
+    workerCalls.length = 0;
+    worker = (data) => (data.cmd === 'start' ? { started: true, done: 0, total: 1, chunkStartedAt: 1, chunkMs: [] } : { status: 'idle' });
+  });
+
+  it('starts jobs only for videos of its own site, of a length a video can have', async () => {
+    const start = (extra) => deliver({ type: MSG.GEN_START, videoId: 'abcdefghijk', duration: 600, meta: {}, lang: 'en', ...extra }, youtube);
+    expect(await start({ videoId: 'bili:BV1GJ411x7h7' })).toEqual({ error: 'unknown' });
+    expect(await start({ videoId: 'not a video id' })).toEqual({ error: 'unknown' });
+    expect(await start({ lang: 'xx' })).toEqual({ error: 'unknown' });
+    expect(await start({ duration: 13 * 3600 })).toEqual({ error: 'unknown' });
+    expect(await start({ duration: Number.NaN })).toEqual({ error: 'unknown' });
+    expect(workerCalls).toEqual([]);
+    expect((await start({})).status).toBe('generating');
+  });
+
+  it('shows and deletes saved descriptions of its own site only', async () => {
+    store['script:abcdefghijk:en'] = { version: SCRIPT_VERSION, videoId: 'abcdefghijk', lang: 'en', cues: [], complete: true };
+    expect((await deliver({ type: MSG.GET_SCRIPT, videoId: 'abcdefghijk', lang: 'en' }, bilibili)).script).toBeNull();
+    expect(await deliver({ type: MSG.DELETE_SCRIPT, videoId: 'abcdefghijk', lang: 'en' }, bilibili)).toEqual({ error: 'unknown' });
+    expect(store['script:abcdefghijk:en']).toBeTruthy();
+    expect((await deliver({ type: MSG.GET_SCRIPT, videoId: 'abcdefghijk', lang: 'en' }, youtube)).script).toBeTruthy();
+    expect(await deliver({ type: MSG.GEN_STATUS, videoId: 'abcdefghijk', lang: 'en' }, bilibili)).toEqual({ status: 'idle' });
+    expect(await deliver({ type: MSG.GEN_STOP, videoId: 'abcdefghijk', lang: 'en' }, bilibili)).toEqual({ stopped: false });
+  });
+
+  it('opens the settings page at the key field the site needs', async () => {
+    const created = [];
+    chrome.tabs.create = vi.fn(async (opts) => created.push(opts.url));
+    chrome.runtime.getURL = (path) => `${ORIGIN}/${path}`;
+    chrome.runtime.openOptionsPage = vi.fn(async () => {});
+    expect(await deliver({ type: MSG.OPEN_OPTIONS, provider: 'qwen' }, bilibili)).toEqual({ ok: true });
+    expect(created).toEqual([`${ORIGIN}/options.html#qwen`]);
+    await deliver({ type: MSG.OPEN_OPTIONS }, youtube);
+    expect(chrome.runtime.openOptionsPage).toHaveBeenCalledTimes(1);
+    // Nothing but a provider name steers it.
+    await deliver({ type: MSG.OPEN_OPTIONS, provider: 'javascript:alert(1)' }, youtube);
+    expect(created).toHaveLength(1);
+    expect(chrome.runtime.openOptionsPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('turns away a page that sends frames faster than a video plays', async () => {
+    worker = () => ({ chunk: { cues: [], characters: [] }, model: 'qwen3-vl-plus' });
+    const tab = { ...bilibili, tab: { id: 99, url: bilibili.url } };
+    const stretch = (n) => ({ type: MSG.GEN_FRAMES, videoId: 'bili:BV1GJ411x7h7', lang: 'zh-CN', duration: 3000, meta: {}, window: { start: n * 12, end: n * 12 + 12 }, frames: [{ time: n * 12 + 1, data: '/9j/AAAA' }] });
+    const replies = [];
+    for (let n = 0; n < 31; n += 1) replies.push(await deliver(stretch(n), tab));
+    expect(replies.slice(0, 30).every((r) => r.status === 'ok')).toBe(true);
+    expect(replies[30]).toEqual({ error: 'busy' });
   });
 });

@@ -623,7 +623,7 @@ describe('settings page: models for each site, and the Qwen key', () => {
     expect($('#qwenModel').value).toBe('qwen3-vl-plus');
     $('#qwenApiKey').value = '  sk-qwen-test  ';
     $('#saveQwenKey').click();
-    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen3-vl-plus. You are ready to go.'));
+    await vi.waitFor(() => expect($('#qwenKeyStatus').textContent).toBe('Connected. Using qwen3-vl-plus. Next: open any Bilibili video and press Alt+Shift+D to hear descriptions.'));
     expect(fake.areas.local.local).toMatchObject({ qwenApiKey: 'sk-qwen-test', qwenModel: 'qwen3-vl-plus' });
     expect(fake.areas.sync.settings?.qwenApiKey).toBeUndefined();
     const [url, init] = fetchMock.mock.calls[0];
@@ -726,7 +726,8 @@ describe('popup on a Bilibili video', () => {
   it('says it is describing as you watch, offers Stop, and stops on request', async () => {
     const asked = [];
     await openPage('popup', { tabReply: (msg) => (asked.push(msg), tab({ status: 'live', cueCount: 3, percent: 20 })(msg)) });
-    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('Describing as you watch: 3 descriptions so far. They come a few seconds after the picture.'));
+    // The live region says the state once; the changing numbers stay out of it.
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('Describing as you watch. Descriptions come a few seconds after the picture; progress is shown below.'));
     expect($('#stop').hidden).toBe(false);
     expect($('#generate').hidden).toBe(true);
     // The same box as on the player: how much of the video is described, and how far the part being watched is.
@@ -750,7 +751,36 @@ describe('popup on a Bilibili video', () => {
 
   it('says how far the part being watched is described', async () => {
     await openPage('popup', { locale: 'zh_CN', uiLanguage: 'zh-CN', tabReply: tab({ status: 'live', cueCount: 4, percent: 30, describedUpTo: 95 }) });
-    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('正在边看边生成口述：已描述到 1:35，目前 4 条。口述会比画面晚几秒。'));
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('正在边看边生成口述。口述会比画面晚几秒，进度见下方。'));
+    expect($('#progressText').textContent).toContain('1:35');
+  });
+
+  it('keeps the live region quiet while the numbers change, and keeps focus on a button after Create and Stop', async () => {
+    let state = { status: 'none' };
+    const asked = [];
+    await openPage('popup', {
+      status: { keys: { gemini: true, qwen: true } },
+      tabReply: (msg) => {
+        asked.push(msg);
+        if (msg.type === MSG.TAB_ACTION) state = msg.action === 'stop' ? { status: 'ready', cueCount: 3 } : { status: 'generating', done: 0, total: 3, percent: 1, eta: 200 };
+        // The tab answers an action with its new state, as the content script does.
+        return tab({ platform: 'youtube', provider: 'gemini', videoId: 'abcdefghijk', ...state })({ type: MSG.TAB_STATE });
+      },
+    });
+    await vi.waitFor(() => expect($('#videoStatus').textContent).toBe('No descriptions yet.'));
+    $('#generate').focus();
+    $('#generate').click();
+    await vi.waitFor(() => expect($('#stop').hidden).toBe(false));
+    expect(document.activeElement.id).toBe('stop');
+    const said = $('#videoStatus').textContent;
+    expect(said).toBe('Creating descriptions. Progress is shown below.');
+    // Progress moves on: the bar and its text change, the live region does not.
+    state = { status: 'generating', done: 1, total: 3, percent: 40, eta: 100 };
+    await vi.waitFor(() => expect($('#progress').value).toBe(40));
+    expect($('#videoStatus').textContent).toBe(said);
+    $('#stop').click();
+    await vi.waitFor(() => expect($('#stop').hidden).toBe(true));
+    expect(document.activeElement.id).toBe('generate');
   });
 
   it('explains an error in Qwen’s words', async () => {
