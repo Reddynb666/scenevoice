@@ -3,10 +3,11 @@
 //   node scripts/build.mjs --zip       build + scenevoice-<version>.zip and scenevoice-<version>-sourcemaps.zip
 //   node scripts/build.mjs --metafile  build + dist-meta.json and a size table; fails when a bundle is over its limit
 //   node scripts/build.mjs --watch     rebuild on change (inline source maps, no minify)
+//   node scripts/build.mjs --web       the web player only: src/web/player.js -> site/play/player.js (npm run build:web)
 
 import { build, context } from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { CORE_LOCALES, LOCALES, LOCALE_FOLDERS, SPOKEN_KEYS, STRINGS, coverage, strayKeys } from './locales.mjs';
@@ -238,6 +239,54 @@ const entries = [
   { entryPoints: [join(root, 'src/offscreen/offscreen.js')], outfile: join(dist, 'offscreen.js'), format: 'iife' },
   { entryPoints: [join(root, 'src/offscreen/worker.js')], outfile: join(dist, 'offscreen-worker.js'), format: 'iife' },
 ];
+
+/**
+ * The web player (site/play): the same shared modules as the extension, on a
+ * plain page. shared/i18n.js (chrome.i18n) is replaced by src/web/i18n.js,
+ * which reads the locale tables; nothing else in the bundle may touch chrome.*
+ * (checked after the build). No source map: the site is served as it is.
+ */
+const webAliases = {
+  name: 'web-aliases',
+  setup(b) {
+    const sharedI18n = join(root, 'src', 'shared', 'i18n.js');
+    const webI18n = join(root, 'src', 'web', 'i18n.js');
+    b.onResolve({ filter: /i18n\.js$/ }, (a) => (a.resolveDir && resolve(a.resolveDir, a.path) === sharedI18n ? { path: webI18n } : null));
+  },
+};
+
+async function buildWeb() {
+  checkStrings();
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const outfile = join(root, 'site', 'play', 'player.js');
+  const entry = {
+    ...common,
+    sourcemap: false,
+    entryPoints: [join(root, 'src/web/player.js')],
+    outfile,
+    format: 'iife',
+    define: { __SCENEVOICE_VERSION__: JSON.stringify(pkg.version) },
+    plugins: [webAliases],
+  };
+  if (args.has('--watch')) {
+    await (await context(entry)).watch();
+    console.log('Watching the web player for changes…');
+    return;
+  }
+  await build(entry);
+  const text = readFileSync(outfile, 'utf8');
+  const stray = text.match(/\bchrome\.(storage|runtime|i18n|tts|tabs|commands|offscreen)\b/);
+  if (stray) {
+    console.error(`site/play/player.js reaches for ${stray[0]}: a shared module that needs the extension was bundled into the web player`);
+    process.exit(1);
+  }
+  console.log(`Built the SceneVoice ${pkg.version} web player into site/play/player.js (${(text.length / 1024).toFixed(1)} KB)`);
+}
+
+if (args.has('--web')) {
+  await buildWeb();
+  process.exit(0);
+}
 
 checkStrings();
 rmSync(dist, { recursive: true, force: true });

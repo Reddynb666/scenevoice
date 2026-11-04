@@ -61,9 +61,15 @@ for (const [locale, table] of Object.entries(TABLES)) {
   for (const [key, text] of Object.entries(table)) if (STRINGS[key]) STRINGS[key][locale] = text;
 }
 
-/** The share of strings a language has, 0 to 1. */
+/**
+ * Strings of the web player (site/play), which speaks English and Chinese only:
+ * not counted when asking how complete another language is.
+ */
+export const isWebKey = (key) => key.startsWith('web_');
+
+/** The share of the extension's strings a language has, 0 to 1. */
 export function coverage(locale) {
-  const keys = Object.keys(TABLES.en);
+  const keys = Object.keys(TABLES.en).filter((k) => !isWebKey(k));
   return keys.filter((k) => TABLES[locale]?.[k]).length / keys.length;
 }
 

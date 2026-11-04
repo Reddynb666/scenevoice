@@ -2,8 +2,12 @@ node_modules/
 dist/
 dist-maps/
 dist-meta.json
+# Built by `npm run build:web` (the Pages workflow builds it before uploading site/).
+site/play/player.js
 *.zip
 SHA256SUMS
 test/e2e/output/
 __pycache__/
 .DS_Store
+# Local preview configuration of the Claude desktop app.
+.claude/

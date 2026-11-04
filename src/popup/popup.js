@@ -1,4 +1,5 @@
-import { LANGUAGES, MSG, RTL_LANGUAGES } from '../shared/constants.js';
+import { LANGUAGES, MSG, RTL_LANGUAGES, SAY_SHORTCUTS } from '../shared/constants.js';
+import { BINDABLE_COMMANDS, COMMAND_LABEL_KEYS, displayShortcut, effectiveShortcuts } from '../shared/shortcuts.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
 import { errorMessage, interfaceLocale, localizeDocument, t } from '../shared/i18n.js';
@@ -273,17 +274,16 @@ function renderQuickKeys(sc) {
   $('quickKeys').textContent = items.length ? t('popup_quick_keys', items.join(' · ')) : t('popup_quick_keys_none');
 }
 
-/** Every SceneVoice shortcut, as a list: what it does, then its key or "not set". */
-async function renderAllKeys() {
+/** Every SceneVoice shortcut, Chrome's and the page's alike, as a list: what it does, then its key or "not set". */
+function renderAllKeys(sc) {
   const list = $('keyList');
   list.replaceChildren();
-  const commands = await chrome.commands.getAll().catch(() => []);
-  for (const c of commands) {
-    if (!c.name || c.name.startsWith('_')) continue;
+  for (const command of BINDABLE_COMMANDS) {
     const li = document.createElement('li');
-    li.textContent = `${c.description || c.name}: ${c.shortcut || t('opt_keys_unset')}`;
+    li.textContent = `${t(COMMAND_LABEL_KEYS[command])}: ${sc[command] || t('opt_keys_unset')}`;
     list.append(li);
   }
+  $('keysHint').textContent = sc[SAY_SHORTCUTS] ? t('popup_keys_hint', sc[SAY_SHORTCUTS]) : t('popup_keys_hint_change');
 }
 
 async function testVoice() {
@@ -303,13 +303,16 @@ async function init() {
   const status = await chrome.runtime.sendMessage({ type: MSG.GET_STATUS });
   keyStatus = status || {};
   renderKeyBanner();
-  const sc = status?.shortcuts || {};
+  // Chrome's keys from the service worker, the page's from the settings, each as the listener should hear it.
+  const keys = effectiveShortcuts(status?.shortcuts || {}, savedSettings?.pageShortcuts);
+  const sc = Object.fromEntries(Object.entries(keys).map(([command, key]) => [command, displayShortcut(key)]));
   if (sc['toggle-descriptions'] || sc['describe-now']) {
     $('shortcutHint').textContent = t('popup_shortcut_hint', sc['toggle-descriptions'] || '—', sc['describe-now'] || '—');
   }
   renderQuickKeys(sc);
-  await renderAllKeys();
-  $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
+  renderAllKeys(sc);
+  // The keys are changed on SceneVoice's own settings page (Chrome's shortcuts page is linked from there).
+  $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html#keys') }));
   $('testVoice').addEventListener('click', testVoice);
 
   $('setupKey').addEventListener('click', () => {

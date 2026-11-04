@@ -298,17 +298,20 @@
       <label class="check"><input type="checkbox" data-setting="showText"><span data-i18n="set_show_text">Show descriptions as large text on the video</span><span class="hint" data-i18n="set_show_text_hint">Helpful for low vision, and for people watching with you.</span></label>
     </section>
 
-    <!-- 4. Shortcuts -->
-    <section class="card stack" aria-labelledby="h-keys">
-      <h2 id="h-keys" data-i18n="opt_keys_title">4. Keyboard shortcuts</h2>
-      <p data-i18n="opt_keys_intro">These work on YouTube and Bilibili videos, even while focus is on the player.</p>
+    <!-- 4. Shortcuts: the four Chrome keeps are shown; the rest are changed here (shared/shortcuts.js). -->
+    <section class="card stack" id="keys" aria-labelledby="h-keys">
+      <h2 id="h-keys" tabindex="-1" data-i18n="opt_keys_title">4. Keyboard shortcuts</h2>
+      <p><span data-i18n="opt_keys_intro">These work on YouTube and Bilibili videos, even while focus is on the player.</span> <span id="keysSayHint"></span></p>
       <table>
         <caption class="visually-hidden" data-i18n="opt_keys_title">Keyboard shortcuts</caption>
-        <thead><tr><th scope="col" data-i18n="opt_keys_action">Action</th><th scope="col" data-i18n="opt_keys_key">Shortcut</th></tr></thead>
+        <thead><tr><th scope="col" data-i18n="opt_keys_action">Action</th><th scope="col" data-i18n="opt_keys_key">Shortcut</th><th scope="col" data-i18n="opt_keys_change_col">Change the key</th></tr></thead>
         <tbody id="shortcuts"></tbody>
       </table>
-      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_edit">Change shortcuts</button></div>
-      <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader. Chrome opens its shortcut settings page, chrome://extensions/shortcuts.</p>
+      <p id="keysStatus" class="small" role="status" aria-live="polite"></p>
+      <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader: press Change, then the new keys; the page says what was saved.</p>
+      <div class="row"><button type="button" id="restoreKeys" class="secondary" data-i18n="opt_keys_restore">Restore default keys</button></div>
+      <p class="small muted" data-i18n="opt_keys_chrome_note">Chrome owns the first four keys. To change them, open Chrome’s shortcuts page (chrome://extensions/shortcuts); the other keys are changed here.</p>
+      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_chrome_open">Open Chrome’s shortcuts page</button></div>
     </section>
 
     <!-- 5. Data -->

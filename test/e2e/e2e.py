@@ -55,8 +55,9 @@ def check(cond, msg):
 
 
 def has_key(text, letter):
-    """Alt+Shift+<letter> as Chrome shows it: "Alt+Shift+D", or "⌥⇧D" on macOS."""
-    return any(k in (text or "") for k in (f"Alt+Shift+{letter}", f"⌥⇧{letter}"))
+    """Alt+Shift+<letter> as SceneVoice says it: "Alt+Shift+D", or "Option+Shift+D" on macOS
+    (Chrome itself prints "⌥⇧D" there; displayShortcut spells it out for the screen reader)."""
+    return any(k in (text or "") for k in (f"Alt+Shift+{letter}", f"Option+Shift+{letter}", f"⌥⇧{letter}"))
 
 
 def locale_only_copy(tmp, locale):
@@ -555,7 +556,8 @@ def main():
         check(opt.locator("#shortcuts tr").count() >= 8, "shortcut table lists all commands")
         check(opt.locator("input[name=density]").count() == 3 and opt.is_checked("input[name=density][value=standard]"), "options page offers the how-much setting with Standard selected")
         check(opt.is_checked("input[data-setting=announceProgress]"), "options page has 'Announce generation progress', on by default")
-        check(opt.locator("#shortcuts kbd").count() == 4, "four default shortcuts are set")
+        # Every command has a default key now: four set by Chrome, eight handled on the page.
+        check(opt.locator("#shortcuts kbd").count() == 12, f"all twelve default shortcuts are set (got {opt.locator('#shortcuts kbd').count()})")
         opt.check("input[name=output][value=tts]")
         time.sleep(0.3)
         check(opt.is_visible("#ttsOptions") and not opt.is_visible("#srOptions"), "voice options follow the chosen output")

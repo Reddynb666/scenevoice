@@ -4,8 +4,10 @@
 # "GitHub Actions". The site is then served at
 # https://reddynb666.github.io/scenevoice/ (and /zh-CN/ for Chinese).
 #
-# Nothing is built: site/ is uploaded as it is. The only step before the upload is
-# site/check.mjs, so a page that fails axe or loses a link never goes live.
+# One thing is built: the web player's script, site/play/player.js, from
+# src/web/ (npm run build:web; the file is not in git). The rest of site/ is
+# uploaded as it is, after site/check.mjs, so a page that fails axe or loses a
+# link never goes live.
 
 name: Pages
 
@@ -14,6 +16,12 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'src/web/**'
+      - 'src/shared/**'
+      - 'scripts/locales/**'
+      - 'scripts/build.mjs'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -38,6 +46,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Build the web player (site/play/player.js)
+        run: npm run build:web
       - name: Accessibility check (axe-core, WCAG 2.2 AA, links, names, contrast)
         run: node site/check.mjs
 
@@ -55,6 +65,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the web player (site/play/player.js)
+        run: npm run build:web
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:

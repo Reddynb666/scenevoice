@@ -30,13 +30,17 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 - [GitHub Releases](https://github.com/reddynb666/scenevoice/releases)：`scenevoice-<版本>.zip`，附 `SHA256SUMS` 用于校验下载；以“加载已解压的扩展程序”方式安装（见[开发](#开发)）
 - 面向中国内地的 Gitee 镜像（见 [docs/distribution-china.md](./docs/distribution-china.md)）
 
+### 不安装也能试
+
+[网页播放器](https://reddynb666.github.io/scenevoice/play/?lang=zh-CN)（英文版：[play/](https://reddynb666.github.io/scenevoice/play/)）接收一个 YouTube 链接，直接在浏览器里通过你的读屏软件或浏览器的语音读出 AI 口述影像，用你自己的 Gemini 密钥（到 Google AI Studio 免费申请；页面上也有 SceneVoice 云端的选项，但尚未开放）。手机上也能用。和扩展的区别：只支持 YouTube（粘贴 B 站链接会被拒绝，并提示改用扩展）；没有字幕掐时间（空隙是模型估计的）；不按视频类型自动调整；YouTube 播放器从 youtube-nocookie.com 嵌入，并且不在 Tab 顺序里，由页面自己的按钮和按键来控制。在播放器区域里：空格播放或暂停，D 描述当前画面，R 重复，A 提问，S 停止朗读，左右方向键前后跳 5 秒，上下方向键调整朗读速度，M 切换模式，问号读出按键列表；`Alt+Shift+D`、`S`、`L`、`Q` 在页面任何位置都有效，和扩展里的字母一样。
+
 ### 首次使用
 
 安装后会打开欢迎页：先听一段示例，再选择 SceneVoice 云端（有免费额度，不用 Key）或自己的 Key。
 
 1. **先听听看。** 三条示例口述，通过你的读屏软件或内置语音朗读，不会发送任何内容。
 2. **选择口述由谁生成。** *自己的 Key*（目前可用的路径）：设置页会在 Key 输入框打开（中文浏览器下在通义千问 Key 输入框），并附有适合读屏用户的分步申请指南。Key 不能用时会说明原因：Key 错误、没网、额度用完，或所在地区不能使用 Gemini。*SceneVoice 云端*还没有开放：中转尚未部署，按“免费开始”会直接说明，并引导你改用自己的 Key。开放之后，按“免费开始”会得到一个匿名的设备凭证，每天可以新生成 60 分钟视频的口述；其他用户已经描述过的视频不计入，生成完成的口述会以文字形式分享回缓存（可在设置里关闭）。
-3. **试一试。** 页面会说出你的快捷键，并给出一个短视频的链接。第一次播放还没有口述的视频时，SceneVoice 会提示一次怎样开始。弹出面板的“全部快捷键”列出了所有快捷键，并有修改按钮。
+3. **试一试。** 页面会说出你的快捷键、提醒在视频页按 `Alt+Shift+H` 可以听到全部按键，并给出一个短视频的链接。第一次播放还没有口述的视频时，SceneVoice 会提示一次怎样开始。弹出面板的“全部快捷键”列出了所有快捷键，并有按钮直接打开修改它们的设置区域。
 
 ### 获取 Gemini API 密钥
 
@@ -52,21 +56,26 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 
 打开任意 YouTube 视频。
 
-| 操作 | 快捷键 |
-| --- | --- |
-| 为这个视频生成口述，或开启/关闭口述 | `Alt+Shift+D` |
-| 描述此刻画面 | `Alt+Shift+S` |
-| 重复上一条描述 | `Alt+Shift+L` |
-| 就当前画面提问 | `Alt+Shift+Q` |
-| 标记上一条描述有误，并重新生成这一段 | （自行设置） |
-| 切换详细程度 | （自行设置） |
-| 切换"描述放不下时"的模式 | （自行设置） |
-| 切换描述密度 | （自行设置） |
-| 加快语速 | （自行设置） |
-| 放慢语速 | （自行设置） |
-| 停止朗读 | （自行设置） |
+### 快捷键
 
-快捷键可在 `chrome://extensions/shortcuts` 修改，如果和读屏软件冲突请改掉。Chrome 只允许一个扩展预设四个快捷键，其余的默认没有按键；设置页会把它们全部列出来，并有按钮直接打开 Chrome 的快捷键页面。播放器控制栏里的 SceneVoice 按钮和工具栏弹出面板可以用鼠标完成同样的操作。
+| 操作 | 快捷键 | 在哪里修改 |
+| --- | --- | --- |
+| 为这个视频生成口述，或开启/关闭口述 | `Alt+Shift+D` | `chrome://extensions/shortcuts` |
+| 描述此刻画面 | `Alt+Shift+S` | `chrome://extensions/shortcuts` |
+| 重复上一条描述 | `Alt+Shift+L` | `chrome://extensions/shortcuts` |
+| 就当前画面提问 | `Alt+Shift+Q` | `chrome://extensions/shortcuts` |
+| 标记上一条描述有误，并重新生成这一段 | `Alt+Shift+W` | SceneVoice 设置页“快捷键” |
+| 切换详细程度 | `Alt+Shift+E` | SceneVoice 设置页“快捷键” |
+| 切换模式（描述放不下时怎么办） | `Alt+Shift+M` | SceneVoice 设置页“快捷键” |
+| 切换描述密度 | `Alt+Shift+N` | SceneVoice 设置页“快捷键” |
+| 加快语速 | `Alt+Shift+Up`（上方向键） | SceneVoice 设置页“快捷键” |
+| 放慢语速 | `Alt+Shift+Down`（下方向键） | SceneVoice 设置页“快捷键” |
+| 停止朗读 | `Alt+Shift+X` | SceneVoice 设置页“快捷键” |
+| 读出全部快捷键 | `Alt+Shift+H` | SceneVoice 设置页“快捷键” |
+
+在 Mac 上，`Alt` 就是 Option 键，SceneVoice 会把按键读成“Option+Shift+……”。随时按 `Alt+Shift+H`，就能听到整个列表和当前设置的按键。
+
+Chrome 只允许一个扩展预设四个快捷键，所以其余八个由 SceneVoice 自己在视频页上处理。修改它们到设置页的“快捷键”部分：按“修改”，再按新的组合键（按 Escape 保留原来的）；“清除”去掉按键；“恢复默认快捷键”全部复原。页面会说出保存了什么；已经被另一个 SceneVoice 命令或 Chrome 的四个快捷键占用的按键会被拒绝；组合键必须带 Alt、Ctrl 或 Command，再加一个字母、数字、方向键或功能键。Chrome 保留的那四个仍然在 `chrome://extensions/shortcuts` 修改，设置页有按钮直接打开它。如果某个按键和读屏软件冲突，请改掉。在输入框、评论框、搜索框或提问对话框里打字时，页面快捷键不起作用；由 SceneVoice 处理的按键不会再传给播放器。播放器控制栏里的 SceneVoice 按钮和工具栏弹出面板可以用鼠标完成同样的操作。
 
 用快捷键切换设置时，会读出新的值，例如"详细程度：简洁。""语速：1.4 倍。"。*加快语速*、*放慢语速*调的是内置语音的语速；使用读屏软件时，调的是 SceneVoice 估算用的读屏语速（见下方设置），不会改变读屏软件本身。
 
@@ -92,7 +101,7 @@ SceneVoice 是一个免费、开源的浏览器扩展，为任意 YouTube 视频
 - **自动生成口述** —— 一打开视频就开始生成。默认关闭，因为每打开一个视频都会消耗 API 额度。
 - **内置语音** —— 语音、语速、音调分别可调，"试听"会用口述语言读一句示例。列表先列出适合当前口述语言的语音（中文口述就先列中文语音），每种口述语言各自记住选过的语音。在别的电脑上选的语音如果这台电脑没有，会自动换用合适的语音。
 - **弹出面板里的快速设置** —— 详细程度、模式、描述密度、屏幕文字开关和语速（内置语音的语速，或读屏语速）在工具栏弹出面板里就能调，不必进设置页。
-- **恢复默认设置** —— 在设置页最后。所有偏好恢复为初始值，API 密钥、模型、已保存的口述和快捷键都保留。
+- **恢复默认设置** —— 在设置页最后。所有偏好恢复为初始值，API 密钥、模型和已保存的口述保留。由 SceneVoice 在页面上处理的快捷键也会恢复默认；Chrome 保留的那四个不受影响。
 
 除密钥外的设置保存在浏览器的个人资料里（`chrome.storage.sync`），开启同步后会跟着你到其他浏览器。
 
@@ -188,6 +197,7 @@ YouTube 页面 ──（视频链接、标题）──▶ Gemini API（你的密
 - 设置项（不含密钥）会随浏览器账号同步。
 - **SceneVoice 云端**（可选；按“免费开始”之前是关闭的）：请求发往项目的中转 `api.scenevoice.app`，携带匿名设备凭证而不是密钥，由中转用项目自己的密钥调用 Gemini。中转按凭证只保存今天描述了多少秒视频、所在档位和已激活的许可证密钥；不保存画面、问题、回答或你的 IP 地址，也不记录请求。“免费开始”同时会开启“共享已完成的口述”：一个视频的口述全部生成后，其文字（绝不包括画面、问题或你的密钥）会发送给中转，让下一位听同一个视频的人直接使用；可在设置里关闭。“停止使用云端”会删除凭证。
 - 用量统计（当天每个模型的请求数、token 数和大致费用，以及每个视频的 token 数）和你设置的每日上限只保存在本机，绝不发送到任何地方。
+- 网页播放器发给 Gemini API（或用云端时发给中转）的内容相同；密钥只放在标签页的会话存储里，除非你勾选“在这台设备上记住密钥”；没有统计分析；YouTube 播放器从 youtube-nocookie.com 嵌入，它仍会设置 YouTube 自己的 Cookie。详见隐私说明的“网页播放器”一节。
 
 完整说明见 [PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)（英文原文：[PRIVACY.md](./PRIVACY.md)）。
 
@@ -203,6 +213,8 @@ npm run build:meta   # 构建并生成 dist-meta.json 与各包体积表（conte
 npm run screenshots  # 生成商店截图和宣传图到 docs/store/（需要先有 dist/）
 npm run release -- 1.2.0   # 切 CHANGELOG、设版本号、测试、构建、提交并打 tag（不推送）；见 docs/release.md
 npm run dev          # 修改后自动重新构建
+npm run build:web    # 网页播放器的包 site/play/player.js（不进 git；Pages 工作流会自己构建）
+node site/check.mjs  # 网站无障碍检查，包括网页播放器页面
 ```
 
 开发者模式安装：
@@ -216,12 +228,13 @@ npm run dev          # 修改后自动重新构建
 - `src/content/` —— 运行在 YouTube 页面和 B 站视频页：跟踪播放、实时区域、播放器按钮、提问对话框，以及 `generator.js`：页面这一侧的生成接口（启动、停止、提问；进度以消息形式送回）。和网站有关的部分在平台适配器 `youtube.js`、`bilibili.js` 里（由 `platforms.js` 选择）；`frames.js` 为需要发送画面的模型截取播放中的视频画面。
 - `src/background/` —— 后台 Service Worker：语音合成、快捷键、给弹出面板的状态、缓存管理，以及生成任务的枢纽（启动任务、保存每段结果、通知各标签页）。它自己不调用 Gemini：Chrome 会终止 fetch 超过 30 秒还没响应的 Service Worker，而视频请求经常超过 30 秒。
 - `src/offscreen/` —— 隐藏页面及其 web worker，模型请求真正在这里发出：Gemini、通义千问，或 SceneVoice Cloud 的中转（包括它的共享缓存读写）（`worker.js` 维护任务列表，`offscreen.js` 负责和 Service Worker 之间的消息）。
-- `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、缓存、设置。每个网站用哪个模型（Gemini、通义千问还是 SceneVoice Cloud）、模型是打开视频链接还是接收画面，在 `providers.js` 里；`qwen.js` 是通义千问客户端，`cloud.js` 是中转自身的接口（设备令牌、额度、许可证，以及脚本哪些部分可以共享），`usage.js` 是每日计数、价格和每日上限，`language.js` 决定哪些语言代码可以作为口述语言，`scheduler.js` 决定什么可以打断什么，`frames.js` 是基于画面的提示词，`describe.js` 用任一模型执行它们，`coverage.js` 记录视频哪些部分已经有口述。
+- `src/shared/` —— 各部分共用的逻辑：Gemini 客户端和提示词、生成循环（`generation.js`：分段、续传、模型回退）、脚本解析、缓存、设置。每个网站用哪个模型（Gemini、通义千问还是 SceneVoice Cloud）、模型是打开视频链接还是接收画面，在 `providers.js` 里；`qwen.js` 是通义千问客户端，`cloud.js` 是中转自身的接口（设备令牌、额度、许可证，以及脚本哪些部分可以共享），`usage.js` 是每日计数、价格和每日上限，`language.js` 决定哪些语言代码可以作为口述语言，`scheduler.js` 决定什么可以打断什么，`frames.js` 是基于画面的提示词，`describe.js` 用任一模型执行它们，`coverage.js` 记录视频哪些部分已经有口述，`shortcuts.js` 是快捷键层（Chrome 的写法和 Mac 符号、按物理按键匹配键盘事件、Chrome 和页面都有按键时谁优先、冲突检查、`pageShortcuts` 设置）。
 - `src/popup/`、`src/options/`、`src/transcript/`、`src/guide/`、`src/welcome/` —— 工具栏弹出面板、设置页、文字稿页、API 密钥指南，以及首次使用时打开的欢迎页（先听一段示例，再选“免费开始”或自己的密钥）。
+- `src/web/` —— 网页播放器（`site/play/`），由 `npm run build:web` 打包成 `site/play/player.js`，不含任何 `chrome.*` API：`app.js` 页面本身，`link.js` 解析 YouTube 链接，`youtube.js` 嵌入式播放器，`playback.js` 口述调度，`output.js` 和 `speech.js` 实时区域或 Web Speech 输出，`keys.js` 单键操作层，`model.js` Gemini 或中转，`store.js` 浏览器记住的内容，`i18n.js` 界面文字（英文和简体中文，来自 `scripts/locales/`）。
 - `scripts/locales/` —— 全部界面文字，每种界面语言一个文件（`en.mjs` 为基准）；构建时生成 `_locales/`。
-- `test/` —— 单元测试，以及 `test/e2e/e2e.py`：在无头 Chromium 里驱动真实扩展，对接假 YouTube 页面和模拟 Gemini API（127 项检查，含 axe 无障碍扫描）。
+- `test/` —— 单元测试（`test/web-player.test.js` 覆盖网页播放器，`test/shortcuts.test.js` 覆盖快捷键层），以及 `test/e2e/e2e.py`：在无头 Chromium 里驱动真实扩展，对接假 YouTube 页面和模拟 Gemini API（127 项检查，含 axe 无障碍扫描）。
 - `server/` —— SceneVoice Cloud 参考中转，一个 Cloudflare Worker，自带 README（协议说明）和 `server/test/` 下的测试；尚未部署。
-- `site/` —— 项目网站（英文 + 简体中文，无需构建）；`site/check.mjs` 是它的无障碍门禁。
+- `site/` —— 项目网站（英文 + 简体中文；首页无需构建）。`site/play/` 是网页播放器页面（`index.html`、`play.css`，以及 `npm run build:web` 生成的 `player.js`）；`site/check.mjs` 是三个页面共用的无障碍门禁。
 
 发布前用读屏软件测试的清单见 [CONTRIBUTING.md](./CONTRIBUTING.md)，其中也列出了 B 站的人工检查项。
 

@@ -1,4 +1,5 @@
-import { DEFAULT_API_BASE, DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL, DEFAULT_SETTINGS, LANGUAGES, MSG, RTL_LANGUAGES, USAGE_KEY } from '../shared/constants.js';
+import { DEFAULT_API_BASE, DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL, DEFAULT_SETTINGS, LANGUAGES, MSG, PAGE_SHORTCUT_DEFAULTS, RTL_LANGUAGES, SAY_SHORTCUTS, USAGE_KEY } from '../shared/constants.js';
+import { BINDABLE_COMMANDS, COMMAND_LABEL_KEYS, displayShortcut, effectiveShortcuts, isPageShortcut, shortcutConflict, shortcutFromEvent } from '../shared/shortcuts.js';
 import { COUNTED_PROVIDERS, costText, formatTokens, todaysUsage } from '../shared/usage.js';
 import { activateLicense, allowanceMinutes, cleanPlan, fetchMe, registerDevice, validLicenseKey } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
@@ -427,6 +428,11 @@ function onSettings(settings, live) {
   if (live) return; // a slider is moving, nothing else changed
   renderVoices(settings);
   renderTypeSettings(settings);
+  // Page keys changed elsewhere (another settings tab, another computer): show the new ones.
+  if (JSON.stringify(settings.pageShortcuts) !== JSON.stringify(pageKeys)) {
+    pageKeys = settings.pageShortcuts;
+    renderKeyRows();
+  }
 }
 
 /** Messages about settings, kept in view at the bottom of the window and read by screen readers. */
@@ -451,27 +457,145 @@ async function restoreDefaults() {
   setToast(t('opt_reset_done'), 'good');
 }
 
-async function renderShortcuts() {
+// ---------- keyboard shortcuts ----------
+// Chrome keeps the keys of the four commands the manifest suggests; the rest
+// are the page's own (shared/shortcuts.js), stored in the pageShortcuts
+// setting and changed here: press Change, then the new keys. Everything that
+// happens is said in the section's status region.
+
+/** Chrome's own keys, { command: shortcut }, and the pageShortcuts setting as last seen. */
+let chromeKeys = {};
+let pageKeys = {};
+/** The command whose new key is being recorded, or null. */
+let capturing = null;
+
+const sayKeys = (text) => {
+  $('keysStatus').textContent = text;
+};
+const commandName = (command) => t(COMMAND_LABEL_KEYS[command]);
+
+async function readChromeKeys() {
+  const out = {};
+  for (const c of await chrome.commands.getAll().catch(() => [])) if (c.name && !c.name.startsWith('_') && c.shortcut) out[c.name] = c.shortcut;
+  return out;
+}
+
+function button(id, label, name, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.id = id;
+  b.className = 'secondary';
+  b.textContent = label;
+  b.setAttribute('aria-label', name);
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** One row per command: what it does, its key, and how to change it (or that Chrome keeps it). */
+function renderKeyRows(focusId = '') {
+  const keys = effectiveShortcuts(chromeKeys, pageKeys);
   const body = $('shortcuts');
   body.replaceChildren();
-  const commands = await chrome.commands.getAll();
-  for (const c of commands) {
-    if (!c.name || c.name.startsWith('_')) continue;
+  for (const command of BINDABLE_COMMANDS) {
     const tr = document.createElement('tr');
     const action = document.createElement('td');
-    action.textContent = c.description || c.name;
+    action.textContent = commandName(command);
     const key = document.createElement('td');
-    if (c.shortcut) {
+    const shown = displayShortcut(keys[command]);
+    if (shown) {
       const k = document.createElement('kbd');
-      k.textContent = c.shortcut;
+      k.textContent = shown;
       key.append(k);
     } else {
       key.textContent = t('opt_keys_unset');
       key.className = 'muted';
     }
-    tr.append(action, key);
+    const change = document.createElement('td');
+    if (chromeKeys[command]) {
+      change.textContent = t('opt_keys_chrome');
+      change.className = 'muted';
+    } else {
+      change.className = 'row';
+      change.append(
+        button(`key-change-${command}`, t('opt_keys_change'), t('opt_keys_change_for', commandName(command)), () => startCapture(command)),
+        button(`key-clear-${command}`, t('opt_keys_clear'), t('opt_keys_clear_for', commandName(command)), () => clearKey(command)),
+      );
+    }
+    tr.append(action, key, change);
     body.append(tr);
   }
+  const say = displayShortcut(keys[SAY_SHORTCUTS]);
+  $('keysSayHint').textContent = say ? t('opt_keys_say_hint', say) : '';
+  if (focusId) $(focusId)?.focus();
+}
+
+/** Chrome's keys again (the listener may be back from Chrome's shortcuts page), then the rows. */
+async function renderShortcuts() {
+  chromeKeys = await readChromeKeys();
+  pageKeys = (await getSettings()).pageShortcuts;
+  renderKeyRows();
+}
+
+async function savePageKeys(next, said, focusId) {
+  try {
+    const saved = await setSettings({ pageShortcuts: next });
+    pageKeys = saved.pageShortcuts;
+  } catch {
+    sayKeys(t('opt_settings_save_failed'));
+    return;
+  }
+  renderKeyRows(focusId);
+  sayKeys(said);
+}
+
+function startCapture(command) {
+  capturing = command;
+  sayKeys(t('opt_keys_capture'));
+}
+
+function clearKey(command) {
+  capturing = null;
+  savePageKeys({ ...pageKeys, [command]: '' }, t('opt_keys_cleared', commandName(command)), `key-clear-${command}`);
+}
+
+function restoreKeys() {
+  capturing = null;
+  savePageKeys(PAGE_SHORTCUT_DEFAULTS, t('opt_keys_restored'), 'restoreKeys');
+}
+
+/**
+ * The next key pressed after Change becomes the command's key: it needs Alt,
+ * Ctrl or Command, may not be another command's key (Chrome's four included),
+ * and Escape keeps the old one. Tab moves on and stops the recording.
+ */
+function onCaptureKey(e) {
+  if (!capturing) return;
+  const command = capturing;
+  if (e.key === 'Tab') {
+    capturing = null;
+    sayKeys(t('opt_keys_unchanged'));
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === 'Escape') {
+    capturing = null;
+    sayKeys(t('opt_keys_unchanged'));
+    return;
+  }
+  const pressed = shortcutFromEvent(e);
+  if (!pressed) return; // a modifier on its own: the key is still to come
+  if (!isPageShortcut(pressed)) {
+    sayKeys(t('opt_keys_need_modifier'));
+    return;
+  }
+  capturing = null;
+  const other = shortcutConflict(pressed, command, chromeKeys, pageKeys);
+  if (other) {
+    sayKeys(t('opt_keys_conflict', displayShortcut(pressed), commandName(other)));
+    return;
+  }
+  savePageKeys({ ...pageKeys, [command]: pressed }, t('opt_keys_set', commandName(command), displayShortcut(pressed)), `key-change-${command}`);
 }
 
 async function renderCache() {
@@ -602,6 +726,8 @@ async function init() {
   $('typeAgain').addEventListener('click', letTypeDecide);
 
   await renderShortcuts();
+  document.addEventListener('keydown', onCaptureKey, true);
+  $('restoreKeys').addEventListener('click', restoreKeys);
   $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   // Back from Chrome's shortcuts page: show the keys just set.
   document.addEventListener('visibilitychange', () => {
@@ -625,7 +751,7 @@ async function init() {
   // relay no longer knew is gone by now, and Start free is the one shown).
   // Otherwise, with nothing set up yet, start where a key goes: in Chinese, at
   // the Qwen key, since Gemini needs Google, which mainland China cannot reach.
-  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey', '#cloud': $('cloudStart').hidden ? 'cloudStop' : 'cloudStart' }[location.hash];
+  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey', '#cloud': $('cloudStart').hidden ? 'cloudStop' : 'cloudStart', '#keys': 'h-keys' }[location.hash];
   if (wanted) $(wanted).focus();
   else if (!local.apiKey && !local.qwenApiKey && !local.cloudToken) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
 }
@@ -660,8 +786,7 @@ async function adoptProviderIfOnlyKey(provider, local) {
 /** What to do now that a key works: the site that key's model usually describes, and the shortcut. */
 async function nextStep(provider) {
   const site = provider === 'qwen' ? 'bilibili' : 'youtube';
-  const commands = await chrome.commands.getAll().catch(() => []);
-  const key = commands.find((c) => c.name === 'toggle-descriptions')?.shortcut;
+  const key = displayShortcut(effectiveShortcuts(await readChromeKeys(), (await getSettings()).pageShortcuts)['toggle-descriptions']);
   const next = key ? t(`opt_next_${site}`, key) : t(`opt_next_${site}_button`);
   const note = providerNote;
   providerNote = '';

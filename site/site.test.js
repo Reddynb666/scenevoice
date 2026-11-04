@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PAGES, checkSite, contrastIssues, loadPage } from './check.mjs';
+import { PAGES, TOOL_PAGES, checkSite, contrastIssues, loadPage } from './check.mjs';
 
 const BASE = 'https://example.test/scenevoice/';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -48,9 +48,9 @@ const $ = (dom, sel) => dom.window.document.querySelector(sel);
 const lines = (dom) => [...dom.window.document.querySelectorAll('#sample p')].map((p) => p.textContent);
 
 describe('site: accessibility', () => {
-  it('both pages: zero axe violations (WCAG 2.2 AA) and no own-check issues', async () => {
+  it('both home pages and the web player: zero axe violations (WCAG 2.2 AA) and no own-check issues', async () => {
     const result = await checkSite();
-    expect(result.pages.map((p) => p.page)).toEqual(PAGES);
+    expect(result.pages.map((p) => p.page)).toEqual([...PAGES, ...TOOL_PAGES]);
     for (const p of result.pages) {
       expect(p.violations, p.page).toEqual([]);
       expect(p.issues, p.page).toEqual([]);

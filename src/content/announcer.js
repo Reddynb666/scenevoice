@@ -208,10 +208,14 @@ export class Announcer {
     });
   }
 
-  /** Status messages (in the interface language): to the screen reader always (also braille), by voice for TTS users. */
-  status(text) {
+  /**
+   * Status messages (in the interface language): to the screen reader always (also braille), by voice for TTS users.
+   * Never cuts off a description being read. `always`: said even with status messages turned off (an answer the
+   * listener asked for, such as the list of shortcuts).
+   */
+  status(text, { always = false } = {}) {
     const s = this.getSettings();
-    if (!s.announceStatus || !text) return Promise.resolve();
+    if ((!s.announceStatus && !always) || !text) return Promise.resolve();
     if (s.output === 'tts') {
       this.announceToScreenReader(text, false);
       return this.pending ? this.say(text, { status: true }) : this.speakTts(text, false, this.uiLang);

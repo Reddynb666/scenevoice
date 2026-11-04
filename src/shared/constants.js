@@ -50,6 +50,35 @@ export const FRAME_SAMPLING = Object.freeze({ intervalSeconds: 2, windowSeconds:
  */
 export const BLANK_FRAMES_LIMIT = 6;
 
+/**
+ * The in-page command that reads every shortcut aloud. It exists only in the
+ * content script's own key layer (shortcuts.js), not in the manifest.
+ */
+export const SAY_SHORTCUTS = 'say-shortcuts';
+
+/**
+ * Default keys for the commands Chrome gives none (it allows four suggested
+ * keys, see static/manifest.json): handled by the content script itself, and
+ * changed on SceneVoice's settings page rather than chrome://extensions/shortcuts,
+ * which is hard to use with a screen reader. Chrome's own key for a command
+ * always wins (see shortcuts.js). "Alt" is Option on a Mac. The four commands
+ * the manifest suggests keys for have none here ('').
+ */
+export const PAGE_SHORTCUT_DEFAULTS = Object.freeze({
+  'toggle-descriptions': '',
+  'describe-now': '',
+  'repeat-last': '',
+  'ask-question': '',
+  'report-wrong': 'Alt+Shift+W',
+  'cycle-detail': 'Alt+Shift+E',
+  'cycle-mode': 'Alt+Shift+M',
+  'cycle-density': 'Alt+Shift+N',
+  'speed-up': 'Alt+Shift+Up',
+  'speed-down': 'Alt+Shift+Down',
+  'stop-speaking': 'Alt+Shift+X',
+  [SAY_SHORTCUTS]: 'Alt+Shift+H',
+});
+
 /** Settings synced across the user's browsers (no secrets here). */
 export const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
@@ -125,6 +154,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** Send finished descriptions (text only) to the SceneVoice Cloud cache, so the next
    *  listener of the same video gets them at once. Turned on when the listener picks Cloud. */
   shareDescriptions: false,
+  /** Keys handled by the content script, { command: 'Alt+Shift+W' } ('' = none); see PAGE_SHORTCUT_DEFAULTS. */
+  pageShortcuts: PAGE_SHORTCUT_DEFAULTS,
 });
 
 /** Allowed values for the choice settings, in the order the cycle shortcuts step through them. */

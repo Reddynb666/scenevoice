@@ -4,7 +4,8 @@
 // starts on the heading, every state is said in a live region, and the
 // built-in voice and the screen reader never speak at once.
 
-import { MSG, SAMPLE_DESCRIPTIONS } from '../shared/constants.js';
+import { MSG, SAMPLE_DESCRIPTIONS, SAY_SHORTCUTS } from '../shared/constants.js';
+import { displayShortcut, effectiveShortcuts } from '../shared/shortcuts.js';
 import { allowanceMinutes, registerDevice } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
 import { bindSettings } from '../shared/form.js';
@@ -147,11 +148,16 @@ async function startFree() {
   }
 }
 
-/** Step 3: the shortcut that creates descriptions, or that none is set. */
+/** Step 3: the shortcut that creates descriptions, or that none is set, and the one that reads all the keys. */
 async function renderShortcut() {
-  const commands = await chrome.commands.getAll().catch(() => []);
-  const key = commands.find((c) => c.name === 'toggle-descriptions')?.shortcut;
-  $('shortcutText').textContent = key ? t('welcome_shortcut_set', key) : t('welcome_shortcut_unset');
+  const chromeKeys = {};
+  for (const c of await chrome.commands.getAll().catch(() => [])) if (c.name && c.shortcut) chromeKeys[c.name] = c.shortcut;
+  const keys = effectiveShortcuts(chromeKeys, (await getSettings()).pageShortcuts);
+  const key = displayShortcut(keys['toggle-descriptions']);
+  const say = displayShortcut(keys[SAY_SHORTCUTS]);
+  const parts = [key ? t('welcome_shortcut_set', key) : t('welcome_shortcut_unset')];
+  if (say) parts.push(t('opt_keys_say_hint', say));
+  $('shortcutText').textContent = parts.join(' ');
 }
 
 async function init() {
@@ -187,8 +193,9 @@ async function init() {
   }
   $('startFree').addEventListener('click', startFree);
 
-  $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
-  // Back from Chrome's shortcuts page: say the key just set.
+  // The keys are changed on SceneVoice's settings page (Chrome's own shortcuts page is linked from there).
+  $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html#keys') }));
+  // Back from the settings or Chrome's shortcuts page: say the key just set.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') renderShortcut();
   });

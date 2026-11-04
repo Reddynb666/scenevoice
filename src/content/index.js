@@ -9,7 +9,8 @@
 // descriptions then come a few seconds after the picture, and are saved for
 // the next viewing like any others.
 
-import { MSG, DEFAULT_SETTINGS, AI_NOTICE_SEEN_KEY, AI_NOTICE_SEEN_MAX, BLANK_FRAMES_LIMIT, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES } from '../shared/constants.js';
+import { MSG, DEFAULT_SETTINGS, AI_NOTICE_SEEN_KEY, AI_NOTICE_SEEN_MAX, BLANK_FRAMES_LIMIT, CHUNK_SECONDS, DENSITIES, DETAILS, FRAME_SAMPLING, MODES, SAY_SHORTCUTS } from '../shared/constants.js';
+import { COMMAND_SHORT_KEYS, SPOKEN_GROUPS, displayShortcut, effectiveShortcuts, matchShortcut, pageBindings } from '../shared/shortcuts.js';
 import { coverageSeconds, coveredRanges, describedUpTo, isCovered, pickEvenly } from '../shared/coverage.js';
 import { t, errorMessage } from '../shared/i18n.js';
 import { readerSpeedLabel, typeAdjustedText } from '../shared/labels.js';
@@ -210,7 +211,8 @@ function main() {
   const readerRate = () => (settings.output === 'tts' ? settings.ttsRate : settings.readerSpeed);
   /** A setting as it applies to this video: mode, detail and density may follow the video type. */
   const setting = (key) => (key in adjusted ? adjusted[key] : settings[key]);
-  const shortcut = (name) => shortcuts[name] || '';
+  /** The key a command answers to, as the listener should hear it ("Option" on a Mac): Chrome's own, or the page's (shortcuts.js); '' for none. */
+  const shortcut = (name) => displayShortcut(currentKeys().effective[name]);
 
   /** Direct feedback to a user action (in the interface language): always delivered, cutting off any description in flight. */
   const feedback = (text) => {
@@ -236,6 +238,77 @@ function main() {
     if (res?.keys) keys = res.keys;
     ui.setButtonState(settings.enabled, shortcut('toggle-descriptions'));
     return undefined;
+  }
+
+  // ---------- keys handled by the page ----------
+  // Chrome keeps a key for only four commands (see shared/shortcuts.js): the
+  // others are matched here, on the window in the capture phase, so the key
+  // never reaches the player. A command that has a Chrome key is not matched
+  // here as well, or it would fire twice. Keys are matched by physical key
+  // (e.code), so Option+Shift on a Mac works although it types another character.
+  let keyCache = { chrome: null, page: null, bindings: {}, effective: {} };
+  /** The page's bindings and every command's effective key, rebuilt only when Chrome's keys or the setting change. */
+  const currentKeys = () => {
+    if (keyCache.chrome !== shortcuts || keyCache.page !== settings.pageShortcuts) {
+      keyCache = {
+        chrome: shortcuts,
+        page: settings.pageShortcuts,
+        bindings: pageBindings(shortcuts, settings.pageShortcuts),
+        effective: effectiveShortcuts(shortcuts, settings.pageShortcuts),
+      };
+    }
+    return keyCache;
+  };
+  const currentBindings = () => currentKeys().bindings;
+
+  /** Whether the key was typed into something: a field, a list box, an editor, or the ask dialog (which handles its own keys). */
+  function isTyping(e) {
+    const path = typeof e.composedPath === 'function' ? e.composedPath() : [e.target];
+    for (const node of path) {
+      if (!node || node.nodeType !== 1) continue;
+      if (ui.dialog && node === ui.dialog) return true;
+      const tag = node.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (node.isContentEditable || node.getAttribute('contenteditable') === 'true' || node.getAttribute('contenteditable') === '') return true;
+      const role = node.getAttribute('role');
+      if (role === 'textbox' || role === 'searchbox' || role === 'combobox') return true;
+    }
+    return false;
+  }
+
+  function onKeyDown(e) {
+    if (dead || e.isComposing || (!e.altKey && !e.ctrlKey && !e.metaKey)) return;
+    const command = matchShortcut(e, currentBindings());
+    if (!command || isTyping(e)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (command === SAY_SHORTCUTS) sayShortcuts();
+    else runCommand(command);
+  }
+  window.addEventListener('keydown', onKeyDown, true);
+
+  /**
+   * Every command and its key, in a few short sentences: what you do to the
+   * video, then the settings, then any command without a key. Said as status,
+   * so it never cuts off a description, but said even with status messages off.
+   */
+  function sayShortcuts() {
+    if (isFrame && !shouldHandle()) return;
+    const keys = currentKeys().effective;
+    const sep = t('keys_said_sep');
+    const unset = [];
+    const sentences = [];
+    SPOKEN_GROUPS.forEach((group, i) => {
+      const items = [];
+      for (const command of group) {
+        const key = displayShortcut(keys[command]);
+        if (key) items.push(`${key} ${t(COMMAND_SHORT_KEYS[command])}`);
+        else unset.push(t(COMMAND_SHORT_KEYS[command]));
+      }
+      if (items.length) sentences.push(t(i === 0 ? 'keys_said_actions' : 'keys_said_settings', items.join(sep)));
+    });
+    if (unset.length) sentences.push(t('keys_said_unset', unset.join(sep)));
+    announcer.status(sentences.join(' '), { always: true });
   }
 
   /**

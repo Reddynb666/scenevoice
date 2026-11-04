@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MSG } from '../src/shared/constants.js';
+import { BINDABLE_COMMANDS } from '../src/shared/shortcuts.js';
 import { fakeChrome } from './fake-chrome.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -198,11 +199,14 @@ describe('popup quick settings', () => {
     });
   });
 
-  it('says where to set shortcuts for the quick settings, or which keys they have', async () => {
+  it('names the keys for the quick settings: the page’s own by default, Chrome’s where it has one, or where to set them', async () => {
     await openPage('popup');
-    await vi.waitFor(() => expect($('#quickKeys').textContent).toMatch(/can each have a shortcut/));
+    await vi.waitFor(() => expect($('#quickKeys').textContent).toBe('Shortcuts: Alt+Shift+E detail · Alt+Shift+N how much to describe · Alt+Shift+M mode · Alt+Shift+Up faster · Alt+Shift+Down slower'));
     await openPage('popup', { shortcuts: { 'cycle-detail': 'Alt+Shift+1', 'cycle-density': 'Alt+Shift+3', 'speed-up': 'Alt+Shift+Up' } });
-    await vi.waitFor(() => expect($('#quickKeys').textContent).toBe('Shortcuts: Alt+Shift+1 detail · Alt+Shift+3 how much to describe · Alt+Shift+Up faster'));
+    await vi.waitFor(() => expect($('#quickKeys').textContent).toBe('Shortcuts: Alt+Shift+1 detail · Alt+Shift+3 how much to describe · Alt+Shift+M mode · Alt+Shift+Up faster · Alt+Shift+Down slower'));
+    const none = { 'cycle-detail': '', 'cycle-density': '', 'cycle-mode': '', 'speed-up': '', 'speed-down': '' };
+    await openPage('popup', { sync: { settings: { pageShortcuts: none } } });
+    await vi.waitFor(() => expect($('#quickKeys').textContent).toMatch(/can each have a shortcut/));
   });
 
   it('reads on-screen text by default, with a switch that says what it reads', async () => {
@@ -682,11 +686,123 @@ describe('settings page', () => {
     expect([...document.querySelectorAll('ul.small li')].map((li) => li.textContent)).toContain('你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。它们不会发给开发者，分享口述前也会先去掉；删除已保存的口述时，这些记录会一并删除。');
   });
 
-  it('lists the new speed shortcuts, unset by default', async () => {
+});
+
+describe('settings page: keyboard shortcuts', () => {
+  const rows = () => [...document.querySelectorAll('#shortcuts tr')].map((tr) => [...tr.children].map((td) => td.textContent));
+  const status = () => $('#keysStatus').textContent;
+  /** A key pressed where focus is, as a browser would deliver it. */
+  const press = (init) => {
+    const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    document.activeElement.dispatchEvent(e);
+    return e;
+  };
+
+  it('lists every command with its key: Chrome’s as set by Chrome, the rest with Change and Clear, all named and in the Tab order', async () => {
     await openPage('options');
-    await vi.waitFor(() => expect(document.querySelectorAll('#shortcuts tr')).toHaveLength(3));
-    const rows = [...document.querySelectorAll('#shortcuts tr')].map((tr) => tr.textContent);
-    expect(rows).toContain('Speak fasterNot set');
+    await vi.waitFor(() => expect(document.querySelectorAll('#shortcuts tr')).toHaveLength(BINDABLE_COMMANDS.length));
+    const r = rows();
+    expect(r[0]).toEqual(['Create descriptions, or turn them on and off', 'Alt+Shift+D', 'Set by Chrome']);
+    // Chrome has no key for this one and neither has the page: it can be given one here.
+    expect(r[1]).toEqual(['Describe what is on screen now', 'Not set', 'ChangeClear']);
+    expect(r[4]).toEqual(['Mark the last description as wrong and describe that moment again', 'Alt+Shift+W', 'ChangeClear']);
+    expect(r[8]).toEqual(['Speak faster', 'Alt+Shift+Up', 'ChangeClear']);
+    expect(r[11]).toEqual(['Say all the shortcuts', 'Alt+Shift+H', 'ChangeClear']);
+    expect($('#key-change-speed-up').getAttribute('aria-label')).toBe('Change the key for: Speak faster');
+    expect($('#key-clear-speed-up').getAttribute('aria-label')).toBe('Clear the key for: Speak faster');
+    expect($('#keysSayHint').textContent).toBe('On a video, Alt+Shift+H reads all the keys aloud.');
+    expect($('#h-keys').textContent).toBe('4. Keyboard shortcuts');
+    expect(unnamedControls()).toEqual([]);
+    expect(await axeViolations()).toEqual([]);
+    // Every control of the section can be reached with Tab, in reading order.
+    const focusable = [...$('#keys').querySelectorAll('button, a[href], input, select, textarea')].filter((el) => el.tabIndex >= 0 && !el.disabled && !el.hidden);
+    const expected = BINDABLE_COMMANDS.slice(1).flatMap((c) => [`key-change-${c}`, `key-clear-${c}`]);
+    expect(focusable.map((el) => el.id)).toEqual([...expected, 'restoreKeys', 'editShortcuts']);
+    const create = vi.spyOn(fake.chrome.tabs, 'create');
+    $('#editShortcuts').click();
+    expect(create).toHaveBeenCalledWith({ url: 'chrome://extensions/shortcuts' });
+  });
+
+  it('records a new key after Change and says it; refuses a key in use, or one without Alt, Ctrl or Command; Escape, Clear and Restore', async () => {
+    await openPage('options');
+    await vi.waitFor(() => expect($('#key-change-cycle-detail')).toBeTruthy());
+    const detailKey = () => rows()[5][1];
+    $('#key-change-cycle-detail').focus();
+    $('#key-change-cycle-detail').click();
+    expect(status()).toBe('Press the new key combination, or Escape to keep the old one.');
+    // A modifier on its own is not the key yet; a letter without Alt, Ctrl or Command will not do.
+    press({ key: 'Alt', code: 'AltLeft', altKey: true });
+    expect(status()).toBe('Press the new key combination, or Escape to keep the old one.');
+    press({ key: 'k', code: 'KeyK' });
+    expect(status()).toMatch(/^Hold Alt \(Option on a Mac\), Ctrl or Command/);
+    // Chrome's own key for another command: refused, the old key kept.
+    const d = press({ key: 'D', code: 'KeyD', altKey: true, shiftKey: true });
+    expect(d.defaultPrevented).toBe(true);
+    expect(status()).toBe('Alt+Shift+D is already used for: Create descriptions, or turn them on and off. The old key is kept.');
+    expect(detailKey()).toBe('Alt+Shift+E');
+    expect(stored().pageShortcuts).toBeUndefined();
+    // Another page key: refused too.
+    $('#key-change-cycle-detail').click();
+    press({ key: 'X', code: 'KeyX', altKey: true, shiftKey: true });
+    expect(status()).toBe('Alt+Shift+X is already used for: Stop speaking. The old key is kept.');
+    expect(detailKey()).toBe('Alt+Shift+E');
+    // A free key, pressed the Mac way (Option+Shift+K types another character; the physical key is K): saved, said, focus kept.
+    $('#key-change-cycle-detail').click();
+    press({ key: '', code: 'KeyK', altKey: true, shiftKey: true });
+    await vi.waitFor(() => expect(status()).toBe('Change the level of detail: now Alt+Shift+K.'));
+    expect(stored().pageShortcuts['cycle-detail']).toBe('Alt+Shift+K');
+    expect(detailKey()).toBe('Alt+Shift+K');
+    expect(document.activeElement.id).toBe('key-change-cycle-detail');
+    // Escape keeps it.
+    $('#key-change-cycle-detail').click();
+    press({ key: 'Escape', code: 'Escape' });
+    expect(status()).toBe('No change.');
+    expect(stored().pageShortcuts['cycle-detail']).toBe('Alt+Shift+K');
+    // Tab moves on and stops the recording; the key is not taken.
+    $('#key-change-cycle-detail').click();
+    const tab = press({ key: 'Tab', code: 'Tab' });
+    expect(tab.defaultPrevented).toBe(false);
+    expect(status()).toBe('No change.');
+    press({ key: 'J', code: 'KeyJ', altKey: true, shiftKey: true });
+    await settle();
+    expect(stored().pageShortcuts['cycle-detail']).toBe('Alt+Shift+K');
+    // Clear.
+    $('#key-clear-cycle-detail').click();
+    await vi.waitFor(() => expect(status()).toBe('Change the level of detail: no key now.'));
+    expect(stored().pageShortcuts['cycle-detail']).toBe('');
+    expect(detailKey()).toBe('Not set');
+    expect(document.activeElement.id).toBe('key-clear-cycle-detail');
+    // Restore the defaults.
+    $('#restoreKeys').click();
+    await vi.waitFor(() => expect(status()).toBe('Default keys restored.'));
+    expect(stored().pageShortcuts['cycle-detail']).toBe('Alt+Shift+E');
+    expect(detailKey()).toBe('Alt+Shift+E');
+    expect(document.activeElement.id).toBe('restoreKeys');
+  });
+
+  it('follows keys changed elsewhere, and says when a key could not be saved', async () => {
+    await openPage('options');
+    await vi.waitFor(() => expect($('#key-change-cycle-detail')).toBeTruthy());
+    await chrome.storage.sync.set({ settings: { ...stored(), pageShortcuts: { 'cycle-detail': 'Ctrl+Alt+2' } } });
+    await vi.waitFor(() => expect(rows()[5][1]).toBe('Ctrl+Alt+2'));
+    fake.failSyncWrites(1);
+    $('#key-clear-cycle-detail').click();
+    await vi.waitFor(() => expect(status()).toMatch(/could not be saved|not saved|save/i));
+    expect(rows()[5][1]).toBe('Ctrl+Alt+2');
+  });
+
+  it('is in Chinese for a Chinese interface', async () => {
+    await openPage('options', { locale: 'zh_CN', uiLanguage: 'zh-CN' });
+    await vi.waitFor(() => expect(document.querySelectorAll('#shortcuts tr')).toHaveLength(BINDABLE_COMMANDS.length));
+    expect(rows()[0]).toEqual(['生成口述，或开启/关闭口述', 'Alt+Shift+D', '由 Chrome 设定']);
+    expect(rows()[11]).toEqual(['朗读全部快捷键', 'Alt+Shift+H', '修改清除']);
+    expect($('#keysSayHint').textContent).toBe('在视频页按 Alt+Shift+H，会朗读全部快捷键。');
+    $('#key-change-cycle-detail').focus();
+    $('#key-change-cycle-detail').click();
+    expect(status()).toBe('请按下新的组合键；按 Escape 保留原来的。');
+    press({ key: 'Escape', code: 'Escape' });
+    expect(status()).toBe('没有改动。');
+    expect(await axeViolations()).toEqual([]);
   });
 });
 
@@ -779,18 +895,27 @@ describe('settings page: models for each site, and the Qwen key', () => {
 });
 
 describe('shortcuts in the popup', () => {
-  it('lists every shortcut with its key or "not set", and opens Chrome\u2019s shortcut page to change them', async () => {
+  it('lists every shortcut, Chrome\u2019s and the page\u2019s, with its key or "not set", and opens the settings section to change them', async () => {
     await openPage('popup');
     const items = [...document.querySelectorAll('#keyList li')].map((li) => li.textContent);
-    expect(items).toEqual([
-      'Create descriptions, or turn them on and off: Alt+Shift+D',
-      'Change the level of detail: Not set',
-      'Speak faster: Not set',
-    ]);
+    expect(items).toHaveLength(BINDABLE_COMMANDS.length);
+    expect(items[0]).toBe('Create descriptions, or turn them on and off: Alt+Shift+D');
+    expect(items[1]).toBe('Describe what is on screen now: Alt+Shift+S');
+    expect(items[2]).toBe('Repeat the last description: Not set');
+    expect(items[5]).toBe('Change the level of detail: Alt+Shift+E');
+    expect(items[8]).toBe('Speak faster: Alt+Shift+Up');
+    expect(items[11]).toBe('Say all the shortcuts: Alt+Shift+H');
+    expect($('#keysHint').textContent).toBe('On a video, Alt+Shift+H reads all the keys aloud. Change them under All settings, Keyboard shortcuts.');
     const create = vi.spyOn(fake.chrome.tabs, 'create');
     $('#editShortcuts').click();
-    expect(create).toHaveBeenCalledWith({ url: 'chrome://extensions/shortcuts' });
+    expect(create).toHaveBeenCalledWith({ url: 'chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef/options.html#keys' });
     expect($('#allKeys summary').textContent).toBe('All keyboard shortcuts');
+    // A custom page key is shown as such; a cleared "say the shortcuts" key changes the hint.
+    await openPage('popup', { sync: { settings: { pageShortcuts: { 'cycle-detail': 'Ctrl+Alt+2', 'say-shortcuts': '' } } } });
+    const again = [...document.querySelectorAll('#keyList li')].map((li) => li.textContent);
+    expect(again[5]).toBe('Change the level of detail: Ctrl+Alt+2');
+    expect(again[11]).toBe('Say all the shortcuts: Not set');
+    expect($('#keysHint').textContent).toBe('Change them under All settings, Keyboard shortcuts.');
   });
 });
 
@@ -1040,7 +1165,7 @@ describe('welcome page (first run)', () => {
     expect($('#tryBilibiliItem').hidden).toBe(true);
     expect($('#tryYoutube').getAttribute('target')).toBe('_blank');
     expect($('#tryYoutube').textContent).toMatch(/opens in a new tab/);
-    expect($('#shortcutText').textContent).toBe('Your shortcut to create descriptions, and to turn them on or off, is Alt+Shift+D.');
+    expect($('#shortcutText').textContent).toBe('Your shortcut to create descriptions, and to turn them on or off, is Alt+Shift+D. On a video, Alt+Shift+H reads all the keys aloud.');
     expect($('#skip').textContent).toBe('Skip, open all settings');
     expect($('#skip').getAttribute('href')).toBe('options.html');
 

@@ -21,6 +21,7 @@ import {
 } from './constants.js';
 import { cleanBudget } from './usage.js';
 import { isDescriptionLanguage } from './language.js';
+import { cleanPageShortcuts } from './shortcuts.js';
 
 const MAX_VOICE_NAME = 200;
 
@@ -92,6 +93,7 @@ const CLEAN = {
   bilibiliProvider: oneOf(PROVIDERS),
   dailyBudgetSeconds: cleanBudget,
   shareDescriptions: bool,
+  pageShortcuts: (v, d) => cleanPageShortcuts(v, d),
 };
 
 /** Settings the user can pick for themselves instead of leaving them to the video type. */

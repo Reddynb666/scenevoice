@@ -78,7 +78,13 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 
 **Popup**
 - [ ] Every control is reachable with Tab; status is announced when it changes.
-- [ ] *All keyboard shortcuts* lists every shortcut with its key or "not set"; *Change shortcuts* opens chrome://extensions/shortcuts.
+- [ ] *All keyboard shortcuts* lists every shortcut with its key or "not set"; *Change shortcuts* opens the *Keyboard shortcuts* section of the settings page.
+
+**Keyboard shortcuts handled on the page**
+- [ ] On a video, `Alt+Shift+H` reads every command with its key in a few short sentences, after any description being read, even with *Announce status* off; on a Mac the keys are said as "Option+Shift+…". `Alt+Shift+W`, `E`, `M`, `N`, `Up`, `Down` and `X` each do what the list says and announce the new value; none of them fires while typing in the ask dialog, a comment box or the search box, and none reaches the player (YouTube's own shortcuts stay quiet). On the settings page, *Change* on a row says to press the new keys, then says what was saved, refuses a key another SceneVoice command or one of Chrome's four already uses, and Escape keeps the old key; *Clear* and *Restore default keys* are announced; focus returns to the button each time.
+
+**Web player (site/play, in a browser with no extension installed)**
+- [ ] The page opens with its heading and a named *SceneVoice player* region; pasting a YouTube link and a key, then *Play*, says that descriptions are being created, then *You can start watching*, and descriptions are heard in the pauses through the screen reader (or the browser's voice, when chosen) without the two ever speaking at once. In the region, Space, D, R, A, S, the arrows, M and ? each announce what they did and never type into a field; `Alt+Shift+D`, `S`, `L` and `Q` work from anywhere on the page. A Bilibili link, an empty link and a missing key are each refused in one plain sentence; the key never appears in the address bar; with *Remember the key on this device* off, reloading the tab forgets it. Check in English and in Chinese (`?lang=zh-CN`), on a phone too.
 
 **China site: Bilibili with Qwen (experimental)**
 

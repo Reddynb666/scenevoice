@@ -30,13 +30,17 @@ SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116
 - [GitHub Releases](https://github.com/reddynb666/scenevoice/releases): `scenevoice-<version>.zip`, with `SHA256SUMS` to check the download; load it as an unpacked extension (see [Development](#development))
 - Gitee mirror for mainland China (see [docs/distribution-china.md](./docs/distribution-china.md))
 
+### Try it without installing
+
+The [web player](https://reddynb666.github.io/scenevoice/play/) (in Chinese: [play/?lang=zh-CN](https://reddynb666.github.io/scenevoice/play/?lang=zh-CN)) takes a YouTube link and reads AI audio description in the browser, through your screen reader or the browser's voice, with your own Gemini key (free from Google AI Studio; SceneVoice Cloud appears on the page but is not open yet). It also works on a phone. The differences from the extension: YouTube only (a Bilibili link is refused with a pointer to the extension), no timing from captions (the pauses are the model's estimates), no adjustments by video type, and the YouTube player is embedded from youtube-nocookie.com and kept out of the Tab order: the page's own buttons and keys drive it. In the player region, Space plays or pauses, D describes now, R repeats, A asks, S stops speaking, Left and Right move 5 seconds, Up and Down change the reading speed, M changes the mode and ? reads the list; `Alt+Shift+D`, `S`, `L` and `Q` work anywhere on the page, the same letters as in the extension.
+
 ### First run
 
 After installing, the welcome page opens: hear a sample, then choose SceneVoice Cloud (free allowance, no key) or your own key.
 
 1. **Hear a sample.** Three sample descriptions through your screen reader or the built-in voice. Nothing is sent anywhere.
 2. **Choose how descriptions are made.** *My own key* (the working path today): the settings page opens at the key field (the Qwen key field in a Chinese browser), with a step-by-step guide written for screen reader users. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are. *SceneVoice Cloud* is not open yet: the relay is not deployed, and *Start free* says so and points you back to your own key. Once it is live, *Start free* gives you an anonymous device token with 60 minutes of newly described video a day; videos other SceneVoice users already had described do not count, and finished descriptions are shared back as text (switch it off in settings).
-3. **Try it.** The page says your shortcut and links to a short video. The first time you play a video without descriptions, SceneVoice says once how to start. The popup lists every shortcut under *All keyboard shortcuts*, with a button to change them.
+3. **Try it.** The page says your shortcut, that `Alt+Shift+H` on a video reads all the keys aloud, and links to a short video. The first time you play a video without descriptions, SceneVoice says once how to start. The popup lists every shortcut under *All keyboard shortcuts*, with a button that opens the settings section where they are changed.
 
 ### Getting a Gemini API key
 
@@ -50,21 +54,26 @@ The free tier is enough for everyday use. Google's terms for the Gemini API appl
 
 Open any YouTube video.
 
-| Action | Shortcut |
-| --- | --- |
-| Create descriptions for this video, or turn them on and off | `Alt+Shift+D` |
-| Describe what is on screen right now | `Alt+Shift+S` |
-| Repeat the last description | `Alt+Shift+L` |
-| Ask a question about this moment | `Alt+Shift+Q` |
-| Mark the last description as wrong and describe that moment again | *(set your own)* |
-| Change the level of detail | *(set your own)* |
-| Change what happens when a description does not fit | *(set your own)* |
-| Change how much is described | *(set your own)* |
-| Speak faster | *(set your own)* |
-| Speak slower | *(set your own)* |
-| Stop speaking | *(set your own)* |
+### Keyboard shortcuts
 
-Shortcuts can be changed at `chrome://extensions/shortcuts` — do this if one clashes with your screen reader. Chrome lets an extension suggest only four shortcuts, so the others start unset; the settings page lists them all and has a button that opens Chrome's shortcut page. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
+| Action | Shortcut | Changed at |
+| --- | --- | --- |
+| Create descriptions for this video, or turn them on and off | `Alt+Shift+D` | `chrome://extensions/shortcuts` |
+| Describe what is on screen right now | `Alt+Shift+S` | `chrome://extensions/shortcuts` |
+| Repeat the last description | `Alt+Shift+L` | `chrome://extensions/shortcuts` |
+| Ask a question about this moment | `Alt+Shift+Q` | `chrome://extensions/shortcuts` |
+| Mark the last description as wrong and describe that moment again | `Alt+Shift+W` | SceneVoice settings, *Keyboard shortcuts* |
+| Change the level of detail | `Alt+Shift+E` | SceneVoice settings, *Keyboard shortcuts* |
+| Change the mode (what happens when a description does not fit) | `Alt+Shift+M` | SceneVoice settings, *Keyboard shortcuts* |
+| Change how much is described | `Alt+Shift+N` | SceneVoice settings, *Keyboard shortcuts* |
+| Speak faster | `Alt+Shift+Up` | SceneVoice settings, *Keyboard shortcuts* |
+| Speak slower | `Alt+Shift+Down` | SceneVoice settings, *Keyboard shortcuts* |
+| Stop speaking | `Alt+Shift+X` | SceneVoice settings, *Keyboard shortcuts* |
+| Say all the shortcuts | `Alt+Shift+H` | SceneVoice settings, *Keyboard shortcuts* |
+
+On a Mac, `Alt` is the Option key, and SceneVoice says the keys as "Option+Shift+…". `Alt+Shift+H` reads the whole list aloud at any time, with the keys currently set.
+
+Chrome lets an extension suggest only four shortcuts, so SceneVoice handles the other eight itself on the video page. Change them on the settings page under *Keyboard shortcuts*: press *Change*, then the new key combination (or Escape to keep the old one); *Clear* removes a key; *Restore default keys* puts them back. The page says what was saved, refuses a key already used by another SceneVoice command or by one of Chrome's four, and needs Alt, Ctrl or Command with a letter, digit, arrow or function key. The four keys Chrome keeps are still changed at `chrome://extensions/shortcuts`; the settings page has a button that opens it. Do change a key if it clashes with your screen reader. The page keys are ignored while you type in a field, a comment box, a search box or the ask dialog, and a key SceneVoice handles never reaches the player. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
 
 The shortcuts that change a setting say the new value, for example "Detail: brief." or "Speaking rate: 1.4 times normal." *Speak faster* and *Speak slower* change the built-in voice's rate; with your screen reader they change the speed SceneVoice plans for (the setting below), not the screen reader itself.
 
@@ -90,7 +99,7 @@ Your marks stay on your computer, next to the saved descriptions, and are delete
 - **Create descriptions automatically** — starts as soon as you open a video. Off by default because it uses your API quota on every video you open.
 - **Built-in voice** — voice, speaking rate and pitch, each set separately, with a *Test voice* button that reads a sentence in the description language. Voices for the description language are listed first, and each description language remembers its own voice. A voice chosen on another computer that this one does not have is replaced by an automatic one.
 - **Quick settings in the popup** — detail, mode, how much to describe, on-screen text and speed (the rate of the built-in voice, or your screen reader speed) are in the toolbar popup as well as on the settings page.
-- **Restore default settings** — at the end of the settings page. It resets every preference but keeps your API key, model, saved descriptions and keyboard shortcuts.
+- **Restore default settings** — at the end of the settings page. It resets every preference but keeps your API key, model and saved descriptions. It also puts the keys SceneVoice handles on the page back to their defaults; the four keys Chrome keeps are not touched.
 
 Settings other than the key are saved in your browser profile (`chrome.storage.sync`) and follow you to your other browsers if sync is on.
 
@@ -186,6 +195,7 @@ Descriptions are generated by a language model and can be wrong. SceneVoice asks
 - Settings (not the key) are synced through your browser profile if sync is on.
 - **SceneVoice Cloud** (optional; off until you press *Start free*): requests go to the project's relay at `api.scenevoice.app` with an anonymous device token instead of a key, and the relay calls Gemini with the project's key. Per token it keeps only the seconds of video described today, the plan and any licence key; it never keeps pictures, questions, answers or your IP address, and does not log requests. *Start free* also turns on *Share finished descriptions*: once a video's descriptions are complete, their text (never pictures, questions or your key) is sent to the relay so the next listener of that video gets it at once; switch it off in settings. *Stop using Cloud* removes the token.
 - A usage counter (today's requests, tokens and a rough cost per model, and each video's token count) and the daily limit you set are kept on this computer only and never sent anywhere.
+- The web player sends the same things to the Gemini API (or, with Cloud, to the relay), keeps the key in the tab's session storage unless you tick *Remember the key on this device*, has no analytics, and embeds YouTube's player from youtube-nocookie.com, which still sets YouTube's own cookies. The *Web player* section of the policy has the details.
 
 Full policy: [PRIVACY.md](./PRIVACY.md) (中文版：[PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)).
 
@@ -201,6 +211,8 @@ npm run build:meta   # build + dist-meta.json and a bundle size table (CI fails 
 npm run screenshots  # store screenshots and promo tile into docs/store/ (needs dist/)
 npm run release -- 1.2.0   # cut CHANGELOG, set the version, test, build, commit and tag (no push); see docs/release.md
 npm run dev          # rebuild on change
+npm run build:web    # the web player bundle, site/play/player.js (not in git; the Pages workflow builds it)
+node site/check.mjs  # accessibility check of the website, the web player page included
 ```
 
 Unpacked (developer) build:
@@ -214,12 +226,13 @@ Layout:
 - `src/content/` — runs on YouTube pages and Bilibili video pages: playback tracking, live regions, player button, ask dialog, and `generator.js`, the tab's side of generation (start, stop, ask; progress arrives as messages). What depends on the site is in a platform adapter, `youtube.js` or `bilibili.js` (`platforms.js` picks one); `frames.js` takes pictures of the playing video for models that are sent frames.
 - `src/background/` — service worker: text-to-speech, keyboard commands, status for the popup, cache housekeeping, and the hub that starts generation jobs, saves each finished section and tells the tabs. It makes no Gemini calls itself: Chrome stops a service worker whose fetch takes more than 30 seconds, and video requests often do.
 - `src/offscreen/` — the offscreen document and its web worker, where the model requests actually run — Gemini, Qwen, or SceneVoice Cloud's relay, including its shared-cache reads and writes (`worker.js` keeps the job list; `offscreen.js` bridges it to the service worker).
-- `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, cache, settings. Which model a site uses (Gemini, Qwen or SceneVoice Cloud) and whether it opens the video link or is sent frames is in `providers.js`; `qwen.js` is the Qwen client, `cloud.js` the relay's own routes (device token, allowance, licence, and which parts of a script may be shared), `usage.js` the daily counter, prices and daily limit, `language.js` which codes may be description languages, `scheduler.js` what may interrupt what, `frames.js` the prompts built from frames, `describe.js` runs them with either model, and `coverage.js` tracks which parts of a video are described.
+- `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, cache, settings. Which model a site uses (Gemini, Qwen or SceneVoice Cloud) and whether it opens the video link or is sent frames is in `providers.js`; `qwen.js` is the Qwen client, `cloud.js` the relay's own routes (device token, allowance, licence, and which parts of a script may be shared), `usage.js` the daily counter, prices and daily limit, `language.js` which codes may be description languages, `scheduler.js` what may interrupt what, `frames.js` the prompts built from frames, `describe.js` runs them with either model, `coverage.js` tracks which parts of a video are described, and `shortcuts.js` is the keyboard layer (Chrome's syntax and the Mac symbols, matching a key event by its physical key, which key wins when Chrome and the page both have one, conflicts, the `pageShortcuts` setting).
 - `src/popup/`, `src/options/`, `src/transcript/`, `src/guide/`, `src/welcome/` — toolbar popup, settings page, the transcript page, the API-key guide, and the welcome page opened on first run (hear a sample, then *Start free* or a key of your own).
+- `src/web/` — the web player (`site/play/`), built by `npm run build:web` into `site/play/player.js` without any `chrome.*` API: `app.js` the page, `link.js` YouTube link parsing, `youtube.js` the embedded player, `playback.js` the cue scheduler, `output.js` and `speech.js` live region or Web Speech output, `keys.js` the single-key layer, `model.js` Gemini or the relay, `store.js` what the browser remembers, `i18n.js` the strings (English and Simplified Chinese, from `scripts/locales/`).
 - `scripts/locales/` — every user-facing string, one file per interface language (`en.mjs` is the reference); the build generates `_locales/`.
-- `test/` — unit tests, and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (127 checks, including axe accessibility scans).
+- `test/` — unit tests (`test/web-player.test.js` covers the web player, `test/shortcuts.test.js` the keyboard layer), and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (127 checks, including axe accessibility scans).
 - `server/` — the SceneVoice Cloud reference relay, a Cloudflare Worker with its own README (the protocol) and tests under `server/test/`; not deployed.
-- `site/` — the project website (English and Simplified Chinese, no build step); `site/check.mjs` is its accessibility gate.
+- `site/` — the project website (English and Simplified Chinese; the home pages need no build step). `site/play/` is the web player page (`index.html`, `play.css`, and `player.js` from `npm run build:web`); `site/check.mjs` is the accessibility gate for all three pages.
 
 Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md), which also lists the manual checks for Bilibili.
 

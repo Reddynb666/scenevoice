@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:meta": "node scripts/build.mjs --metafile",
+    "build:web": "node scripts/build.mjs --web",
     "package": "node scripts/build.mjs --zip",
     "dev": "node scripts/build.mjs --watch",
     "test": "vitest run",
