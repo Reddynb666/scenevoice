@@ -155,6 +155,8 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     progressSaid: { milestone: 0, at: 0 },
     enabled: true,
     asking: false,
+    /** The last failure, in words: said again when a description is asked for and there is none, so it is not lost behind later status. */
+    lastError: '',
   };
 
   function nearest(list, value) {
@@ -269,6 +271,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     state.script = null;
     state.history = [];
     state.duration = 0;
+    state.lastError = '';
     playback.setVideo();
     el.progress.textContent = '';
     output.status(t('web_status_loading_player'));
@@ -280,13 +283,8 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     }
     if (state.videoId !== parsed.videoId) return;
     el.region.focus();
-    const duration = await waitForDuration(parsed.videoId);
-    if (state.videoId !== parsed.videoId) return;
-    if (!duration) {
-      output.status(webErrorMessage(new ApiError('bad-duration')));
-      return;
-    }
-    state.duration = duration;
+    // Play first: the embedded player knows a video's length only once it has
+    // started (getDuration() is 0 before that), and the listener did press Play.
     const lang = interfaceLocale();
     const cached = loadScript(local, parsed.videoId, lang);
     if (cached) {
@@ -294,6 +292,13 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
       playback.setScript(cached);
     }
     state.player.playVideo?.();
+    const duration = await waitForDuration(parsed.videoId);
+    if (state.videoId !== parsed.videoId) return;
+    if (!duration) {
+      sayError(new ApiError('bad-duration'));
+      return;
+    }
+    state.duration = duration;
     if (cached?.complete) {
       output.status(t('web_status_cached', String(cached.cues.length)));
       return;
@@ -374,11 +379,18 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     const provider = providerOf(source);
     if (source === 'cloud' && err instanceof ApiError && err.code === 'bad-key') saveToken(local, '');
     if (source === 'cloud' && err instanceof ApiError && (err.code === 'network' || err.code === 'request-failed' || err.code === 'rate-limited' || err.code === 'device-limit') && !state.script) {
-      output.status(t('web_cloud_unreachable'));
+      rememberError(t('web_cloud_unreachable'));
       return;
     }
     let text = webErrorMessage(err, provider);
     if (resumable && state.script?.completedUntil) text = `${text} ${t('web_error_resume', String(Math.max(1, Math.round(state.script.completedUntil / 60))))}`;
+    rememberError(text);
+  }
+
+  /** Say a failure now, keep it for later, and leave it in view under the player for a sighted helper. */
+  function rememberError(text) {
+    state.lastError = text;
+    el.progress.textContent = text;
     output.status(text);
   }
 
@@ -401,6 +413,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     if (state.videoId !== videoId) return;
     const controller = new AbortController();
     state.generating = controller;
+    state.lastError = '';
     state.progressSaid = { milestone: 0, at: Date.now() };
     output.status(resumeFrom ? t('web_status_resuming', String(Math.max(1, Math.round((resumeFrom.completedUntil || 0) / 60)))) : t('web_status_generating'));
     const mine = () => state.generating === controller && state.videoId === videoId;
@@ -486,7 +499,8 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     'describe-now': () => {
       if (noVideo()) return;
       if (!state.script) {
-        output.status(state.generating ? t('web_status_not_yet') : t('web_status_no_descriptions'));
+        // No descriptions, and the reason may have been talked over since: say it again.
+        output.status(state.generating ? t('web_status_not_yet') : state.lastError ? `${t('web_status_no_descriptions')} ${state.lastError}` : t('web_status_no_descriptions'));
         return;
       }
       if (!playback.describeNow()) output.status(t('web_status_nothing_here'));
