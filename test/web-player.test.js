@@ -47,7 +47,7 @@ function memoryStorage() {
 }
 
 /** A YT namespace whose Player is ready on the next tick and can be driven by the test. */
-function fakeYouTube({ duration = 60 } = {}) {
+function fakeYouTube({ duration = 60, durationAfterPlay = false } = {}) {
   const players = [];
   function Player(el, opts) {
     const p = this;
@@ -64,7 +64,8 @@ function fakeYouTube({ duration = 60 } = {}) {
     p.getCurrentTime = () => p.time;
     p.getPlayerState = () => p.state;
     p.getPlaybackRate = () => p.rate;
-    p.getDuration = () => duration;
+    // The real player knows the length only once the video has started (0 before that).
+    p.getDuration = () => (durationAfterPlay && !p.calls.includes('play') ? 0 : duration);
     p.getVideoData = () => ({ title: 'A test video', author: 'Tester' });
     p.playVideo = () => {
       p.calls.push('play');
@@ -456,6 +457,27 @@ describe('web player: playback', () => {
     await vi.waitFor(() => expect(status()).toBe(TABLES.en.status_on));
     // The script was complete: nothing more is asked of the model.
     expect(app.gemini.requests.length).toBe(before);
+  });
+
+  it('presses play before asking the player for the length, which the embedded player knows only once the video runs', async () => {
+    openPlayer({ yt: fakeYouTube({ durationAfterPlay: true }) });
+    const player = await play();
+    expect(player.calls[0]).toBe('play');
+    expect(app.state.duration).toBe(60);
+    expect(app.state.script?.complete).toBe(true);
+  });
+
+  it('keeps the reason descriptions failed: D says it again later, and it stays in view under the player', async () => {
+    openPlayer({ gemini: fakeGemini({ fail: true }) });
+    $('key').value = KEY;
+    $('link').value = `https://www.youtube.com/watch?v=${VIDEO}`;
+    $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_error_network), { timeout: 3000 });
+    expect($('progress').textContent).toBe(TABLES.en.web_error_network);
+    app.actions['play-pause']();
+    await vi.waitFor(() => expect(status()).toMatch(/^Paused\.|^Playing\./));
+    app.actions['describe-now']();
+    await vi.waitFor(() => expect(status()).toBe(`${TABLES.en.web_status_no_descriptions} ${TABLES.en.web_error_network}`));
   });
 
   it('a second link waits for the player to report the new video before reading its length', async () => {
