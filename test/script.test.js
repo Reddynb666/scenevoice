@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ESTIMATE_MARGIN,
+  applyConfidence,
   chooseUtterance,
   cleanText,
+  hedged,
+  isHedged,
   passesDensity,
   cueAt,
   estimateSeconds,
@@ -11,7 +15,8 @@ import {
   parseTime,
   planChunks,
 } from '../src/shared/script.js';
-import { CueScheduler, pickOne } from '../src/shared/scheduler.js';
+import { HEDGE_WORDS, LANGUAGES, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, ANSWER_AT } from '../src/shared/constants.js';
+import { CueScheduler, mayInterrupt, pickOne } from '../src/shared/scheduler.js';
 import { resolveLanguage } from '../src/shared/storage.js';
 import { parseIsoDuration, videoIdFromUrl } from '../src/content/youtube.js';
 
@@ -104,6 +109,100 @@ describe('normalizeChunk', () => {
   it('accepts a bare array', () => {
     expect(normalizeChunk([{ start: 1, standard: 'x' }]).cues).toHaveLength(1);
   });
+
+  it('keeps the video type only when it is one SceneVoice has settings for', () => {
+    expect(normalizeChunk({ videoType: 'tutorial', cues: [] }).videoType).toBe('tutorial');
+    expect(normalizeChunk({ videoType: 'entertainment', cues: [] }).videoType).toBe('entertainment');
+    expect(normalizeChunk({ videoType: 'other', cues: [] }).videoType).toBe('');
+    expect(normalizeChunk({ videoType: 'constructor', cues: [] }).videoType).toBe('');
+    expect(normalizeChunk([{ start: 1, standard: 'x' }]).videoType).toBe('');
+  });
+});
+
+describe('confidence', () => {
+  const raw = (confidence, extra = {}) => ({ cues: [{ start: 3, gap: 4, kind: 'visual', priority: 1, confidence, brief: 'A man holds a phone.', standard: 'A man holds a phone to his ear.', detailed: 'A man in a grey coat holds a phone to his ear.', ...extra }] });
+
+  it('keeps what Gemini said, and drops anything else', () => {
+    expect(normalizeChunk(raw('high')).cues[0].confidence).toBe('high');
+    expect(normalizeChunk(raw('medium')).cues[0].confidence).toBe('medium');
+    expect(normalizeChunk(raw('certain')).cues[0]).not.toHaveProperty('confidence');
+    // Scripts from before: nothing is added or changed.
+    const old = normalizeChunk(raw(undefined)).cues[0];
+    expect(old).not.toHaveProperty('confidence');
+    expect(old).toMatchObject({ priority: 1, brief: 'A man holds a phone.' });
+  });
+
+  it('makes a low-confidence description less important, and says it is not certain in every length', () => {
+    const [cue] = normalizeChunk(raw('low'), { lang: 'en' }).cues;
+    expect(cue).toMatchObject({
+      confidence: 'low',
+      priority: 2,
+      brief: 'Not certain. A man holds a phone.',
+      standard: 'Not certain. A man holds a phone to his ear.',
+      detailed: 'Not certain. A man in a grey coat holds a phone to his ear.',
+    });
+    // With "essentials only" it is no longer heard; it never goes below "atmosphere".
+    expect(passesDensity(cue, 'essential')).toBe(false);
+    expect(normalizeChunk(raw('low', { priority: 3 })).cues[0].priority).toBe(3);
+  });
+
+  it('leaves the words alone where they already say it is not clear', () => {
+    const [cue] = normalizeChunk(raw('low', { brief: 'He seems to hold a phone.', standard: 'He holds what appears to be a phone.' }), { lang: 'en' }).cues;
+    expect(cue.brief).toBe('He seems to hold a phone.');
+    expect(cue.standard).toBe('He holds what appears to be a phone.');
+    expect(cue.detailed).toBe('Not certain. A man in a grey coat holds a phone to his ear.');
+  });
+
+  it('says it in the description language', () => {
+    const zh = { brief: '一个男人拿着手机。', standard: '他手里好像拿着手机。', detailed: '画面很暗，看不清他手里拿的是什么。' };
+    const [cue] = normalizeChunk(raw('low', zh), { lang: 'zh-CN' }).cues;
+    expect(cue.brief).toBe('不太确定。一个男人拿着手机。');
+    expect(cue.standard).toBe(zh.standard);
+    expect(cue.detailed).toBe(zh.detailed);
+    expect(hedged('Un hombre sostiene un teléfono.', 'es')).toBe('No está claro. Un hombre sostiene un teléfono.');
+    expect(hedged('Un hombre parece sostener un teléfono.', 'es')).toBe('Un hombre parece sostener un teléfono.');
+  });
+
+  it('marks on-screen text that could not be read in full', () => {
+    const [cue] = normalizeChunk({ cues: [{ start: 1, kind: 'text', priority: 1, confidence: 'low', onScreenText: 'OPEN …', brief: 'Sign: OPEN …', standard: 'Sign: OPEN …, the rest is hard to read' }] }, { lang: 'en' }).cues;
+    expect(cue).toMatchObject({ kind: 'text', priority: 2, onScreenText: 'OPEN …', brief: 'Not certain. Sign: OPEN …', standard: 'Sign: OPEN …, the rest is hard to read' });
+    // Text gets one step more: still read with "essentials only".
+    expect(passesDensity(cue, 'essential')).toBe(true);
+  });
+
+  it('applies once: a description already said to be uncertain is not changed again', () => {
+    const once = applyConfidence({ priority: 1, confidence: 'low', brief: 'A dog.', standard: 'A dog runs.', detailed: 'A dog runs.' }, 'en');
+    expect(once.brief).toBe('Not certain. A dog.');
+    expect(hedged(once.brief, 'en')).toBe(once.brief);
+    expect(applyConfidence({ priority: 1, confidence: 'high', brief: 'A dog.' }, 'en')).toEqual({ priority: 1, confidence: 'high', brief: 'A dog.' });
+  });
+
+  it('has words for every description language, and for no other', () => {
+    const codes = LANGUAGES.map((l) => l.code);
+    // The languages with tables of their own; any other real language falls back to the English tables.
+    expect(codes).toEqual(['en', 'zh-CN', 'zh-TW', 'es', 'fr', 'de', 'pt', 'ja', 'ko', 'ru', 'ar', 'hi', 'it', 'nl', 'pl', 'tr', 'vi', 'th', 'id', 'bn', 'ur', 'fa', 'uk', 'sw']);
+    // Every table has exactly these languages: a new language must be added to all of them.
+    const sorted = [...codes].sort();
+    for (const [name, table] of Object.entries({ LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, HEDGE_WORDS, ANSWER_AT })) {
+      expect(Object.keys(table).sort(), name).toEqual(sorted);
+    }
+    for (const { code, name } of LANGUAGES) {
+      expect(name, code).toBeTruthy();
+      expect(LANGUAGE_NAMES_EN[code], code).toMatch(/^[A-Z]/);
+      expect(UNCERTAIN_LEAD[code], code).toBeTruthy();
+      // Ends with the space or punctuation the language needs before the description.
+      expect(UNCERTAIN_LEAD[code], code).toMatch(/[\s。]$/);
+      expect(ANSWER_AT[code], code).toContain('$1');
+      // Enough words to recognise the model's own hedging; the first three are shown to it as examples.
+      expect(HEDGE_WORDS[code]?.length, code).toBeGreaterThanOrEqual(6);
+      // The lead counts as saying so, so it is never added twice.
+      expect(isHedged(UNCERTAIN_LEAD[code], code), code).toBe(true);
+      for (const w of HEDGE_WORDS[code]) {
+        expect(w, code).toBe(w.toLowerCase());
+        expect(w.trim(), code).toBe(w);
+      }
+    }
+  });
 });
 
 describe('mergeScript', () => {
@@ -113,6 +212,14 @@ describe('mergeScript', () => {
     expect(merged.cues.map((c) => c.start)).toEqual([1, 500]);
     expect(merged.characters.map((c) => c.label)).toEqual(['Ann', 'Bo']);
     expect(merged.completedUntil).toBe(960);
+  });
+
+  it('takes the video type from the first section that names one', () => {
+    const first = mergeScript({ cues: [], characters: [] }, { cues: [], characters: [], videoType: '' }, 300);
+    expect(first.videoType).toBe('');
+    const second = mergeScript(first, { cues: [], characters: [], videoType: 'tutorial' }, 600);
+    expect(second.videoType).toBe('tutorial');
+    expect(mergeScript(second, { cues: [], characters: [], videoType: 'entertainment' }, 900).videoType).toBe('tutorial');
   });
 });
 
@@ -156,17 +263,43 @@ describe('chooseUtterance', () => {
     expect(chooseUtterance(roomy, { mode: 'gaps', detail: 'detailed', rate: 1, onScreenText: true }).text).toBe(roomy.detailed);
     expect(chooseUtterance(roomy, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true }).text).toBe(roomy.brief);
   });
-  it('gaps mode still says important cues briefly, drops minor ones', () => {
+  it('gaps mode skips a cue that does not fit, however important', () => {
     const tight = cue(0, { gap: 0.2, brief: 'A very long brief description that will not fit at all here' });
-    expect(chooseUtterance({ ...tight, priority: 1 }, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true }).needsPause).toBe(false);
-    expect(chooseUtterance({ ...tight, priority: 3 }, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true })).toBeNull();
+    for (const priority of [1, 2, 3]) {
+      expect(chooseUtterance({ ...tight, priority }, { mode: 'gaps', detail: 'standard', rate: 1, onScreenText: true })).toBeNull();
+    }
+  });
+  it('pause mode pauses for a cue that does not fit instead of skipping it', () => {
+    const tight = cue(0, { gap: 0.2, priority: 1 });
+    const u = chooseUtterance(tight, { mode: 'pause', detail: 'standard', rate: 1, onScreenText: true });
+    expect(u).toEqual({ text: tight.standard, needsPause: true });
+  });
+  it('keeps half a second back from a gap the model estimated, and none from one measured from captions', () => {
+    // "A door opens." takes about 1.3 s at rate 1.
+    expect(ESTIMATE_MARGIN).toBe(0.5);
+    const c = cue(0, { gap: 1.5 });
+    expect(chooseUtterance({ ...c, gapMeasured: true }, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true }).text).toBe(c.brief);
+    // The estimate is optimistic: 1.5 s claimed leaves 1 s of room, not enough.
+    expect(chooseUtterance(c, { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true })).toBeNull();
+    expect(chooseUtterance(c, { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
+    // The margin never makes the room negative, and at 2x the gap is halved before the margin comes off.
+    expect(chooseUtterance(cue(0, { gap: 0.3 }), { mode: 'pause', detail: 'brief', rate: 1, onScreenText: true }).needsPause).toBe(true);
+    expect(chooseUtterance(cue(0, { gap: 4 }), { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true, playbackRate: 2 }).text).toBe(c.brief);
+    expect(chooseUtterance(cue(0, { gap: 3 }), { mode: 'gaps', detail: 'brief', rate: 1, onScreenText: true, playbackRate: 2 })).toBeNull();
+  });
+  it('treats a gap of 0 (frames mode: no pause known) as no room at all', () => {
+    const unknown = cue(0, { gap: 0, priority: 1 });
+    expect(chooseUtterance(unknown, { mode: 'gaps', detail: 'standard', rate: 3, onScreenText: true })).toBeNull();
+    expect(chooseUtterance(unknown, { mode: 'pause', detail: 'standard', rate: 1, onScreenText: true })).toEqual({ text: unknown.standard, needsPause: true });
+    expect(chooseUtterance(unknown, { mode: 'manual', detail: 'standard', rate: 1, onScreenText: true })).toEqual({ text: unknown.standard, needsPause: false });
   });
   it('pause mode pauses only when needed', () => {
     expect(chooseUtterance(cue(0, { gap: 1 }), { mode: 'pause', detail: 'detailed', rate: 1, onScreenText: true }).needsPause).toBe(true);
     expect(chooseUtterance(cue(0, { gap: 30 }), { mode: 'pause', detail: 'detailed', rate: 1, onScreenText: true }).needsPause).toBe(false);
   });
   it('faster readers fit more', () => {
-    const c = cue(0, { gap: 3 });
+    // 3.5 s claimed, 3 s of room after the margin.
+    const c = cue(0, { gap: 3.5 });
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'detailed', rate: 1, onScreenText: true }).text).toBe(c.brief);
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'detailed', rate: 2, onScreenText: true }).text).toBe(c.standard);
     expect(chooseUtterance(c, { mode: 'gaps', detail: 'detailed', rate: 3, onScreenText: true }).text).toBe(c.detailed);
@@ -228,6 +361,32 @@ describe('CueScheduler', () => {
     expect(pickOne([cue(1, { priority: 2 }), cue(2, { priority: 1 }), cue(3, { priority: 2 })]).start).toBe(2);
     expect(pickOne([cue(1), cue(3)]).start).toBe(3);
     expect(pickOne([])).toBeNull();
+  });
+});
+
+describe('mayInterrupt', () => {
+  const visual = (priority) => ({ kind: 'visual', priority });
+  const text = (priority) => ({ kind: 'text', priority });
+  it('lets anything through when nothing is being said', () => {
+    expect(mayInterrupt(null, visual(3))).toBe(true);
+    expect(mayInterrupt(undefined, text(2))).toBe(true);
+  });
+  it('never cuts off a description of equal or higher priority', () => {
+    expect(mayInterrupt(visual(1), visual(1))).toBe(false);
+    expect(mayInterrupt(visual(1), visual(2))).toBe(false);
+    expect(mayInterrupt(visual(2), visual(1))).toBe(true);
+    expect(mayInterrupt(text(2), text(2))).toBe(false);
+    expect(mayInterrupt(text(2), text(1))).toBe(true);
+  });
+  it('keeps on-screen text safe from a visual description that is no more important', () => {
+    expect(mayInterrupt(text(2), visual(2))).toBe(false);
+    expect(mayInterrupt(text(2), visual(3))).toBe(false);
+    expect(mayInterrupt(text(2), visual(1))).toBe(true);
+  });
+  it('lets nothing scheduled cut off what the user asked for', () => {
+    const manual = { kind: 'manual', priority: 0 };
+    expect(mayInterrupt(manual, visual(1))).toBe(false);
+    expect(mayInterrupt(manual, text(1))).toBe(false);
   });
 });
 

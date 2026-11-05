@@ -1,363 +1,79 @@
-// Single source for all UI strings. build.mjs turns this into _locales/*/messages.json.
-// $1, $2 … are substitutions passed to chrome.i18n.getMessage.
+// All interface strings, one file per language in scripts/locales/ (en.mjs is
+// the reference). build.mjs turns them into _locales/*/messages.json; tests
+// read them through STRINGS, keyed as { key: { en, zh_CN, … } }.
+//
+// To add a language, add scripts/locales/<chrome locale>.mjs (for example
+// pt_BR.mjs) exporting an object with the same keys as en.mjs. It is picked up
+// here by its file name. The core languages must be complete; any other may be
+// partial: a missing string falls back to English, and the build prints how
+// much of each language is translated.
 
-export const LOCALES = ['en', 'zh_CN'];
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const STRINGS = {
-  // ----- manifest -----
-  ext_name: { en: 'SceneVoice: AI Audio Description for YouTube', zh_CN: 'SceneVoice 声景：YouTube AI 口述影像' },
-  ext_description: {
-    en: 'Audio description for any YouTube video, made for blind and low-vision viewers. Works with your screen reader.',
-    zh_CN: '为任意 YouTube 视频生成口述影像，专为盲人和低视力观众设计，配合读屏软件使用。',
-  },
-  cmd_toggle: { en: 'Create descriptions, or turn them on and off', zh_CN: '生成口述，或开启/关闭口述' },
-  cmd_describe_now: { en: 'Describe what is on screen now', zh_CN: '描述当前画面' },
-  cmd_repeat: { en: 'Repeat the last description', zh_CN: '重复上一条描述' },
-  cmd_ask: { en: 'Ask a question about this moment', zh_CN: '就当前画面提问' },
-  cmd_cycle_detail: { en: 'Change the level of detail', zh_CN: '切换详细程度' },
-  cmd_cycle_mode: { en: 'Change what happens when a description does not fit', zh_CN: '切换口述放不下时的处理方式' },
-  cmd_stop: { en: 'Stop speaking', zh_CN: '停止朗读' },
-  cmd_cycle_density: { en: 'Change how much is described', zh_CN: '切换口述多少' },
+/** Languages that must have every string: the build fails on a missing one. */
+export const CORE_LOCALES = ['en', 'zh_CN'];
 
-  // ----- on the YouTube page -----
-  player_button_label: { en: 'SceneVoice audio description', zh_CN: 'SceneVoice 口述影像' },
-  overlay_on_screen_text: { en: 'On screen', zh_CN: '画面文字' },
-  ask_title: { en: 'Ask about this moment', zh_CN: '就当前画面提问' },
-  ask_hint: {
-    en: 'For example: Who is speaking? What does the sign say? What just happened?',
-    zh_CN: '例如：谁在说话？牌子上写了什么？刚才发生了什么？',
-  },
-  ask_label: { en: 'Your question', zh_CN: '你的问题' },
-  ask_submit: { en: 'Ask', zh_CN: '提问' },
-  ask_close: { en: 'Close', zh_CN: '关闭' },
-  ask_thinking: { en: 'Looking at the video…', zh_CN: '正在查看视频……' },
-  ask_default_question: {
-    en: 'Describe what is on screen right now, briefly.',
-    zh_CN: '请简要描述此刻画面上的内容。',
-  },
-  status_generating: {
-    en: 'SceneVoice is creating descriptions. This takes about half a minute for every 5 minutes of video. You can keep watching.',
-    zh_CN: 'SceneVoice 正在生成口述，每 5 分钟视频约需半分钟，你可以继续观看。',
-  },
-  status_resuming: { en: 'Continuing descriptions for this video.', zh_CN: '继续为这个视频生成口述。' },
-  status_partial_ready: {
-    en: 'Descriptions are ready for the first $1 minutes ($2 so far). The rest is on the way.',
-    zh_CN: '前 $1 分钟的口述已就绪（目前 $2 条），其余部分正在生成。',
-  },
-  status_partial_empty: {
-    en: 'The first $1 minutes had nothing visual to describe. Working on the rest.',
-    zh_CN: '前 $1 分钟没有需要描述的画面，正在继续生成其余部分。',
-  },
-  popup_ready_detail: { en: '$1 descriptions ready, the first at $2.', zh_CN: '已就绪：$1 条口述，第一条在 $2。' },
-  popup_transcript: { en: 'Read all descriptions', zh_CN: '查看全部口述' },
-  transcript_title: { en: 'SceneVoice descriptions', zh_CN: 'SceneVoice 口述文本' },
-  transcript_intro: { en: '$1 descriptions · language $2 · model $3', zh_CN: '共 $1 条口述 · 语言 $2 · 模型 $3' },
-  transcript_none: { en: 'No descriptions are saved for this video.', zh_CN: '这个视频还没有保存的口述。' },
-  transcript_copy: { en: 'Copy as text', zh_CN: '复制为文本' },
-  transcript_copied: { en: 'Copied.', zh_CN: '已复制。' },
-  transcript_download: { en: 'Download .txt', zh_CN: '下载 .txt' },
-  transcript_detail_label: { en: 'Length', zh_CN: '长度' },
-  transcript_on_screen: { en: 'On screen', zh_CN: '画面文字' },
-  transcript_time: { en: 'Time', zh_CN: '时间' },
-  transcript_description: { en: 'Description', zh_CN: '描述' },
-  transcript_open_video: { en: 'Open the video', zh_CN: '打开视频' },
-  status_ready: {
-    en: 'Descriptions ready: $1 in total. Press $2 to describe the current moment at any time.',
-    zh_CN: '口述已就绪，共 $1 条。随时按 $2 可描述当前画面。',
-  },
-  status_ready_empty: {
-    en: 'Done. This video has nothing visual that needs describing.',
-    zh_CN: '完成。这个视频没有需要描述的画面内容。',
-  },
-  status_progress: { en: 'Creating descriptions: part $1 of $2 done.', zh_CN: '正在生成口述：已完成第 $1 部分，共 $2 部分。' },
-  status_progress_percent: { en: 'Creating descriptions: $1% done, working on section $2 of $3.', zh_CN: '生成进度 $1%，正在生成第 $2 段，共 $3 段。' },
-  status_progress_percent_single: { en: 'Creating descriptions: $1% done.', zh_CN: '生成进度 $1%。' },
-  status_hint_generate: {
-    en: 'No audio description yet. Press $1 to create it.',
-    zh_CN: '这个视频还没有口述，按 $1 即可生成。',
-  },
-  status_hint_generate_button: {
-    en: 'No audio description yet. Use the SceneVoice button in the player or the toolbar to create it.',
-    zh_CN: '这个视频还没有口述，可以用播放器里的 SceneVoice 按钮或工具栏图标生成。',
-  },
-  status_the_describe_button: { en: 'the Describe now button', zh_CN: '“描述当前画面”按钮' },
-  status_waiting_for_ad: {
-    en: 'Waiting for the ad to finish before creating descriptions.',
-    zh_CN: '等广告结束后再开始生成口述。',
-  },
-  status_ad_playing: { en: 'An ad is playing. Try again when the video is back.', zh_CN: '正在播放广告，等视频回来后再试。' },
-  status_stopped: { en: 'Stopped.', zh_CN: '已停止。' },
-  status_stopped_partial: {
-    en: 'Stopped. Descriptions for the first $1 minutes are saved; create again to continue.',
-    zh_CN: '已停止。前 $1 分钟的口述已保存，再次生成会从这里继续。',
-  },
-  progress_section: { en: 'Creating descriptions: section $1 of $2', zh_CN: '正在生成口述：第 $1 / $2 段' },
-  progress_working: { en: 'Creating descriptions…', zh_CN: '正在生成口述……' },
-  progress_eta_soon: { en: 'Under a minute left', zh_CN: '还需不到 1 分钟' },
-  progress_eta_minutes: { en: 'About $1 minutes left', zh_CN: '还需约 $1 分钟' },
-  popup_stop: { en: 'Stop', zh_CN: '停止' },
-  popup_progress_label: { en: 'Generation progress', zh_CN: '生成进度' },
-  popup_eta_soon: { en: 'Under a minute left.', zh_CN: '还需不到 1 分钟。' },
-  popup_eta_minutes: { en: 'About $1 minutes left.', zh_CN: '还需约 $1 分钟。' },
-  status_on: { en: 'Descriptions on.', zh_CN: '口述已开启。' },
-  status_off: { en: 'Descriptions off.', zh_CN: '口述已关闭。' },
-  status_looking: { en: 'Looking…', zh_CN: '正在查看……' },
-  status_nothing_to_repeat: { en: 'Nothing to repeat yet.', zh_CN: '还没有可以重复的描述。' },
-  announce_detail_brief: { en: 'Detail: brief.', zh_CN: '详细程度：简洁。' },
-  announce_detail_standard: { en: 'Detail: standard.', zh_CN: '详细程度：标准。' },
-  announce_detail_detailed: { en: 'Detail: detailed.', zh_CN: '详细程度：详细。' },
-  announce_mode_gaps: { en: 'Mode: keep playing, fit descriptions into pauses.', zh_CN: '模式：不暂停，在对白空隙描述。' },
-  announce_mode_pause: { en: 'Mode: pause the video for longer descriptions.', zh_CN: '模式：描述较长时暂停视频。' },
-  announce_mode_manual: { en: 'Mode: describe only when I ask.', zh_CN: '模式：只在我要求时描述。' },
+/**
+ * Strings spoken into the live region during playback, in front of or between
+ * descriptions. Every shipped language must have them: a partial language may
+ * fall back to English on a settings page, but not in the middle of a video.
+ */
+export const SPOKEN_KEYS = ['late_prefix', 'status_skipped_no_pause', 'status_skipped_no_pause_setting'];
 
-  // ----- errors -----
-  error_no_key: {
-    en: 'SceneVoice needs a Gemini API key. The settings page is opening so you can add one.',
-    zh_CN: 'SceneVoice 需要 Gemini API 密钥，正在打开设置页面，请添加密钥。',
-  },
-  error_bad_key: {
-    en: 'The Gemini API key was not accepted. Check it on the SceneVoice settings page.',
-    zh_CN: 'Gemini API 密钥无效，请在 SceneVoice 设置页检查。',
-  },
-  error_forbidden: {
-    en: 'Gemini refused the request. Your key may not have access to this model, or the service is not available in your region.',
-    zh_CN: 'Gemini 拒绝了请求。可能是密钥无权使用该模型，或你所在地区无法使用此服务。',
-  },
-  error_model_not_found: {
-    en: 'The chosen Gemini model is no longer available. Pick another one on the settings page.',
-    zh_CN: '所选的 Gemini 模型已不可用，请在设置页换一个。',
-  },
-  error_quota: {
-    en: 'Your Gemini quota is used up for now. Try again later; descriptions made so far are saved.',
-    zh_CN: 'Gemini 用量已达上限，请稍后再试；已生成的口述都已保存。',
-  },
-  error_video_unsupported: {
-    en: 'Gemini cannot watch this video. It may be private, age-restricted or unavailable in some regions.',
-    zh_CN: 'Gemini 无法读取这个视频，它可能是私享、有年龄限制或在部分地区不可用。',
-  },
-  error_too_long: { en: 'This part of the video is too long for the model. Try again.', zh_CN: '这段视频超出了模型的处理长度，请重试。' },
-  error_server: { en: 'The Gemini service had a problem. Try again in a moment.', zh_CN: 'Gemini 服务出现问题，请稍后重试。' },
-  error_request_failed: { en: 'The request to Gemini failed. Try again.', zh_CN: '向 Gemini 发送请求失败，请重试。' },
-  error_network: {
-    en: 'Could not reach the Gemini API. Check your internet connection or the API address in settings.',
-    zh_CN: '无法连接 Gemini API，请检查网络或设置中的 API 地址。',
-  },
-  error_no_model: {
-    en: 'No suitable Gemini model is available for this key.',
-    zh_CN: '这个密钥没有可用的 Gemini 模型。',
-  },
-  error_aborted: { en: 'Stopped.', zh_CN: '已停止。' },
-  error_blocked: {
-    en: 'Gemini declined to describe this video.',
-    zh_CN: 'Gemini 拒绝描述这个视频。',
-  },
-  error_empty_response: { en: 'Gemini returned no answer. Try again.', zh_CN: 'Gemini 没有返回结果，请重试。' },
-  error_truncated: { en: 'The answer from Gemini was cut off. Try again.', zh_CN: 'Gemini 的回答被截断，请重试。' },
-  error_bad_json: { en: 'Gemini returned an answer SceneVoice could not read. Try again.', zh_CN: 'Gemini 返回的内容无法解析，请重试。' },
-  error_bad_duration: {
-    en: 'The video is not ready yet. Start playing it, then try again.',
-    zh_CN: '视频还没加载好，请先播放，然后再试。',
-  },
-  error_live: { en: 'Live streams cannot be described yet.', zh_CN: '暂不支持描述直播。' },
-  error_extension_reloaded: {
-    en: 'SceneVoice was updated or restarted. Reload this page to continue.',
-    zh_CN: 'SceneVoice 已更新或重启，请刷新页面后继续。',
-  },
-  error_no_video: { en: 'No video found on this page.', zh_CN: '这个页面上没有找到视频。' },
-  error_unknown: { en: 'Something went wrong. Try again.', zh_CN: '出现了问题，请重试。' },
+const dir = join(dirname(fileURLToPath(import.meta.url)), 'locales');
+const rank = (l) => (CORE_LOCALES.includes(l) ? CORE_LOCALES.indexOf(l) : CORE_LOCALES.length);
+const files = readdirSync(dir)
+  .filter((f) => f.endsWith('.mjs'))
+  .map((f) => f.slice(0, -4))
+  .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 
-  // ----- popup -----
-  popup_setup_title: { en: 'Set up SceneVoice', zh_CN: '设置 SceneVoice' },
-  popup_setup_body: {
-    en: 'Add your free Gemini API key to start creating descriptions.',
-    zh_CN: '添加免费的 Gemini API 密钥后即可开始生成口述。',
-  },
-  popup_setup_button: { en: 'Add API key', zh_CN: '添加密钥' },
-  popup_this_video: { en: 'This video', zh_CN: '当前视频' },
-  popup_generate: { en: 'Create descriptions', zh_CN: '生成口述' },
-  popup_regenerate: { en: 'Create again', zh_CN: '重新生成' },
-  popup_continue: { en: 'Continue', zh_CN: '继续生成' },
-  popup_describe_now: { en: 'Describe now', zh_CN: '描述当前画面' },
-  popup_ask: { en: 'Ask a question', zh_CN: '提问' },
-  popup_settings: { en: 'Settings', zh_CN: '设置' },
-  popup_all_settings: { en: 'All settings', zh_CN: '全部设置' },
-  popup_reload_tab: {
-    en: 'Reload this YouTube tab to start SceneVoice.',
-    zh_CN: '请刷新这个 YouTube 页面以启动 SceneVoice。',
-  },
-  popup_open_video: { en: 'Open a YouTube video to use SceneVoice.', zh_CN: '打开一个 YouTube 视频即可使用 SceneVoice。' },
-  popup_ready: { en: '$1 descriptions ready.', zh_CN: '已就绪：$1 条口述。' },
-  popup_partial: {
-    en: 'Descriptions ready for the first $1 minutes.',
-    zh_CN: '前 $1 分钟的口述已就绪。',
-  },
-  popup_loading: { en: 'Loading…', zh_CN: '加载中……' },
-  popup_none: { en: 'No descriptions yet.', zh_CN: '还没有口述。' },
-  popup_shortcut_hint: { en: 'Shortcuts: $1 create or toggle · $2 describe now', zh_CN: '快捷键：$1 生成/开关 · $2 描述当前画面' },
+/** { locale: { key: text } } for every language file. */
+export const TABLES = {};
+// Imported by absolute file URL on purpose: a relative template literal would
+// make Vite (vitest) bake the folder's file list into its module cache, so a
+// locale file added later was not seen until the cache was cleared.
+for (const locale of files) TABLES[locale] = (await import(pathToFileURL(join(dir, `${locale}.mjs`)).href)).default;
 
-  // ----- shared settings -----
-  set_enabled: { en: 'Describe while I watch', zh_CN: '观看时自动口述' },
-  set_enabled_hint: { en: 'Speak descriptions automatically during playback.', zh_CN: '播放时自动朗读口述。' },
-  set_mode: { en: 'When a description does not fit', zh_CN: '描述放不进对白空隙时' },
-  mode_gaps: { en: 'Keep playing', zh_CN: '不暂停' },
-  mode_gaps_hint: { en: 'Shorten it to fit the pause. The video never stops.', zh_CN: '缩短描述以放进空隙，视频不会停。' },
-  mode_pause: { en: 'Pause the video', zh_CN: '暂停视频' },
-  mode_pause_hint: { en: 'Pause, describe in full, then continue.', zh_CN: '先暂停，完整描述后继续播放。' },
-  mode_manual: { en: 'Only when I ask', zh_CN: '只在我要求时' },
-  mode_manual_hint: { en: 'Silent until you press Describe now.', zh_CN: '平时不说话，按“描述当前画面”时才描述。' },
-  set_detail: { en: 'Detail', zh_CN: '详细程度' },
-  detail_brief: { en: 'Brief', zh_CN: '简洁' },
-  detail_standard: { en: 'Standard', zh_CN: '标准' },
-  detail_detailed: { en: 'Detailed', zh_CN: '详细' },
-  detail_brief_hint: { en: 'A few words: only what you need to follow along.', zh_CN: '几个词，只说跟上剧情所需的内容。' },
-  detail_standard_hint: { en: 'One sentence, like professional audio description.', zh_CN: '一句话，接近专业口述影像。' },
-  detail_detailed_hint: { en: 'Adds setting, appearance and detail.', zh_CN: '补充场景、外貌和细节。' },
-  set_density: { en: 'How much to describe', zh_CN: '口述多少' },
-  density_essential: { en: 'Essentials', zh_CN: '只说关键' },
-  density_standard: { en: 'Standard', zh_CN: '标准' },
-  density_full: { en: 'Everything', zh_CN: '全部' },
-  density_essential_hint: {
-    en: 'Only what you need to follow: scene changes, who is there, the main action, important text.',
-    zh_CN: '只说跟上剧情必需的：场景切换、谁在场、主要动作、重要文字。',
-  },
-  density_standard_hint: { en: 'Adds expressions, gestures, objects and how people look.', zh_CN: '再加上表情、手势、物品和人物外貌。' },
-  density_full_hint: { en: 'Also scenery, decor and background activity, like a radio play.', zh_CN: '连景物、陈设和背景活动也说，接近广播剧式的无障碍电影。' },
-  announce_density_essential: { en: 'Describing essentials only.', zh_CN: '口述多少：只说关键。' },
-  announce_density_standard: { en: 'Describing the standard amount.', zh_CN: '口述多少：标准。' },
-  announce_density_full: { en: 'Describing everything.', zh_CN: '口述多少：全部。' },
-  set_on_screen_text: { en: 'Read on-screen text', zh_CN: '朗读画面文字' },
-  set_on_screen_text_hint: { en: 'Titles, burned-in captions, signs and slides.', zh_CN: '标题、视频内嵌字幕、标牌和幻灯片。' },
-  set_output: { en: 'Voice', zh_CN: '朗读方式' },
-  output_screenreader: { en: 'My screen reader', zh_CN: '我的读屏软件' },
-  output_screenreader_hint: { en: 'Your own voice, speed and braille display.', zh_CN: '使用你自己的语音、语速和盲文显示器。' },
-  output_tts: { en: 'Built-in voice', zh_CN: '内置语音' },
-  output_tts_hint: { en: 'For listeners without a screen reader.', zh_CN: '适合不使用读屏软件的用户。' },
-  set_language: { en: 'Description language', zh_CN: '口述语言' },
-  lang_auto: { en: 'Same as my browser', zh_CN: '与浏览器语言相同' },
-  set_auto_generate: { en: 'Create descriptions automatically', zh_CN: '自动生成口述' },
-  set_auto_generate_hint: {
-    en: 'Start as soon as you open a video. Uses your API quota for every video you open.',
-    zh_CN: '打开视频就开始生成，每打开一个视频都会消耗 API 用量。',
-  },
-  set_announce_status: { en: 'Announce progress and status', zh_CN: '播报进度和状态' },
-  set_announce_status_hint: { en: 'For example “Descriptions ready”.', zh_CN: '例如“口述已就绪”。' },
-  set_pause_on_ask: { en: 'Pause while I ask a question', zh_CN: '提问时暂停视频' },
-  set_reader_speed: { en: 'How fast does your screen reader speak?', zh_CN: '你的读屏软件语速有多快？' },
-  set_reader_speed_hint: {
-    en: 'SceneVoice cannot hear your screen reader, so it uses this to decide which descriptions fit in a pause.',
-    zh_CN: 'SceneVoice 听不到读屏软件的声音，会根据这个设置判断描述能否放进空隙。',
-  },
-  speed_normal: { en: 'Default speed', zh_CN: '默认语速' },
-  speed_fast: { en: 'Fast', zh_CN: '较快' },
-  speed_very_fast: { en: 'Very fast', zh_CN: '很快' },
-  speed_fastest: { en: 'Extremely fast', zh_CN: '极快' },
-  set_interrupt: { en: 'Interrupt other speech', zh_CN: '打断读屏软件正在朗读的内容' },
-  set_interrupt_hint: {
-    en: 'Descriptions cut off whatever your screen reader is saying, so they stay in time with the video.',
-    zh_CN: '口述会打断读屏正在朗读的内容，以便与画面同步。',
-  },
-  set_voice: { en: 'Voice', zh_CN: '语音' },
-  set_voice_auto: { en: 'Automatic (matches the description language)', zh_CN: '自动（与口述语言匹配）' },
-  set_tts_rate: { en: 'Speaking rate', zh_CN: '语速' },
-  set_test_voice: { en: 'Test voice', zh_CN: '试听' },
-  set_test_voice_sample: {
-    en: 'A woman in a red coat crosses the snowy street.',
-    zh_CN: '一位穿红色大衣的女人走过积雪的街道。',
-  },
-  set_duck: { en: 'Lower the video volume while describing', zh_CN: '口述时降低视频音量' },
-  set_duck_level: { en: 'Video volume while describing', zh_CN: '口述时的视频音量' },
-  set_show_text: { en: 'Show descriptions as large text on the video', zh_CN: '在视频上用大字显示口述' },
-  set_show_text_hint: {
-    en: 'Helpful for low vision, and for people watching with you.',
-    zh_CN: '方便低视力用户，以及和你一起观看的人。',
-  },
+/** Every language shipped, core first. */
+export const LOCALES = Object.keys(TABLES);
 
-  // ----- options page -----
-  options_title: { en: 'SceneVoice settings', zh_CN: 'SceneVoice 设置' },
-  options_skip: { en: 'Skip to settings', zh_CN: '跳到设置' },
-  options_tagline: {
-    en: 'AI audio description for YouTube, made for screen reader users.',
-    zh_CN: '为读屏用户打造的 YouTube AI 口述影像。',
-  },
-  opt_key_title: { en: '1. Connect to Gemini', zh_CN: '1. 连接 Gemini' },
-  opt_key_intro: {
-    en: "SceneVoice uses Google's Gemini model to watch the video and write descriptions. You use your own free API key, so there is no account and no subscription.",
-    zh_CN: 'SceneVoice 使用谷歌的 Gemini 模型观看视频并撰写口述。你使用自己的免费 API 密钥，无需注册账号，也没有订阅费。',
-  },
-  opt_key_step1: { en: 'Open Google AI Studio and sign in with a Google account:', zh_CN: '打开 Google AI Studio，并用谷歌账号登录：' },
-  opt_key_step2: { en: 'Choose “Create API key” and copy it.', zh_CN: '选择“Create API key”（创建 API 密钥）并复制。' },
-  opt_key_step3: { en: 'Paste it below and press Save and test.', zh_CN: '粘贴到下方，然后按“保存并测试”。' },
-  opt_key_label: { en: 'Gemini API key', zh_CN: 'Gemini API 密钥' },
-  opt_key_show: { en: 'Show', zh_CN: '显示' },
-  opt_key_hide: { en: 'Hide', zh_CN: '隐藏' },
-  opt_key_save: { en: 'Save and test', zh_CN: '保存并测试' },
-  opt_key_remove: { en: 'Remove key', zh_CN: '删除密钥' },
-  opt_key_privacy: {
-    en: 'Your key is stored only on this computer and is sent only to the Gemini API address below.',
-    zh_CN: '密钥只保存在这台电脑上，并且只会发送到下方的 Gemini API 地址。',
-  },
-  opt_key_missing: { en: 'Enter your API key first.', zh_CN: '请先输入 API 密钥。' },
-  opt_key_testing: { en: 'Testing your key…', zh_CN: '正在测试密钥……' },
-  opt_key_ok: { en: 'Connected. Using $1. You are ready to go.', zh_CN: '连接成功，当前模型：$1，可以开始了。' },
-  opt_key_removed: { en: 'Key removed.', zh_CN: '密钥已删除。' },
-  opt_model_label: { en: 'Model', zh_CN: '模型' },
-  opt_model_hint: {
-    en: 'The recommended model is chosen automatically. Flash models are fast and inexpensive.',
-    zh_CN: '会自动选择推荐模型。Flash 系列速度快、费用低。',
-  },
-  opt_model_none: { en: 'Add a key to see models', zh_CN: '添加密钥后可查看模型' },
-  opt_model_recommended: { en: 'recommended', zh_CN: '推荐' },
-  opt_model_saved: { en: 'Model set to $1.', zh_CN: '已切换到 $1。' },
-  opt_advanced: { en: 'Advanced', zh_CN: '高级' },
-  opt_endpoint_label: { en: 'API address', zh_CN: 'API 地址' },
-  opt_endpoint_hint: {
-    en: 'Change only if you use a compatible relay, for example where Google services are not reachable. The relay will see your key and requests.',
-    zh_CN: '仅在使用兼容的中转服务时修改，例如在无法直接访问谷歌服务的地区。中转服务能看到你的密钥和请求内容。',
-  },
-  opt_endpoint_save: { en: 'Save address', zh_CN: '保存地址' },
-  opt_endpoint_reset: { en: 'Reset to default', zh_CN: '恢复默认' },
-  opt_endpoint_invalid: { en: 'Enter a full https:// address.', zh_CN: '请输入完整的 https:// 地址。' },
-  opt_settings_save_failed: {
-    en: 'Settings could not be saved just now (too many changes in a short time). Wait a moment and try again.',
-    zh_CN: '刚才的设置没能保存（短时间内修改次数过多），请稍等片刻再试。',
-  },
-  opt_endpoint_denied: {
-    en: 'SceneVoice needs permission to contact that address. Allow it in the prompt and try again.',
-    zh_CN: 'SceneVoice 需要获得访问该地址的权限，请在弹出的提示中允许后重试。',
-  },
-  opt_desc_title: { en: '2. Descriptions', zh_CN: '2. 口述内容' },
-  opt_speech_title: { en: '3. Voice and sound', zh_CN: '3. 语音和声音' },
-  opt_keys_title: { en: '4. Keyboard shortcuts', zh_CN: '4. 快捷键' },
-  opt_keys_intro: {
-    en: 'These work on any YouTube video, even while focus is on the player.',
-    zh_CN: '在任意 YouTube 视频页面都可使用，焦点在播放器上时也有效。',
-  },
-  opt_keys_action: { en: 'Action', zh_CN: '功能' },
-  opt_keys_key: { en: 'Shortcut', zh_CN: '快捷键' },
-  opt_keys_edit: { en: 'Change shortcuts', zh_CN: '修改快捷键' },
-  opt_keys_hint: {
-    en: 'Change them if they clash with your screen reader. Chrome opens its shortcut settings page.',
-    zh_CN: '如果与读屏软件冲突，可以修改。将打开 Chrome 的快捷键设置页面。',
-  },
-  opt_keys_unset: { en: 'Not set', zh_CN: '未设置' },
-  opt_data_title: { en: '5. Saved descriptions and privacy', zh_CN: '5. 已保存的口述与隐私' },
-  opt_cache_clear: { en: 'Delete all saved descriptions', zh_CN: '删除所有已保存的口述' },
-  opt_cache_info: { en: '$1 videos described and saved on this computer ($2 KB).', zh_CN: '这台电脑上保存了 $1 个视频的口述（$2 KB）。' },
-  opt_cache_confirm: {
-    en: 'Delete all saved descriptions? Videos will need to be described again.',
-    zh_CN: '确定删除所有已保存的口述吗？之后视频需要重新生成。',
-  },
-  privacy_1: {
-    en: 'SceneVoice has no server and no account. It does not collect analytics.',
-    zh_CN: 'SceneVoice 没有服务器，也不需要账号，不收集任何统计数据。',
-  },
-  privacy_2: {
-    en: "To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. Google's terms for the Gemini API apply.",
-    zh_CN: '生成口述或回答提问时，视频地址、标题、频道名、简介、你的问题以及最近的口述会连同你的密钥发送给 Gemini API，并受谷歌 Gemini API 条款约束。',
-  },
-  privacy_3: {
-    en: 'Descriptions are saved on this computer so a video is described only once.',
-    zh_CN: '口述保存在这台电脑上，同一个视频只需生成一次。',
-  },
-  opt_footer: { en: 'SceneVoice is free and open source.', zh_CN: 'SceneVoice 免费且开源。' },
-};
+/**
+ * The _locales folders the build writes, as [folder, locale]: one per language
+ * file, plus a bare parent folder (zh, pt) for every regional locale whose
+ * parent has no file of its own, written from the first such locale in LOCALES
+ * order (core first, then alphabetical: zh from zh_CN, pt from pt_BR). Chrome
+ * resolves a browser locale through its parents and then default_locale
+ * (pt_PT → pt → en), never through a sibling region, so without the parent
+ * folder a Portuguese (Portugal) or Hong Kong browser would get English.
+ */
+export const LOCALE_FOLDERS = LOCALES.map((l) => [l, l]);
+for (const locale of LOCALES) {
+  const base = locale.split('_')[0];
+  if (base !== locale && !LOCALE_FOLDERS.some(([folder]) => folder === base)) LOCALE_FOLDERS.push([base, locale]);
+}
+
+/** { key: { locale: text } }, in the order of en.mjs. */
+export const STRINGS = {};
+for (const key of Object.keys(TABLES.en)) STRINGS[key] = {};
+for (const [locale, table] of Object.entries(TABLES)) {
+  for (const [key, text] of Object.entries(table)) if (STRINGS[key]) STRINGS[key][locale] = text;
+}
+
+/**
+ * Strings of the web player (site/play), which speaks English and Chinese only:
+ * not counted when asking how complete another language is.
+ */
+export const isWebKey = (key) => key.startsWith('web_');
+
+/** The share of the extension's strings a language has, 0 to 1. */
+export function coverage(locale) {
+  const keys = Object.keys(TABLES.en).filter((k) => !isWebKey(k));
+  return keys.filter((k) => TABLES[locale]?.[k]).length / keys.length;
+}
+
+/** Keys a language has that English no longer has: stale, to be removed. */
+export function strayKeys(locale) {
+  return Object.keys(TABLES[locale] || {}).filter((k) => !(k in TABLES.en));
+}

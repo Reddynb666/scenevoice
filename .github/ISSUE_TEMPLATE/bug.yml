@@ -1,0 +1,61 @@
+# Written to be filled in with a screen reader: every field is a plain text box
+# with a spoken label, nothing is a dropdown, and only the three fields that
+# make a report usable are required. Chinese answers are welcome (可以用中文填写).
+name: Something went wrong (问题反馈)
+description: SceneVoice did not do what you expected, or said something wrong. 描述有误、没有声音、快捷键无效等。
+title: "Problem: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Please answer what you can; every field below is a plain text box. You can write in English or Chinese (可以用中文). Do not paste your API key anywhere in this form.
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: For example "Chrome 131 on Windows 11" or "Edge 130 on macOS". chrome://version shows it.
+      placeholder: Chrome 131, Windows 11
+    validations:
+      required: true
+  - type: input
+    id: screen-reader
+    attributes:
+      label: Screen reader or voice, and version
+      description: NVDA, JAWS, VoiceOver, Narrator, 争渡, 保益, or "built-in voice" if you use SceneVoice's own speech. Write "none" if you do not use one.
+      placeholder: NVDA 2025.1
+  - type: input
+    id: video
+    attributes:
+      label: Video address
+      description: The YouTube or Bilibili link where it happened, if it is public. Leave empty if you would rather not say.
+      placeholder: https://www.youtube.com/watch?v=...
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Gemini, Qwen, or SceneVoice Cloud, and the model name if you changed it in settings.
+      placeholder: Gemini (gemini-3.5-flash)
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you pressed or did
+      description: Step by step. For example "Opened the video, pressed Alt+Shift+D, waited a minute, pressed Alt+Shift+S".
+    validations:
+      required: true
+  - type: textarea
+    id: heard
+    attributes:
+      label: What you heard
+      description: As exactly as you can, including the status messages SceneVoice said and anything the screen reader read.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Settings that differ from the defaults (mode, detail, output), whether it worked before, the exact error text, a screenshot if you have one.

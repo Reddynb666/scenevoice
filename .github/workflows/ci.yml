@@ -5,25 +5,66 @@ on:
     branches: [main]
   pull_request:
 
+# The job only reads the repository; nothing here writes back.
+permissions:
+  contents: read
+
+# A new push to the same branch or pull request replaces the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions are pinned to full commit SHAs; the comment names the tag that SHA was resolved from.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run build
-      - uses: actions/setup-python@v5
+      - name: Build, with bundle sizes
+        # build:meta writes dist-meta.json, prints a size table and exits 1 when content.js is over 120 KB.
+        # `shell: bash` runs the script with `-o pipefail`, so that exit status survives the pipe into tee.
+        shell: bash
+        run: |
+          npm run build:meta | tee build.log
+          { echo "### Bundle sizes (minified)"; echo; grep '^|' build.log; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
-      - run: pip install playwright && python -m playwright install --with-deps chromium
-      - run: python test/e2e/e2e.py
+          cache: pip
+          cache-dependency-path: test/e2e/requirements.txt
+      - run: pip install -r test/e2e/requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: End-to-end test (real extension, headless Chromium, mock model)
+        run: python test/e2e/e2e.py
+      - name: Keep the e2e screenshots when it fails
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-output
+          path: test/e2e/output
+          if-no-files-found: ignore
       - run: npm run package
-      - uses: actions/upload-artifact@v4
+      - name: Check the package contents
+        # The store package must hold only the built extension: no dotfiles (.DS_Store), no source maps.
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          ZIP="scenevoice-$VERSION.zip"
+          unzip -l "$ZIP"
+          if unzip -Z1 "$ZIP" | grep -E '(^|/)\.|\.map$'; then
+            echo "::error::$ZIP contains dotfiles or source maps (listed above)"; exit 1
+          fi
+          unzip -tq "$ZIP"
+          unzip -tq "scenevoice-$VERSION-sourcemaps.zip"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: scenevoice
-          path: scenevoice-*.zip
+          path: |
+            scenevoice-*.zip
+            dist-meta.json

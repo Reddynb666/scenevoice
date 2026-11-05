@@ -1,22 +1,53 @@
 // Gemini API client. Request builders are pure functions so they can be tested;
 // network calls take an injectable fetch.
 
-import { LANGUAGE_NAMES_EN } from './constants.js';
-import { extractJson, formatTime } from './script.js';
+import { ANSWER_AT, HEDGE_WORDS, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD } from './constants.js';
+import { ApiError } from './errors.js';
+import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
+import { askHistoryText } from './ask.js';
+import { countedUsage } from './usage.js';
 
-export class GeminiError extends Error {
-  /** @param {string} code  stable code mapped to a localized message */
-  constructor(code, detail = '', status = 0) {
-    super(`${code}${detail ? `: ${detail}` : ''}`);
-    this.code = code;
-    this.detail = detail;
-    this.status = status;
-  }
+/** The people the descriptions have labelled so far, for the model to keep calling them the same. */
+export function peopleText(characters) {
+  const list = (Array.isArray(characters) ? characters : [])
+    .filter((c) => c && typeof c.label === 'string' && c.label.trim())
+    .slice(0, 20);
+  if (!list.length) return '';
+  const one = (c) => `${clip(c.label, 80)}${typeof c.description === 'string' && c.description ? ` (${clip(c.description, 160)})` : ''}`;
+  return `People already introduced earlier in the video (reuse these labels): ${list.map(one).join('; ')}`;
 }
+
+/** @see ApiError; Gemini's own name, kept for the code and tests that use it. */
+export class GeminiError extends ApiError {}
+
+const CUE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    start: { type: 'NUMBER' },
+    gap: { type: 'NUMBER' },
+    kind: { type: 'STRING', enum: ['visual', 'text'] },
+    priority: { type: 'INTEGER' },
+    // Text cues: the text exactly as written, transcribed before the
+    // spoken versions are written, so they quote it rather than paraphrase.
+    // Also what playback compares with the captions. '' for visual cues.
+    onScreenText: { type: 'STRING' },
+    // Decided before the spoken versions, so they can say in words what is not
+    // clear. A low one is heard less often and is said to be uncertain (script.js).
+    confidence: { type: 'STRING', enum: CONFIDENCES },
+    brief: { type: 'STRING' },
+    standard: { type: 'STRING' },
+    detailed: { type: 'STRING' },
+  },
+  required: ['start', 'gap', 'kind', 'priority', 'onScreenText', 'confidence', 'brief', 'standard', 'detailed'],
+  propertyOrdering: ['start', 'gap', 'kind', 'priority', 'onScreenText', 'confidence', 'brief', 'standard', 'detailed'],
+};
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    // Chooses the default mode, detail and density for the video (see videotype.js). It
+    // comes with the descriptions, so knowing it costs no extra request.
+    videoType: { type: 'STRING', enum: ['entertainment', 'tutorial', 'other'] },
     characters: {
       type: 'ARRAY',
       items: {
@@ -28,30 +59,67 @@ const RESPONSE_SCHEMA = {
         required: ['label'],
       },
     },
-    cues: {
-      type: 'ARRAY',
-      items: {
-        type: 'OBJECT',
-        properties: {
-          start: { type: 'NUMBER' },
-          gap: { type: 'NUMBER' },
-          kind: { type: 'STRING', enum: ['visual', 'text'] },
-          priority: { type: 'INTEGER' },
-          brief: { type: 'STRING' },
-          standard: { type: 'STRING' },
-          detailed: { type: 'STRING' },
-        },
-        required: ['start', 'gap', 'kind', 'priority', 'brief', 'standard', 'detailed'],
-        propertyOrdering: ['start', 'gap', 'kind', 'priority', 'brief', 'standard', 'detailed'],
-      },
-    },
+    cues: { type: 'ARRAY', items: CUE_SCHEMA },
   },
-  required: ['characters', 'cues'],
-  propertyOrdering: ['characters', 'cues'],
+  required: ['videoType', 'characters', 'cues'],
+  propertyOrdering: ['videoType', 'characters', 'cues'],
 };
 
+/** One moment described again, after the user marked its description as wrong. */
+const REVISION_SCHEMA = {
+  type: 'OBJECT',
+  properties: { cues: { type: 'ARRAY', items: CUE_SCHEMA } },
+  required: ['cues'],
+};
+
+/** An answer to a question, with the moment it is about, so SceneVoice can say it and jump there. */
+const ASK_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    time: { type: 'NUMBER' },
+    confidence: { type: 'STRING', enum: CONFIDENCES },
+    answer: { type: 'STRING' },
+  },
+  required: ['time', 'confidence', 'answer'],
+  propertyOrdering: ['time', 'confidence', 'answer'],
+};
+
+/**
+ * The description language's English name, for the prompts. Any real language
+ * can be asked for (storage.js resolveLanguage), so one without a table is
+ * named by the browser ("sv" → "Swedish"); the code itself is the last resort.
+ */
 export function languageName(code) {
-  return LANGUAGE_NAMES_EN[code] || code;
+  if (LANGUAGE_NAMES_EN[code]) return LANGUAGE_NAMES_EN[code];
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' }).of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+/**
+ * How to hedge, as examples for the model: in English, and in the description
+ * language when that is another one. Taken from the words SceneVoice itself
+ * recognises as hedging (HEDGE_WORDS), so a model that uses them is not told
+ * "Not certain." a second time. A language without a table gets English only.
+ */
+export function hedgeExamples(lang) {
+  const quoted = (words) => words.slice(0, 3).map((w) => `"${w}"`).join(', ');
+  const en = quoted(HEDGE_WORDS.en);
+  const own = lang && lang !== 'en' && HEDGE_WORDS[lang];
+  return own ? `${en} (in ${languageName(lang)} ${quoted(own)})` : en;
+}
+
+/**
+ * The "I cannot see it" example for the question prompts: in English, and in
+ * the description language when it has its own "Not certain." lead (with the
+ * full stop that language writes, without the space that follows it).
+ */
+export function cannotTellExample(lang) {
+  const en = 'for example "I can\'t tell from the picture"';
+  const own = lang && lang !== 'en' && UNCERTAIN_LEAD[lang];
+  return own ? `${en}, or in ${languageName(lang)} "${own.trim()}"` : en;
 }
 
 export function youtubeUrl(videoId) {
@@ -69,7 +137,12 @@ function clip(text, n) {
  * (ACB Audio Description Project guidelines, Netflix AD Style Guide, DCMP
  * Description Key, and the Chinese T/CSMPTE 13-2021 standard): describe what
  * is seen, set the scene, introduce people, read on-screen text, never talk over
- * dialogue, and never interpret.
+ * dialogue, and never interpret. Blind viewers say what they mind most is
+ * missing text on screen, and descriptions that fill every silence: text comes
+ * first, word for word, and quiet moments stay quiet. What worries them most
+ * is a description that is wrong without any way to tell: so only what is
+ * seen, no guessed feelings, judgements or identities, uncertainty said out
+ * loud, and a confidence for every description.
  */
 export function scriptInstructions(lang) {
   const language = languageName(lang);
@@ -78,15 +151,15 @@ export function scriptInstructions(lang) {
     `Write every description in ${language}.`,
     '',
     'Always describe (these come first when time is short):',
+    '- Meaningful on-screen text, each as its own "text" cue (see below). It comes before everything else: a viewer can often follow the picture from the sound, but never text they cannot see.',
     '- Every change of place or time: start that description with where we are now (and when, if it changed).',
     '- Every person the first time they appear: a short visual sketch (apparent age, build, hair, clothing) and what they are doing. On later appearances, just the label.',
     '- Who is speaking or being spoken to, whenever that is not obvious from the audio alone (for example in a group, a video call, or when someone speaks off screen).',
     '- Actions and their results: what someone does, picks up, hands over, points at, and what happens next. Follow the action step by step in demonstrations, tutorials, cooking, sport and gameplay.',
-    '- Expressions and gestures that carry meaning (a nod, a smile, a shaking head, a look away).',
+    '- Expressions and gestures that carry meaning (a nod, a smile, a shaking head, a look away): the expression itself, not the feeling you suppose behind it.',
     '- Important objects, products, charts, diagrams and what they show.',
-    '- Any meaningful on-screen text (see below).',
     '',
-    'Also describe, when there is room: setting details, clothing, lighting and weather, camera moves that matter (a close-up on an object, a drone shot of a landscape), montages (summarise), and the mood the picture creates.',
+    'Also describe, as priority 2 or 3 and only when it adds something the viewer would want to know (never just because there is a pause): setting details, clothing, lighting and weather, camera moves that matter (a close-up on an object, a drone shot of a landscape), montages (summarise), and the light and colour that set the mood (the light and colour, not the feeling).',
     '',
     'Rules:',
     '- Describe only what can be seen. Never describe what can be heard (dialogue, music, sound effects) and never repeat what a speaker is saying.',
@@ -95,19 +168,43 @@ export function scriptInstructions(lang) {
     '- If you are not sure what something is, say "appears to" rather than guessing. Never invent names, numbers or text.',
     '- Do not censor: describe what is shown.',
     '',
+    'Objective, and honest about what is not clear:',
+    '- Do not guess what people feel, think, want or intend, and do not explain why something happens. Describe the face, the body and the action, and let the viewer draw the conclusion.',
+    '- Do not judge or praise: no "beautiful", "delicious", "amazing", "ugly", "funny", "elegant". Say what makes it so ("a three-layer cake with white icing", not "a delicious cake").',
+    '- Do not guess who someone is. A name, job, title, relationship (wife, boss, doctor), nationality, religion or health comes only from on-screen text (a lower third, a name tag, a sign) or from the dialogue saying it clearly. Never identify anyone from their face or voice, however famous they look.',
+    `- When something is small, far away, blurred, dark, partly hidden or too quick to see, say so instead of filling in the detail: ${hedgeExamples(lang)}. Leave out what you cannot see at all. A vague description that is true is better than a precise one that is wrong.`,
+    '- "confidence" says how sure you are that everything in the description is right: "high" when it is clearly visible, "medium" when a detail is inferred from what is visible, "low" when the picture is unclear or you are guessing what something is. With "low", the description itself must say in words that it is not certain.',
+    '',
+    'Examples (wrong → right):',
+    '- "He is furious." → "He slams his fist on the table."',
+    '- "她很伤心，想起了往事。" → "她低下头，用手背擦了擦眼睛。"',
+    '- "A beautiful, peaceful beach." → "A wide, empty beach with small waves."',
+    '- "一盘美味的红烧肉。" → "一盘红烧肉，酱汁油亮。"',
+    '- "Taylor Swift walks on stage." (no name on screen or in the dialogue) → "A woman in a silver sequinned dress walks on stage."',
+    '- "他的妻子走进厨房。"（字幕和对白都没说明两人的关系）→ "一位短发女人走进厨房。"',
+    '- "He hands her a 100-dollar bill." (too small to read) → "He hands her what appears to be a banknote."',
+    '- "屏幕上写着“周五截止”。"（字太小，读不出来）→ "屏幕上有一行小字，看不清。"',
+    '',
     'People:',
-    '- Use a name only if it is established by the title, the description, on-screen text or dialogue. Otherwise use a short, consistent visual label (for example "the woman in the red coat") and keep using it.',
-    '- Keep labels consistent with the provided character list. Add new people to "characters" with a one-line description.',
+    '- Use a name only after on-screen text or the dialogue has tied it to that person. The title or the uploader\'s description may say who is in the video, but not which person on screen is who. Until then use a short, consistent visual label (for example "the woman in the red coat") and keep using it.',
+    '- Keep labels consistent with the provided character list. Add new people to "characters" with a one-line description of how they look, not of who you think they are.',
+    '- Make a label tell people apart: two visible features, such as clothing colour and role or hair (for example "the woman host in red", "the man with glasses"; in Chinese "穿红衣服的女主持人", "戴眼镜的男人"). Never a bare "a man", "a woman", "一个男人", "一位女士".',
+    '- When someone already in the character list appears again, call them by that same label every time (or "he" / "she" when it cannot be confused). Never introduce them again as a new, unnamed person: not "A man walks in." but "The man with glasses walks back in."; not "一个男人走进来。" but "戴眼镜的男人又走了进来。"',
     '',
     'On-screen text (kind "text"):',
-    '- Read meaningful text that appears on screen: titles, captions or subtitles burned into the picture, signs, labels, slides, chat or phone screens, product names, scores, prices.',
-    `- Quote it as written. If it is not in ${language}, give the original followed by a short translation.`,
-    '- Skip channel watermarks, subscribe buttons, platform interface and text that only repeats what is being said.',
+    '- Give meaningful text its own "text" cue; never fold it into a visual description. That includes titles and title cards, names and roles in lower thirds, chapter cards, subtitles burned into the picture, slides, chart and graph labels with their numbers, prices, scores, dates, phone numbers, email and web addresses, social media handles, code, menu items and buttons in a screen recording, signs, labels, chat and phone screens.',
+    '- "onScreenText" is a transcription: copy the text exactly as written, character for character, in its original language and script, with its numbers, symbols, capitalisation and punctuation. Never translate, summarise, correct or reword it. Separate lines or list items with " / ". Text that appears together (one slide, one menu, one lower third) is one cue. For visual cues, "onScreenText" is "".',
+    '- Text you cannot read in full: transcribe only what you can read, put "…" where words are missing, set "confidence" to "low", and say in the spoken versions that part of it cannot be read. Never complete a word, a name or a number by guessing.',
+    `- The three spoken versions quote "onScreenText" word for word after a one- or two-word label saying what it is (for example "Title: …", "Price: …", "Code: …", "Menu: …"). For long text, the brief version quotes only the key words and the standard version the most important lines, in reading order, but neither rewords what it quotes. If the text is not in ${language}, quote the original and add a short translation in the standard and detailed versions.`,
+    '- Skip text the viewer already hears: subtitles of dialogue in the language being spoken, or words a speaker reads aloud. Do read subtitles that translate speech in another language. Skip channel watermarks, subscribe buttons and platform interface, and do not read the same text again while it stays on screen.',
+    '- Set "start" when the text appears, or at the first pause in speech while it is still on screen.',
     '',
-    'How much:',
-    '- Aim for a description every 10 to 20 seconds while the picture is changing, and never leave more than 30 seconds undescribed unless the picture is static and has already been described. A five-minute section of a typical video has 15 to 40 descriptions; a fast demonstration or an action scene can have more, a static talking head fewer.',
-    '- Descriptions may be as close as 2 seconds apart when the picture changes quickly.',
+    'When to describe, and when to stay silent:',
+    '- Describe only when something visually important appears, happens or changes. Silence is part of the experience: never describe just to fill a pause, and do not describe again what is still the same.',
+    '- There is no quota. A talking head, a slide already read, or a long take may need nothing for a minute or more; a fast demonstration or an action scene may need a description every few seconds (as close as 2 seconds apart).',
+    '- Music, scenery and other atmospheric passages: let them play. Describe only a key change in the picture (a new place, a new person, a cut to something different), in a few words, with priority 3 unless it matters to the story or the subject.',
     '- Each description says one thing. Do not pad: the viewer hears the video first and the description second.',
+    '- No filler: never start with "We see", "The video shows", "In this scene", "The camera shows" or "画面中可以看到", "镜头里", "视频中"; say what is there ("A dog runs across the beach.", "一只狗跑过沙滩。"). Do not repeat what the title or the dialogue already says.',
     '',
     'Timing:',
     '- "start" is the moment in seconds from the beginning of the full video when the description should begin. Place it as close as possible to the action, preferably in a pause in speech.',
@@ -118,25 +215,47 @@ export function scriptInstructions(lang) {
     '- "brief": the essential fact in at most 8 words (or 15 characters in Chinese, Japanese or Korean).',
     '- "standard": one sentence, at most 22 words (40 characters in CJK).',
     '- "detailed": one or two sentences, at most 50 words (90 characters in CJK), adding setting, appearance or detail.',
+    '- In text cues, only the quoted on-screen text may go beyond these limits.',
     '',
     'Priority:',
-    '- 1 = needed to follow what happens: scene changes, who is present, the main action and its result, on-screen text that matters, who is speaking.',
-    '- 2 = helpful: secondary actions, expressions and gestures, objects, appearance details on first sight.',
-    '- 3 = atmosphere: decor, lighting, scenery, minor background activity.',
+    '- 1 = needed to follow what happens: scene changes, who is present, the main action and its result, who is speaking, and on-screen text that carries information (titles, names, numbers, prices, contact details, code, instructions).',
+    '- 2 = helpful: secondary actions, expressions and gestures, objects, appearance details on first sight, minor on-screen text such as a sign in the background.',
+    '- 3 = atmosphere: decor, lighting, scenery, minor background activity, the picture during music. Anything the viewer would not miss.',
     '',
-    'Output JSON only, matching the schema. If truly nothing visual happens in this section, return an empty "cues" list.',
+    'Video type ("videoType"), for the whole video, judged from the title, the uploader\'s description and the picture:',
+    '- "tutorial": made to teach or explain, so what is on screen must not be missed: lessons and lectures, how-to and product demonstrations, cooking and craft tutorials, science explainers, news or analysis built on charts, maps or slides.',
+    '- "entertainment": watched for enjoyment: films, series, animation, music videos and performances, vlogs, gameplay, comedy, sport.',
+    '- "other": neither, or you cannot tell.',
+    '',
+    'Output JSON only, matching the schema. If nothing important is visible in this section, return an empty "cues" list: that is a correct answer, not a failure.',
   ].join('\n');
 }
 
-export function scriptPrompt({ meta = {}, chunk, duration, characters = [], lang }) {
+/** How many of the previous section's last descriptions the next section is told about. */
+export const PREVIOUS_CUES = 4;
+
+/**
+ * The request text for one section.
+ * @param {Array<{start: number, text: string}>} [previous]  the last descriptions
+ *   of the section before, so this one does not describe the same thing again,
+ *   and does not open with an establishing description as if the video began here.
+ */
+export function scriptPrompt({ meta = {}, chunk, duration, characters = [], previous = [], lang }) {
+  const recent = (Array.isArray(previous) ? previous : []).slice(-PREVIOUS_CUES);
   const lines = [
     `Video title: ${clip(meta.title, 200) || 'unknown'}`,
     meta.channel ? `Channel: ${clip(meta.channel, 100)}` : '',
     meta.description ? `Video description (from the uploader): ${clip(meta.description, 1500)}` : '',
     Number.isFinite(duration) ? `Full video length: ${formatTime(duration)} (${Math.round(duration)} seconds).` : '',
     `Describe only the section from ${formatTime(chunk.start)} to ${formatTime(chunk.end)} (${chunk.start}s to ${chunk.end}s). Timestamps must be seconds from the start of the full video.`,
+    chunk.start > 0
+      ? 'This section is not the start of the video: the viewer has been watching since the beginning, so give no establishing description. Carry on from what was already described, and describe only what appears, happens or changes in this section.'
+      : '',
+    recent.length
+      ? `Already described just before this section; do not describe it again unless it changed: ${recent.map((r) => `${formatTime(r.start)} ${clip(r.text, 160)}`).join(' | ')}`
+      : '',
     characters.length
-      ? `People already introduced earlier in the video (reuse these labels): ${characters.map((c) => `${c.label}${c.description ? ` (${c.description})` : ''}`).join('; ')}`
+      ? peopleText(characters)
       : '',
     `Write in ${languageName(lang)}.`,
   ];
@@ -149,7 +268,7 @@ export function outputLimit(model = '') {
   return /^gemini-(1\.|2\.0)/.test(model) ? 8192 : 32768;
 }
 
-export function buildScriptRequest({ videoId, meta, chunk, duration, characters, lang, model }) {
+export function buildScriptRequest({ videoId, meta, chunk, duration, characters, previous, lang, model }) {
   const isWhole = chunk.start <= 0 && Number.isFinite(duration) && chunk.end >= duration - 1;
   const videoPart = { fileData: { fileUri: youtubeUrl(videoId) } };
   if (!isWhole) {
@@ -160,7 +279,7 @@ export function buildScriptRequest({ videoId, meta, chunk, duration, characters,
     contents: [
       {
         role: 'user',
-        parts: [videoPart, { text: scriptPrompt({ meta, chunk, duration, characters, lang }) }],
+        parts: [videoPart, { text: scriptPrompt({ meta, chunk, duration, characters, previous, lang }) }],
       },
     ],
     generationConfig: {
@@ -185,9 +304,15 @@ export function tuningFor(model = '', temperature) {
   return cfg;
 }
 
-export function buildAskRequest({ videoId, meta, time, duration, question, nearbyText, lang, model }) {
+/** The part of the video a question is asked about: the 20 seconds before the moment and a few after. */
+export function askClip(time, duration) {
   const start = Math.max(0, Math.floor(time - 20));
   const end = Math.min(Number.isFinite(duration) ? Math.ceil(duration) : Math.ceil(time + 5), Math.ceil(time + 4));
+  return { start, end: Math.max(end, start + 2) };
+}
+
+export function buildAskRequest({ videoId, meta, time, duration, question, nearbyText, history, characters, lang, model }) {
+  const { start, end } = askClip(time, duration);
   return {
     systemInstruction: {
       parts: [
@@ -195,8 +320,12 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
           text: [
             'You help a blind or low-vision person understand a video they are watching.',
             `Answer in ${languageName(lang)}, in at most 3 short sentences, plain text without markdown.`,
-            'Answer about what is visible at the moment they asked, using the clip and context provided.',
-            'If you cannot tell, say so honestly. Never invent details.',
+            'Base the answer on what can be seen in the clip, at or just before the moment they asked. Describe what is visible: do not guess what people feel or intend, do not judge, and name a person only if on-screen text or the dialogue gives the name.',
+            'Quote any text on screen that bears on the question exactly as written.',
+            `If the clip does not show the answer, or you cannot see it clearly, say so plainly (${cannotTellExample(lang)}) and set "confidence" to "low". Never invent details.`,
+            '"time": the moment your answer is about, in seconds from the start of the full video (not from the start of the clip). SceneVoice says that moment before your answer, so do not put a time in "answer".',
+            '"confidence": "high" when the answer is clearly visible, "medium" when part of it is inferred, "low" when you are not sure.',
+            'The recent audio descriptions were written by an AI and can be wrong: check them against the picture, and do not repeat them as fact.',
           ].join('\n'),
         },
       ],
@@ -207,13 +336,15 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
         parts: [
           {
             fileData: { fileUri: youtubeUrl(videoId) },
-            videoMetadata: { startOffset: `${start}s`, endOffset: `${Math.max(end, start + 2)}s` },
+            videoMetadata: { startOffset: `${start}s`, endOffset: `${end}s` },
           },
           {
             text: [
               `Video title: ${clip(meta?.title, 200) || 'unknown'}`,
-              `The viewer paused at ${formatTime(time)} (${Math.round(time)} seconds). The clip covers ${start}s to ${end}s of the video.`,
-              nearbyText ? `Recent audio descriptions: ${clip(nearbyText, 800)}` : '',
+              `The viewer paused at ${formatTime(time)} (${Math.round(time)} seconds). The clip covers ${formatTime(start)} to ${formatTime(end)} (${start}s to ${end}s) of the full video.`,
+              nearbyText ? `Recent audio descriptions (may be wrong): ${clip(nearbyText, 800)}` : '',
+              peopleText(characters),
+              askHistoryText(history),
               `Question: ${clip(question, 500)}`,
             ]
               .filter(Boolean)
@@ -222,7 +353,138 @@ export function buildAskRequest({ videoId, meta, time, duration, question, nearb
         ],
       },
     ],
-    generationConfig: { ...tuningFor(model, 0.3), maxOutputTokens: 2048 },
+    generationConfig: {
+      ...tuningFor(model, 0.2),
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      responseSchema: ASK_SCHEMA,
+    },
+  };
+}
+
+/**
+ * The moment an answer is about, in seconds of the full video. A time the model
+ * gave from the start of the clip is moved to the video; one outside the clip
+ * is not trusted, and the moment the viewer asked at is used instead.
+ */
+export function answerTime(value, { time, duration }) {
+  const asked = Math.max(0, Math.floor(time));
+  const { start, end } = askClip(time, duration);
+  let t = parseTime(value);
+  if (!Number.isFinite(t) || t < 0) return asked;
+  if (start > 0 && t < start - 2 && t <= end - start + 2) t += start;
+  if (t < start - 2 || t > end + 2) return asked;
+  return Math.max(0, Math.round(t));
+}
+
+const LEADING_TIME = /^[^\d\n]{0,15}?(\d{1,2}:\d{2}(?::\d{2})?)\s*[^\s\d,:，：、。.]{0,3}\s*[,:，：、]\s*/;
+
+/**
+ * Read the answer to a question. Resolves to
+ * { text, time, confidence }: text starts with the moment it is about ("At 2:15: …",
+ * "在 2:15 处：…") and says it is not certain when Gemini is not; time is that
+ * moment in seconds, for jumping there. A relay that ignores the schema and
+ * answers in plain text still gives an answer, about the moment asked.
+ */
+export function parseAskResponse(body, ctx) {
+  return parseAnswer(responseText(body).text, ctx);
+}
+
+/** The answer to a question from the model's text, whichever model wrote it (see parseAskResponse). */
+export function parseAnswer(raw, { time, duration, lang }) {
+  let json = null;
+  try {
+    json = extractJson(raw);
+  } catch {
+    json = null;
+  }
+  const given = json && typeof json === 'object' ? json.answer : raw;
+  let answer = cleanText(typeof given === 'string' ? given : '', 700);
+  if (!answer) throw new GeminiError('empty-response');
+  const t = answerTime(json?.time, { time, duration });
+  const confidence = CONFIDENCES.includes(json?.confidence) ? json.confidence : '';
+  // Asked not to, the model may still begin with the moment: say it only once.
+  const lead = LEADING_TIME.exec(answer);
+  if (lead && [formatTime(t), formatTime(t - askClip(time, duration).start)].includes(lead[1])) answer = answer.slice(lead[0].length);
+  if (confidence === 'low') answer = hedged(answer, lang);
+  const at = (ANSWER_AT[lang] || ANSWER_AT.en).replace('$1', formatTime(t));
+  return { text: `${at}${answer}`, time: t, confidence };
+}
+
+/** The part of the video looked at again for a description marked as wrong. */
+export function revisionClip(start, duration) {
+  const end = Number.isFinite(duration) && duration > 0 ? duration : Infinity;
+  const from = Math.max(0, Math.floor(start - 8));
+  const to = Math.min(Math.ceil(end), Math.ceil(start + 12));
+  return { start: from, end: Math.max(to, from + 4) };
+}
+
+function revisionPrompt({ meta = {}, duration, cue, clip: span, characters = [], lang }) {
+  return [
+    `Video title: ${clip(meta.title, 200) || 'unknown'}`,
+    meta.channel ? `Channel: ${clip(meta.channel, 100)}` : '',
+    Number.isFinite(duration) ? `Full video length: ${formatTime(duration)} (${Math.round(duration)} seconds).` : '',
+    `A viewer reported that this description, at ${formatTime(cue.start)} (${cue.start} seconds), is wrong:`,
+    `"${clip(cue.standard, 600)}"`,
+    cue.kind === 'text' && cue.onScreenText ? `It was given as on-screen text reading: "${clip(cue.onScreenText, 600)}"` : '',
+    `Look again, closely, at the clip from ${formatTime(span.start)} to ${formatTime(span.end)} (${span.start}s to ${span.end}s of the full video), and write a corrected description of that moment: one cue, with "start" at ${cue.start}.`,
+    '- Check every detail against the picture: people, actions, objects, colours, numbers and text. Leave out anything you cannot clearly see.',
+    '- Do not repeat the reported description, and do not just reword it. Keep only what you can confirm in the picture.',
+    `- If you are still not sure, say so in the description (${hedgeExamples(lang)}) and set "confidence" to "low".`,
+    '- If, looking again, nothing at that moment is worth describing, return an empty "cues" list.',
+    characters.length
+      ? `People already introduced earlier in the video (reuse these labels): ${characters.map((c) => `${c.label}${c.description ? ` (${c.description})` : ''}`).join('; ')}`
+      : '',
+    `Write in ${languageName(lang)}.`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** Describe one moment again: a short clip around a description the user marked as wrong. */
+export function buildRevisionRequest({ videoId, meta, duration, cue, characters, lang, model }) {
+  const span = revisionClip(cue.start, duration);
+  return {
+    systemInstruction: { parts: [{ text: scriptInstructions(lang) }] },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { fileData: { fileUri: youtubeUrl(videoId) }, videoMetadata: { startOffset: `${span.start}s`, endOffset: `${span.end}s` } },
+          { text: revisionPrompt({ meta, duration, cue, clip: span, characters, lang }) },
+        ],
+      },
+    ],
+    generationConfig: {
+      ...tuningFor(model, 0.2),
+      maxOutputTokens: Math.min(outputLimit(model), 8192),
+      responseMimeType: 'application/json',
+      responseSchema: REVISION_SCHEMA,
+    },
+  };
+}
+
+const FRAME_SCHEMAS = { script: RESPONSE_SCHEMA, ask: ASK_SCHEMA, revise: REVISION_SCHEMA };
+
+/**
+ * A request built from still frames instead of a video link: for videos Gemini
+ * cannot open by URL (Bilibili). `prompt` comes from frames.js; each frame is a
+ * label and a JPEG image, in time order.
+ * @param {{kind: 'script'|'ask'|'revise', system: string, frames: Array<{label: string, data: string}>, text: string, maxTokens: number, temperature: number, model: string}} prompt
+ */
+export function buildFramesRequest({ kind, system, frames, text, maxTokens, temperature, model }) {
+  const parts = [];
+  for (const f of frames) parts.push({ text: f.label }, { inlineData: { mimeType: 'image/jpeg', data: f.data } });
+  parts.push({ text });
+  return {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      ...tuningFor(model, temperature),
+      maxOutputTokens: Math.min(outputLimit(model), maxTokens),
+      responseMimeType: 'application/json',
+      responseSchema: FRAME_SCHEMAS[kind],
+    },
   };
 }
 
@@ -260,17 +522,60 @@ export function usableModels(models) {
     .filter((m) => ids.has(m.id));
 }
 
+/** A 429 about the day's quota rather than this minute's: the free tier's per-day limits, and YouTube hours per day. */
+const DAILY_QUOTA = /per.?day|daily|youtube.{0,40}hours?/i;
+
+/** The wait the server asks for, from a google.rpc.RetryInfo detail ("12s", or { seconds, nanos }), in ms; undefined when none. */
+export function retryDelayMs(details) {
+  for (const d of Array.isArray(details) ? details : []) {
+    if (!/RetryInfo$/.test(String(d?.['@type'] || '')) || d.retryDelay == null) continue;
+    const delay = d.retryDelay;
+    const seconds = typeof delay === 'string' ? parseFloat(delay) : Number(delay.seconds || 0) + Number(delay.nanos || 0) / 1e9;
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  }
+  return undefined;
+}
+
+/** When the SceneVoice Cloud allowance comes back, from the error detail that refused the request (ISO time), or ''. */
+function allowanceReset(details) {
+  for (const d of Array.isArray(details) ? details : []) {
+    const at = d?.resetsAt || d?.metadata?.resetsAt || d?.resetAt || d?.metadata?.resetAt;
+    if (typeof at === 'string' && !Number.isNaN(Date.parse(at))) return at;
+  }
+  return '';
+}
+
+/**
+ * The error for a failed HTTP reply, as a stable code. 429 is split: the
+ * minute's rate limit ('rate-limited', retried, honouring RetryInfo) and the
+ * day's quota ('quota-daily', not retried: another model may still have some).
+ * The SceneVoice Cloud relay refuses a used-up free allowance with
+ * reason SCENEVOICE_ALLOWANCE ('allowance': neither retried nor switched).
+ */
 function classifyHttp(status, body) {
   const msg = body?.error?.message || '';
-  const reason = JSON.stringify(body?.error?.details || '');
+  const details = Array.isArray(body?.error?.details) ? body.error.details : [];
+  const reason = JSON.stringify(details);
+  if (details.some((d) => d?.reason === 'SCENEVOICE_ALLOWANCE')) {
+    const err = new GeminiError('allowance', msg, status);
+    err.resetAt = allowanceReset(details);
+    return err;
+  }
+  // Checked first: it can come as a 400 or a 403, and is not about the key.
+  if (/location is not supported|not available in your (country|region)/i.test(msg)) return new GeminiError('region', msg, status);
   if (status === 400 && /api key|API_KEY_INVALID/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
   if (status === 401 || status === 403) {
-    if (/api key|permission|PERMISSION_DENIED|API_KEY/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
+    // SCENEVOICE_DEVICE_UNKNOWN: the relay no longer knows this device token (Start free issues a new one).
+    if (/api key|permission|PERMISSION_DENIED|API_KEY|SCENEVOICE_DEVICE_UNKNOWN/i.test(msg + reason)) return new GeminiError('bad-key', msg, status);
     return new GeminiError('forbidden', msg, status);
   }
   if (status === 404) return new GeminiError('model-not-found', msg, status);
-  if (/location is not supported|not available in your (country|region)/i.test(msg)) return new GeminiError('forbidden', msg, status);
-  if (status === 429) return new GeminiError('quota', msg, status);
+  if (status === 429) {
+    if (DAILY_QUOTA.test(`${msg} ${reason}`)) return new GeminiError('quota-daily', msg, status);
+    const err = new GeminiError('rate-limited', msg, status);
+    err.retryAfterMs = retryDelayMs(details);
+    return err;
+  }
   if (status === 400 && /(video|youtube|file|uri|private|unavailable|not supported)/i.test(msg)) {
     return new GeminiError('video-unsupported', msg, status);
   }
@@ -287,6 +592,18 @@ const sleep = (ms, signal) =>
       reject(new GeminiError('aborted'));
     });
   });
+
+/** Longest wait a RetryInfo is followed for: anything longer is as good as a failure to the listener. */
+const MAX_RETRY_WAIT_MS = 90000;
+
+/** How long to wait before attempt n (1-based) after a retryable error. */
+export function retryWait(err, attempt) {
+  if (err.code === 'rate-limited') {
+    if (Number.isFinite(err.retryAfterMs)) return Math.min(MAX_RETRY_WAIT_MS, Math.max(1000, err.retryAfterMs));
+    return 6000 * 2 ** (attempt - 1);
+  }
+  return 2000 * 2 ** (attempt - 1);
+}
 
 export class GeminiClient {
   constructor({ apiKey, apiBase, model, fetchImpl }) {
@@ -310,9 +627,12 @@ export class GeminiClient {
   }
 
   /**
-   * generateContent with retries. Overloaded servers (503), rate limits (429) and
-   * network failures are retried with exponential backoff: 2, 4, 8 s for server
-   * and network errors, 6, 12, 24 s for rate limits.
+   * generateContent with retries. Overloaded servers (503), the minute's rate
+   * limit (429) and network failures are retried with exponential backoff:
+   * 2, 4, 8 s for server and network errors, 6, 12, 24 s for rate limits, or
+   * the wait the server itself asks for (RetryInfo) when it gives one. A used-up
+   * daily quota, or a used-up Cloud allowance, is not retried: it will not
+   * come back within the minute.
    */
   async generate(body, signal, { retries = 3 } = {}) {
     if (!this.model) throw new GeminiError('no-model');
@@ -330,10 +650,10 @@ export class GeminiClient {
           payload = { ...payload, generationConfig: rest };
           continue;
         }
-        const retryable = ['server', 'quota', 'network'].includes(err.code);
+        const retryable = ['server', 'rate-limited', 'network'].includes(err.code);
         if (!retryable || attempt >= retries) throw err;
         attempt += 1;
-        await sleep((err.code === 'quota' ? 6000 : 2000) * 2 ** (attempt - 1), signal);
+        await sleep(retryWait(err, attempt), signal);
       }
     }
   }
@@ -360,6 +680,12 @@ export class GeminiClient {
     if (!res.ok) throw classifyHttp(res.status, body);
     return body || {};
   }
+}
+
+/** What one reply cost, from its usageMetadata (zeros when the server sent none): see usage.js. */
+export function usageOf(body) {
+  const u = body?.usageMetadata || {};
+  return countedUsage({ input: u.promptTokenCount, output: u.candidatesTokenCount, thinking: u.thoughtsTokenCount });
 }
 
 /** Text of the first candidate, with a clear error for blocked or empty output. */

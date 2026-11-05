@@ -2,13 +2,19 @@
 // estimating speech time and choosing which text to speak.
 // No browser APIs here, so everything is unit-testable.
 
-import { SCRIPT_VERSION } from './constants.js';
+import { HEDGE_WORDS, SCRIPT_VERSION, UNCERTAIN_LEAD, VIDEO_TYPES } from './constants.js';
 
 /** Highest priority number spoken for each density setting. */
 export const DENSITY_MAX_PRIORITY = Object.freeze({ essential: 1, standard: 2, full: 3 });
 
+/**
+ * Whether a cue is spoken at this density. On-screen text is what listeners
+ * least want to miss (a picture can often be followed from the sound, text
+ * never), so it gets one level more: "essential" still reads helpful text.
+ */
 export function passesDensity(cue, density) {
-  return cue.priority <= (DENSITY_MAX_PRIORITY[density] || 3);
+  const max = DENSITY_MAX_PRIORITY[density] || 3;
+  return cue.priority <= (cue.kind === 'text' ? max + 1 : max);
 }
 
 export const DETAIL_ORDER = Object.freeze({
@@ -17,7 +23,30 @@ export const DETAIL_ORDER = Object.freeze({
   detailed: ['detailed', 'standard', 'brief'],
 });
 
+/** Hard limits in characters: on-screen text, quoted word for word, may run long. */
 const MAX_LEN = { brief: 160, standard: 360, detailed: 800 };
+/**
+ * Limits for a visual description, about 1.5 times what the model is asked for
+ * (gemini.js: brief 8 words / 15 CJK characters, standard 22 / 40, detailed
+ * 50 / 90), so a description that runs long is cut at a sentence end rather than
+ * read in full over the video. CJK text counts characters, other text characters
+ * of about 6.5 per word.
+ */
+const VISUAL_LEN = {
+  cjk: { brief: 25, standard: 60, detailed: 135 },
+  other: { brief: 80, standard: 215, detailed: 490 },
+};
+const CJK_CHAR = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
+
+/** The length limit for one version of a description. */
+function maxLength(text, version, kind) {
+  if (kind === 'text') return MAX_LEN[version];
+  const s = String(text || '');
+  const cjk = (s.match(CJK_CHAR) || []).length;
+  return cjk > s.length / 3 ? VISUAL_LEN.cjk[version] : VISUAL_LEN.other[version];
+}
+/** A transcription of on-screen text: a slide or a code block, but not a page of it. */
+const MAX_SCREEN_TEXT = 600;
 
 /**
  * Parse a timestamp the model may return as seconds, "m:ss", "h:mm:ss",
@@ -41,23 +70,72 @@ export function parseTime(value) {
   return NaN;
 }
 
-/** Remove markdown, wrapping quotes and stray whitespace from model text. */
-export function cleanText(text, maxLen = 700) {
+/**
+ * Remove markdown, wrapping quotes and stray whitespace from model text.
+ * keepSymbols: the text quotes the screen, where "__init__", "#1" or "-5 °C"
+ * mean something; only bold markers and backticks are removed.
+ */
+export function cleanText(text, maxLen = 700, { keepSymbols = false } = {}) {
   if (typeof text !== 'string') return '';
-  let t = text
-    .replace(/\*\*|__|`+/g, '')
-    .replace(/^[#>\-*\s]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let t = keepSymbols
+    ? text.replace(/\*\*|`+/g, '')
+    : text.replace(/\*\*|__|`+/g, '').replace(/^[#>\-*\s]+/, '');
+  t = t.replace(/\s+/g, ' ').trim();
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('“') && t.endsWith('”'))) {
     t = t.slice(1, -1).trim();
   }
   if (t.length > maxLen) {
     const cut = t.slice(0, maxLen);
-    const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('。'), cut.lastIndexOf('！'), cut.lastIndexOf('? '));
-    t = stop > maxLen * 0.5 ? cut.slice(0, stop + 1) : cut.trimEnd() + '…';
+    const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('。'), cut.lastIndexOf('！'), cut.lastIndexOf('？'), cut.lastIndexOf('? '));
+    // A whole first sentence or two beats a sentence broken off: keep them if they say a fair part of it.
+    t = stop > maxLen * 0.35 ? cut.slice(0, stop + 1) : `${cut.slice(0, maxLen - 1).trimEnd()}…`;
   }
   return t;
+}
+
+/**
+ * On-screen text as transcribed: exactly as written, quotes and symbols
+ * included. Line breaks become " / " so lists, menus and addresses keep their shape.
+ */
+export function cleanScreenText(text, maxLen = MAX_SCREEN_TEXT) {
+  if (typeof text !== 'string') return '';
+  const t = text
+    .split(/\s*\n\s*/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' / ');
+  return t.length > maxLen ? `${t.slice(0, maxLen).trimEnd()}…` : t;
+}
+
+/** How sure Gemini is of a description. Scripts saved before it said have none. */
+export const CONFIDENCES = Object.freeze(['high', 'medium', 'low']);
+
+/** Whether a text already says it is not certain ("appears to", "可能", "看不清"…), in the description language. */
+export function isHedged(text, lang) {
+  const s = String(text || '').toLowerCase();
+  return (HEDGE_WORDS[lang] || HEDGE_WORDS.en).some((w) => s.includes(w));
+}
+
+/** The text, led by "Not certain." in the description language unless it already says so. */
+export function hedged(text, lang) {
+  if (!text || isHedged(text, lang)) return text;
+  return `${UNCERTAIN_LEAD[lang] || UNCERTAIN_LEAD.en}${text}`;
+}
+
+/**
+ * A description Gemini is not sure of is said to be uncertain in every length,
+ * and counts one step less important: it is heard less often and never wins
+ * over a description that is sure.
+ */
+export function applyConfidence(cue, lang) {
+  if (cue.confidence !== 'low') return cue;
+  return {
+    ...cue,
+    priority: Math.min(3, cue.priority + 1),
+    brief: hedged(cue.brief, lang),
+    standard: hedged(cue.standard, lang),
+    detailed: hedged(cue.detailed, lang),
+  };
 }
 
 /** Extract a JSON object from model text that may be wrapped in a code fence. */
@@ -79,8 +157,10 @@ export function extractJson(text) {
 /**
  * Validate and normalise one chunk of model output.
  * @param {object} raw  parsed JSON from the model
- * @param {{duration?: number, chunkStart?: number, chunkEnd?: number}} ctx
- * @returns {{cues: Array, characters: Array}}
+ * @param {{duration?: number, chunkStart?: number, chunkEnd?: number, lang?: string}} ctx
+ *   lang: the description language, for saying a low-confidence description is uncertain
+ * @returns {{cues: Array, characters: Array, videoType: string}}
+ *   videoType: 'entertainment' | 'tutorial', or '' when the model gave neither
  */
 export function normalizeChunk(raw, ctx = {}) {
   const duration = Number.isFinite(ctx.duration) && ctx.duration > 0 ? ctx.duration : Infinity;
@@ -94,10 +174,14 @@ export function normalizeChunk(raw, ctx = {}) {
     const start = parseTime(item.start ?? item.time ?? item.timestamp);
     if (!Number.isFinite(start) || start < 0) continue;
     const kind = item.kind === 'text' ? 'text' : 'visual';
-    let brief = cleanText(item.brief, MAX_LEN.brief);
-    let standard = cleanText(item.standard ?? item.text, MAX_LEN.standard);
-    let detailed = cleanText(item.detailed, MAX_LEN.detailed);
-    if (!standard) standard = detailed || brief;
+    const opts = { keepSymbols: kind === 'text' };
+    // Only text cues carry a transcription; a visual cue's would be a stray.
+    const onScreenText = kind === 'text' ? cleanScreenText(item.onScreenText) : '';
+    const sized = (text, version) => cleanText(text, maxLength(text, version, kind), opts);
+    let brief = sized(item.brief, 'brief');
+    let standard = sized(item.standard ?? item.text, 'standard');
+    let detailed = sized(item.detailed, 'detailed');
+    if (!standard) standard = detailed || brief || cleanText(onScreenText, MAX_LEN.standard, opts);
     if (!brief) brief = standard;
     if (!detailed) detailed = standard;
     if (!standard) continue;
@@ -106,7 +190,10 @@ export function normalizeChunk(raw, ctx = {}) {
     gap = Math.min(gap, 60);
     let priority = parseInt(item.priority, 10);
     if (![1, 2, 3].includes(priority)) priority = 2;
-    cues.push({ start, gap, kind, priority, brief, standard, detailed });
+    const cue = { start, gap, kind, priority, brief, standard, detailed };
+    if (onScreenText) cue.onScreenText = onScreenText;
+    if (CONFIDENCES.includes(item.confidence)) cue.confidence = item.confidence;
+    cues.push(applyConfidence(cue, ctx.lang));
   }
 
   // Timestamps are occasionally returned in milliseconds.
@@ -141,7 +228,8 @@ export function normalizeChunk(raw, ctx = {}) {
     seen.add(label.toLowerCase());
     characters.push({ label, description: cleanText(ch?.description, 200) });
   }
-  return { cues, characters };
+  const videoType = VIDEO_TYPES.includes(raw?.videoType) ? raw.videoType : '';
+  return { cues, characters, videoType };
 }
 
 /** Collapse cues of the same kind that start within 1 second of each other. */
@@ -158,7 +246,7 @@ export function dedupeCues(sorted) {
   return out;
 }
 
-/** Merge a new chunk into an existing script. */
+/** Merge a new chunk into an existing script. The first section that names a video type decides it. */
 export function mergeScript(script, chunk, untilSeconds) {
   const cues = dedupeCues([...(script.cues || []), ...chunk.cues].sort((a, b) => a.start - b.start));
   const characters = [...(script.characters || [])];
@@ -174,6 +262,7 @@ export function mergeScript(script, chunk, untilSeconds) {
     version: SCRIPT_VERSION,
     cues,
     characters,
+    videoType: script.videoType || chunk.videoType || '',
     completedUntil: Math.max(script.completedUntil || 0, untilSeconds || 0),
     updatedAt: Date.now(),
   };
@@ -209,6 +298,9 @@ export function estimateSeconds(text, rate = 1) {
   return cjk / (4.5 * r) + words / (2.8 * r) + 0.25;
 }
 
+/** Seconds kept back from a pause the model estimated (see chooseUtterance). */
+export const ESTIMATE_MARGIN = 0.5;
+
 /**
  * Decide what to say for a cue.
  * @returns {{text: string, needsPause: boolean} | null} null = skip this cue
@@ -217,16 +309,20 @@ export function chooseUtterance(cue, { mode, detail, rate, onScreenText, playbac
   if (!cue) return null;
   if (cue.kind === 'text' && !onScreenText) return null;
   const order = DETAIL_ORDER[detail] || DETAIL_ORDER.standard;
-  // The gap is measured in video seconds; at 2x it passes twice as fast.
-  const room = cue.gap / Math.max(0.25, playbackRate || 1) + 0.5;
+  // The gap is in video seconds; at 2x it passes twice as fast. A gap measured
+  // from captions is taken as it is. The model's own estimate runs optimistic
+  // (it places the pause by ear and rounds up), so half a second is kept back:
+  // a description that runs over the estimate covers the next line of dialogue.
+  // A gap of 0 (frames mode: the model could not tell whether anyone speaks)
+  // leaves no room at all: skipped here, or paused for in 'pause' mode.
+  const room = Math.max(0, cue.gap / Math.max(0.25, playbackRate || 1) - (cue.gapMeasured ? 0 : ESTIMATE_MARGIN));
 
   if (mode === 'gaps') {
     for (const key of order) {
       const text = cue[key];
       if (text && estimateSeconds(text, rate) <= room) return { text, needsPause: false };
     }
-    // Nothing fits. Say the shortest version of important cues anyway; drop the rest.
-    if (cue.priority <= 2) return { text: cue.brief || cue.standard, needsPause: false };
+    // Nothing fits: skip it rather than talk over dialogue, however important.
     return null;
   }
 

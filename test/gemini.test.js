@@ -2,15 +2,22 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   GeminiClient,
   GeminiError,
+  answerTime,
   buildAskRequest,
+  buildRevisionRequest,
   buildScriptRequest,
   chooseModel,
   scriptInstructions,
   outputLimit,
+  parseAskResponse,
   parseScriptResponse,
   responseText,
+  retryDelayMs,
+  retryWait,
+  revisionClip,
   tuningFor,
   usableModels,
+  usageOf,
 } from '../src/shared/gemini.js';
 
 const m = (name, methods = ['generateContent']) => ({ name: `models/${name}`, supportedGenerationMethods: methods });
@@ -55,10 +62,73 @@ describe('describer instructions', () => {
       expect(text).toContain(rule);
     }
   });
-  it('set a density target so sections are not sparse', () => {
-    expect(text).toMatch(/every 10 to 20 seconds/);
-    expect(text).toMatch(/15 to 40 descriptions/);
-    expect(text).not.toMatch(/at least 3 seconds apart/);
+  it('leave quiet moments quiet instead of filling every pause', () => {
+    expect(text).toMatch(/never describe just to fill a pause/);
+    expect(text).toMatch(/There is no quota/);
+    expect(text).toMatch(/Music, scenery and other atmospheric passages: let them play/);
+    expect(text).toMatch(/empty "cues" list: that is a correct answer/);
+    // The old targets asked for a description every 10 to 20 seconds whatever the picture.
+    expect(text).not.toMatch(/every 10 to 20 seconds|15 to 40 descriptions|never leave more than 30 seconds|when there is room/);
+    // Fast pictures may still be described closely.
+    expect(text).toMatch(/as close as 2 seconds apart/);
+  });
+  it('put on-screen text first, as its own cue, transcribed word for word', () => {
+    expect(text.indexOf('Meaningful on-screen text')).toBeLessThan(text.indexOf('Every change of place or time'));
+    for (const kind of ['prices', 'phone numbers', 'email and web addresses', 'code', 'menu items', 'chart and graph labels with their numbers']) {
+      expect(text).toContain(kind);
+    }
+    expect(text).toMatch(/"onScreenText" is a transcription: copy the text exactly as written/);
+    expect(text).toMatch(/Never translate, summarise, correct or reword it/);
+    expect(text).toMatch(/Skip text the viewer already hears/);
+    // Translated with the original quoted when it is in another language than the descriptions.
+    expect(text).toMatch(/If the text is not in Simplified Chinese, quote the original and add a short translation/);
+  });
+  it('ask for the transcription in its own field, before the spoken versions', () => {
+    const cue = buildScriptRequest({ videoId: 'abcdefghijk', meta: {}, chunk: { start: 0, end: 60 }, duration: 60, characters: [], lang: 'en' }).generationConfig.responseSchema.properties.cues.items;
+    expect(cue.properties.onScreenText).toEqual({ type: 'STRING' });
+    expect(cue.properties.kind.enum).toEqual(['visual', 'text']);
+    expect(cue.required).toContain('onScreenText');
+    expect(cue.propertyOrdering.indexOf('onScreenText')).toBeLessThan(cue.propertyOrdering.indexOf('brief'));
+  });
+  it('describe only what is seen: no guessed feelings, judgements or identities', () => {
+    expect(text).toMatch(/Do not guess what people feel, think, want or intend/);
+    expect(text).toMatch(/Do not judge or praise/);
+    expect(text).toMatch(/Do not guess who someone is\. A name, job, title, relationship .* comes only from on-screen text .* or from the dialogue saying it clearly/);
+    expect(text).toMatch(/Never identify anyone from their face or voice/);
+    // The title alone does not say which person on screen is who.
+    expect(text).toMatch(/Use a name only after on-screen text or the dialogue has tied it to that person/);
+    expect(text).not.toMatch(/established by the title, the description/);
+    expect(text).not.toMatch(/the mood the picture creates/);
+  });
+  it('say when something is not clear, in English and Chinese, rather than fill it in', () => {
+    // The second set of examples is in the description language (here Chinese), from HEDGE_WORDS.
+    expect(text).toMatch(/"appears to", "possibly", "hard to see" \(in Simplified Chinese "可能", "看起来", "看不清"\)/);
+    expect(text).toMatch(/A vague description that is true is better than a precise one that is wrong/);
+    expect(text).toMatch(/Never complete a word, a name or a number by guessing/);
+  });
+  it('give wrong and right examples in English and Chinese', () => {
+    const examples = text.slice(text.indexOf('Examples (wrong → right):'));
+    expect(examples).toContain('"He is furious." → "He slams his fist on the table."');
+    expect(examples).toContain('"她很伤心，想起了往事。" → "她低下头，用手背擦了擦眼睛。"');
+    expect(examples).toContain('"一盘美味的红烧肉。"');
+    expect(examples).toContain('"他的妻子走进厨房。"');
+    expect(examples).toContain('what appears to be a banknote');
+    expect(examples).toContain('"屏幕上有一行小字，看不清。"');
+  });
+  it('ask how sure Gemini is of each description, before it writes the spoken versions', () => {
+    expect(text).toMatch(/"confidence" says how sure you are/);
+    const cue = buildScriptRequest({ videoId: 'abcdefghijk', meta: {}, chunk: { start: 0, end: 60 }, duration: 60, characters: [], lang: 'en' }).generationConfig.responseSchema.properties.cues.items;
+    expect(cue.properties.confidence).toEqual({ type: 'STRING', enum: ['high', 'medium', 'low'] });
+    expect(cue.required).toContain('confidence');
+    expect(cue.propertyOrdering.indexOf('confidence')).toBeLessThan(cue.propertyOrdering.indexOf('brief'));
+  });
+  it('ask for the video type in the same answer, so it costs no extra request', () => {
+    expect(text).toMatch(/"tutorial": made to teach or explain/);
+    expect(text).toMatch(/"entertainment": watched for enjoyment/);
+    const schema = buildScriptRequest({ videoId: 'abcdefghijk', meta: {}, chunk: { start: 0, end: 60 }, duration: 60, characters: [], lang: 'en' }).generationConfig.responseSchema;
+    expect(schema.properties.videoType).toEqual({ type: 'STRING', enum: ['entertainment', 'tutorial', 'other'] });
+    expect(schema.required).toContain('videoType');
+    expect(schema.propertyOrdering[0]).toBe('videoType');
   });
 });
 
@@ -79,8 +149,87 @@ describe('request builders', () => {
   it('builds a short clip around the asked moment', () => {
     const req = buildAskRequest({ videoId: 'abcdefghijk', meta: {}, time: 100, duration: 300, question: 'Who?', nearbyText: '', lang: 'en' });
     expect(req.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '80s', endOffset: '104s' });
+    expect(req.systemInstruction.parts[0].text).toContain('Quote any text on screen that bears on the question exactly as written.');
     const early = buildAskRequest({ videoId: 'abcdefghijk', meta: {}, time: 1, duration: 3, question: 'Who?', lang: 'en' });
     expect(early.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '0s', endOffset: '3s' });
+  });
+  it('asks for an answer from the picture, with the moment it is about and how sure it is', () => {
+    const req = buildAskRequest({ videoId: 'abcdefghijk', meta: {}, time: 100, duration: 300, question: 'Who?', nearbyText: 'A chef enters.', lang: 'zh-CN' });
+    const rules = req.systemInstruction.parts[0].text;
+    expect(rules).toMatch(/Base the answer on what can be seen in the clip/);
+    expect(rules).toMatch(/say so plainly .*or in Simplified Chinese "不太确定。".* set "confidence" to "low"\. Never invent details\./);
+    expect(rules).toMatch(/"time": the moment your answer is about, in seconds from the start of the full video \(not from the start of the clip\)/);
+    expect(rules).toMatch(/The recent audio descriptions were written by an AI and can be wrong/);
+    expect(req.contents[0].parts[1].text).toContain('The clip covers 1:20 to 1:44 (80s to 104s) of the full video.');
+    expect(req.contents[0].parts[1].text).toContain('Recent audio descriptions (may be wrong): A chef enters.');
+    expect(req.generationConfig.responseMimeType).toBe('application/json');
+    expect(req.generationConfig.responseSchema.propertyOrdering).toEqual(['time', 'confidence', 'answer']);
+  });
+  it('looks again at a short clip for a description marked as wrong, with the describing rules', () => {
+    const cue = { start: 125, gap: 2, kind: 'text', standard: 'Sign: OPEN', onScreenText: 'OPEN' };
+    const req = buildRevisionRequest({ videoId: 'abcdefghijk', meta: { title: 'Diner' }, duration: 600, cue, characters: [], lang: 'zh-CN', model: 'gemini-2.5-flash' });
+    expect(req.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '117s', endOffset: '137s' });
+    expect(req.systemInstruction.parts[0].text).toBe(scriptInstructions('zh-CN'));
+    const prompt = req.contents[0].parts[1].text;
+    expect(prompt).toContain('A viewer reported that this description, at 2:05 (125 seconds), is wrong:\n"Sign: OPEN"');
+    expect(prompt).toContain('It was given as on-screen text reading: "OPEN"');
+    expect(prompt).toMatch(/Do not repeat the reported description, and do not just reword it/);
+    expect(prompt).toMatch(/return an empty "cues" list/);
+    expect(prompt).toContain('Write in Simplified Chinese.');
+    const schema = req.generationConfig.responseSchema;
+    expect(Object.keys(schema.properties)).toEqual(['cues']);
+    expect(schema.properties.cues.items.required).toContain('confidence');
+    expect(req.generationConfig.temperature).toBe(0.2);
+  });
+  it('keeps the clip for a description inside the video', () => {
+    expect(revisionClip(2, 600)).toEqual({ start: 0, end: 14 });
+    expect(revisionClip(597, 600)).toEqual({ start: 589, end: 600 });
+    expect(revisionClip(3, 4)).toEqual({ start: 0, end: 4 });
+    expect(revisionClip(50, NaN)).toEqual({ start: 42, end: 62 });
+  });
+});
+
+describe('answers to questions', () => {
+  const body = (answer) => ({ candidates: [{ content: { parts: [{ text: typeof answer === 'string' ? answer : JSON.stringify(answer) }] }, finishReason: 'STOP' }] });
+  const at100 = { time: 100, duration: 300, lang: 'en' };
+
+  it('leads with the moment, in the answer language', () => {
+    expect(parseAskResponse(body({ time: 95, confidence: 'high', answer: 'She holds a red key.' }), at100)).toEqual({ text: 'At 1:35: She holds a red key.', time: 95, confidence: 'high' });
+    expect(parseAskResponse(body({ time: 95, confidence: 'high', answer: '她拿着一把红色钥匙。' }), { ...at100, lang: 'zh-CN' }).text).toBe('在 1:35 处：她拿着一把红色钥匙。');
+    expect(parseAskResponse(body({ time: 95, confidence: 'high', answer: '她拿著一把紅色鑰匙。' }), { ...at100, lang: 'zh-TW' }).text).toBe('在 1:35 處：她拿著一把紅色鑰匙。');
+  });
+
+  it('says when it is not sure, unless the answer already does', () => {
+    expect(parseAskResponse(body({ time: 100, confidence: 'low', answer: 'She holds a key.' }), at100).text).toBe('At 1:40: Not certain. She holds a key.');
+    expect(parseAskResponse(body({ time: 100, confidence: 'low', answer: "I can't tell from the picture what she holds." }), at100).text).toBe("At 1:40: I can't tell from the picture what she holds.");
+    expect(parseAskResponse(body({ time: 100, confidence: 'low', answer: '画面上看不清她拿着什么。' }), { ...at100, lang: 'zh-CN' }).text).toBe('在 1:40 处：画面上看不清她拿着什么。');
+  });
+
+  it('moves a time given from the start of the clip to the video, and does not trust one outside it', () => {
+    // The clip is 1:20 to 1:44.
+    expect(answerTime(15, at100)).toBe(95);
+    expect(answerTime(82, at100)).toBe(82);
+    expect(answerTime('1:35', at100)).toBe(95);
+    expect(answerTime(250, at100)).toBe(100);
+    expect(answerTime(undefined, at100)).toBe(100);
+    expect(answerTime(-4, at100)).toBe(100);
+    // From the very start, a clip time is a video time.
+    expect(answerTime(3, { time: 10, duration: 300 })).toBe(3);
+  });
+
+  it('does not say the moment twice when the model gives it too, but keeps a clock it reads', () => {
+    expect(parseAskResponse(body({ time: 95, confidence: 'high', answer: 'At 1:35, she holds a red key.' }), at100).text).toBe('At 1:35: she holds a red key.');
+    expect(parseAskResponse(body({ time: 95, confidence: 'high', answer: '在 1:35 处，她拿着钥匙。' }), { ...at100, lang: 'zh-CN' }).text).toBe('在 1:35 处：她拿着钥匙。');
+    expect(parseAskResponse(body({ time: 95, confidence: 'high', answer: 'Clock: 12:30, on the wall.' }), at100).text).toBe('At 1:35: Clock: 12:30, on the wall.');
+  });
+
+  it('accepts a plain-text answer, about the moment asked', () => {
+    expect(parseAskResponse(body('She holds a red key.'), at100)).toEqual({ text: 'At 1:40: She holds a red key.', time: 100, confidence: '' });
+  });
+
+  it('reports an empty answer', () => {
+    expect(() => parseAskResponse(body({ time: 95, confidence: 'high', answer: '' }), at100)).toThrow(/empty-response/);
+    expect(() => parseAskResponse(body({ time: 95 }), at100)).toThrow(/empty-response/);
   });
 });
 
@@ -126,12 +275,86 @@ describe('GeminiClient', () => {
       [{ status: 400, body: { error: { message: 'API key not valid. Please pass a valid API key.' } } }, 'bad-key'],
       [{ status: 404, body: { error: { message: 'models/x is not found' } } }, 'model-not-found'],
       [{ status: 400, body: { error: { message: 'Video is private or unavailable' } } }, 'video-unsupported'],
-      [{ status: 403, body: { error: { message: 'User location is not supported for the API use.' } } }, 'forbidden'],
+      [{ status: 403, body: { error: { message: 'User location is not supported for the API use.' } } }, 'region'],
+      [{ status: 400, body: { error: { message: 'User location is not supported for the API use.', status: 'FAILED_PRECONDITION' } } }, 'region'],
+      [{ status: 403, body: { error: { message: 'Permission denied on resource project.' } } }, 'bad-key'],
+      [{ status: 429, body: { error: { message: 'Resource has been exhausted (e.g. check quota).' } } }, 'rate-limited'],
     ];
     for (const [resp, code] of cases) {
       const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: fakeFetch([resp]) });
       await expect(c.generate({}, undefined, { retries: 0 })).rejects.toMatchObject({ code });
     }
+  });
+
+  it("tells this minute's rate limit from the day's quota, and the Cloud allowance from both", async () => {
+    const quotaFailure = (quotaId, extra = []) => ({
+      status: 429,
+      body: {
+        error: {
+          code: 429,
+          message: 'You exceeded your current quota, please check your plan and billing details.',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: 'generativelanguage.googleapis.com/generate_content_free_tier_requests', quotaId }] },
+            ...extra,
+          ],
+        },
+      },
+    });
+    const retryInfo = { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '27s' };
+    const code = async (resp) => {
+      const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: fakeFetch([resp]) });
+      return c.generate({}, undefined, { retries: 0 }).catch((e) => e);
+    };
+    const minute = await code(quotaFailure('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', [retryInfo]));
+    expect(minute).toMatchObject({ code: 'rate-limited', retryAfterMs: 27000 });
+    expect(await code(quotaFailure('GenerateRequestsPerDayPerProjectPerModel-FreeTier', [retryInfo]))).toMatchObject({ code: 'quota-daily' });
+    expect(await code({ status: 429, body: { error: { message: 'Quota exceeded for youtube video hours per day.' } } })).toMatchObject({ code: 'quota-daily' });
+    // The SceneVoice Cloud relay: its own reason, whatever the status, with the reset time when it gives one.
+    const allowance = await code({ status: 429, body: { error: { message: 'allowance used up', details: [{ reason: 'SCENEVOICE_ALLOWANCE', metadata: { resetAt: '2026-11-05T00:00:00Z' } }] } } });
+    expect(allowance).toMatchObject({ code: 'allowance', resetAt: '2026-11-05T00:00:00Z' });
+    expect(await code({ status: 403, body: { error: { message: 'x', details: [{ reason: 'SCENEVOICE_ALLOWANCE' }] } } })).toMatchObject({ code: 'allowance', resetAt: '' });
+  });
+
+  it('reads the wait the server asks for, in either form', () => {
+    expect(retryDelayMs([{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '12s' }])).toBe(12000);
+    expect(retryDelayMs([{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: { seconds: 1, nanos: 500000000 } }])).toBe(1500);
+    expect(retryDelayMs([{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo' }])).toBeUndefined();
+    expect(retryDelayMs(undefined)).toBeUndefined();
+    // Honoured, within reason; else 6, 12, 24 s for rate limits and 2, 4, 8 s for the rest.
+    expect(retryWait({ code: 'rate-limited', retryAfterMs: 27000 }, 1)).toBe(27000);
+    expect(retryWait({ code: 'rate-limited', retryAfterMs: 600000 }, 1)).toBe(90000);
+    expect([1, 2, 3].map((n) => retryWait({ code: 'rate-limited' }, n))).toEqual([6000, 12000, 24000]);
+    expect([1, 2, 3].map((n) => retryWait({ code: 'server' }, n))).toEqual([2000, 4000, 8000]);
+  });
+
+  it('retries a rate limit after the wait the server asks for, and a used-up daily quota not at all', async () => {
+    vi.useFakeTimers();
+    const limited = { status: 429, body: { error: { message: 'slow down', details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '3s' }] } } };
+    const f = fakeFetch([limited, { status: 200, body: { ok: 1 } }]);
+    const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: f });
+    const p = c.generate({});
+    await vi.advanceTimersByTimeAsync(2900);
+    expect(f).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(p).resolves.toEqual({ ok: 1 });
+
+    const daily = fakeFetch([{ status: 429, body: { error: { message: 'Quota exceeded: requests per day' } } }, { status: 200, body: { ok: 1 } }]);
+    const d = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: daily });
+    await expect(d.generate({})).rejects.toMatchObject({ code: 'quota-daily' });
+    expect(daily).toHaveBeenCalledTimes(1);
+
+    const allowance = fakeFetch([{ status: 429, body: { error: { message: 'x', details: [{ reason: 'SCENEVOICE_ALLOWANCE' }] } } }, { status: 200, body: { ok: 1 } }]);
+    const a = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: allowance });
+    await expect(a.generate({})).rejects.toMatchObject({ code: 'allowance' });
+    expect(allowance).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('reads what an answer cost from usageMetadata, thinking apart', () => {
+    expect(usageOf({ usageMetadata: { promptTokenCount: 91234, candidatesTokenCount: 2100, thoughtsTokenCount: 800, totalTokenCount: 94134 } })).toEqual({ input: 91234, output: 2100, thinking: 800, requests: 1 });
+    expect(usageOf({ candidates: [] })).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
+    expect(usageOf(null)).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
   });
 
   it('retries server errors, then succeeds', async () => {

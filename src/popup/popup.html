@@ -16,7 +16,7 @@
 
     <section id="keyBanner" class="card stack" hidden aria-labelledby="keyBannerTitle">
       <h2 id="keyBannerTitle" data-i18n="popup_setup_title">Set up SceneVoice</h2>
-      <p data-i18n="popup_setup_body">Add your free Gemini API key to start creating descriptions.</p>
+      <p id="setupBody" data-i18n="popup_setup_body">Add your free Gemini API key to start creating descriptions.</p>
       <div class="row"><button type="button" id="setupKey" data-i18n="popup_setup_button">Add API key</button></div>
     </section>
 
@@ -35,7 +35,9 @@
         <button type="button" id="describe" class="secondary" data-i18n="popup_describe_now">Describe now</button>
         <button type="button" id="ask" class="secondary" data-i18n="popup_ask">Ask a question</button>
         <button type="button" id="transcript" class="secondary" hidden data-i18n="popup_transcript">Read all descriptions</button>
+        <button type="button" id="report" class="secondary" hidden aria-describedby="reportHint" data-i18n="popup_report">Last description is wrong</button>
       </div>
+      <p id="reportHint" class="small muted" hidden data-i18n="popup_report_hint">Marks the description you just heard (or the one for this moment) as wrong, and describes only that moment again. The mark stays on this computer.</p>
     </section>
 
     <section class="card stack" aria-labelledby="settingsHeading">
@@ -47,16 +49,18 @@
         <span class="hint" data-i18n="set_enabled_hint">Speak descriptions automatically during playback.</span>
       </label>
 
-      <fieldset>
+      <p id="typeNote" class="small type-note" hidden></p>
+
+      <fieldset aria-describedby="typeNote">
         <legend data-i18n="set_mode">When a description does not fit</legend>
         <div class="choices">
-          <label class="choice"><input type="radio" name="mode" value="gaps" data-setting="mode"><span data-i18n="mode_gaps">Keep playing</span><span class="hint" data-i18n="mode_gaps_hint">Shorten it to fit the pause. The video never stops.</span></label>
+          <label class="choice"><input type="radio" name="mode" value="gaps" data-setting="mode"><span data-i18n="mode_gaps">Keep playing</span><span class="hint" data-i18n="mode_gaps_hint">Use a shorter version that fits the pause, or skip it rather than talk over dialogue. The video never stops.</span></label>
           <label class="choice"><input type="radio" name="mode" value="pause" data-setting="mode"><span data-i18n="mode_pause">Pause the video</span><span class="hint" data-i18n="mode_pause_hint">Pause, describe in full, then continue.</span></label>
           <label class="choice"><input type="radio" name="mode" value="manual" data-setting="mode"><span data-i18n="mode_manual">Only when I ask</span><span class="hint" data-i18n="mode_manual_hint">Silent until you press Describe now.</span></label>
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset aria-describedby="typeNote">
         <legend data-i18n="set_detail">Detail</legend>
         <div class="choices choices-inline">
           <label class="choice"><input type="radio" name="detail" value="brief" data-setting="detail"><span data-i18n="detail_brief">Brief</span></label>
@@ -66,21 +70,6 @@
       </fieldset>
 
       <fieldset>
-        <legend data-i18n="set_density">How much to describe</legend>
-        <div class="choices choices-inline">
-          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials</span></label>
-          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Standard</span></label>
-          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">Everything</span></label>
-        </div>
-      </fieldset>
-
-      <label class="check">
-        <input type="checkbox" data-setting="onScreenText">
-        <span data-i18n="set_on_screen_text">Read on-screen text</span>
-        <span class="hint" data-i18n="set_on_screen_text_hint">Titles, burned-in captions, signs and slides.</span>
-      </label>
-
-      <fieldset>
         <legend data-i18n="set_output">Voice</legend>
         <div class="choices">
           <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
@@ -88,11 +77,57 @@
         </div>
       </fieldset>
 
+      <div id="ttsSpeed" class="stack" hidden>
+        <label class="field" for="rate">
+          <span><span data-i18n="set_tts_rate">Speaking rate</span> <output id="rateOut" for="rate" aria-hidden="true"></output></span>
+          <input type="range" id="rate" min="0.6" max="3" step="0.1" data-setting="ttsRate" data-number data-format="rate">
+        </label>
+        <div class="row"><button type="button" id="testVoice" class="secondary" data-i18n="set_test_voice">Test voice</button></div>
+      </div>
+      <div id="readerSpeed" class="stack" hidden>
+        <label class="field">
+          <span data-i18n="set_reader_speed">How fast does your screen reader speak?</span>
+          <select data-setting="readerSpeed" data-number aria-describedby="readerSpeedHint">
+            <option value="1" data-i18n="speed_normal">Default speed</option>
+            <option value="1.6" data-i18n="speed_fast">Fast</option>
+            <option value="2.4" data-i18n="speed_very_fast">Very fast</option>
+            <option value="3.2" data-i18n="speed_fastest">Extremely fast</option>
+          </select>
+        </label>
+        <p id="readerSpeedHint" class="small muted" data-i18n="set_reader_speed_hint">SceneVoice cannot hear your screen reader, so it uses this to decide which descriptions fit in a pause.</p>
+      </div>
+
+      <fieldset aria-describedby="typeNote">
+        <legend data-i18n="set_density">How much to describe</legend>
+        <div class="choices choices-inline">
+          <label class="choice"><input type="radio" name="density" value="essential" data-setting="density"><span data-i18n="density_essential">Essentials only</span></label>
+          <label class="choice"><input type="radio" name="density" value="standard" data-setting="density"><span data-i18n="density_standard">Moderate</span></label>
+          <label class="choice"><input type="radio" name="density" value="full" data-setting="density"><span data-i18n="density_full">As much as possible</span></label>
+        </div>
+      </fieldset>
+
+      <label class="check">
+        <input type="checkbox" data-setting="onScreenText" aria-describedby="onScreenTextHint">
+        <span data-i18n="set_on_screen_text">Read on-screen text</span>
+      </label>
+      <p id="onScreenTextHint" class="small muted" data-i18n="set_on_screen_text_hint">Titles, names, slides, chart figures, prices, contact details, code and menus, word for word and before other descriptions. Text you already hear in the dialogue is not read again.</p>
+
       <label class="field">
         <span data-i18n="set_language">Description language</span>
         <select id="language" data-setting="language"></select>
       </label>
+      <p id="languageNote" class="small muted" hidden></p>
+
+      <p id="quickKeys" class="small muted"></p>
+      <p id="settingsStatus" class="small status-bad" role="status" aria-live="polite"></p>
     </section>
+
+    <details id="allKeys">
+      <summary data-i18n="popup_all_keys">All keyboard shortcuts</summary>
+      <ul id="keyList" class="small"></ul>
+      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_edit">Change shortcuts</button></div>
+      <p class="small muted" id="keysHint"></p>
+    </details>
 
     <footer class="row">
       <button type="button" id="openOptions" class="secondary" data-i18n="popup_all_settings">All settings</button>

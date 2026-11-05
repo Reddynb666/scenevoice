@@ -1,0 +1,6 @@
+body { padding: 0 16px 40px; }
+main { max-width: 760px; margin: 0 auto; padding-top: 24px; }
+h1 { font-size: 24px; }
+h2 { font-size: 19px; }
+ol.steps { padding-inline-start: 1.6em; display: grid; gap: 8px; }
+ol.steps li { line-height: 1.55; }

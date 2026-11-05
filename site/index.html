@@ -1,0 +1,249 @@
+<!doctype html>
+<!--
+  SceneVoice website, English. The Chinese page is zh-CN/index.html; keep the two in step
+  (same sections, same ids, same order; site/check.mjs compares them).
+
+  THINGS THE OWNER FILLS IN (search for "FILL IN"):
+    1. Store links, in the "Install" section: the <span> elements with data-store="chrome",
+       data-store="edge" and data-store="gitee". For each one, change the <span> into
+       <a class="button" href="https://…" data-store="…">, drop the "placeholder" class and
+       change the visible text from "… (coming soon)" to the store's name. Then reword the
+       first paragraph of that section ("Store listings are on the way …"); update it too once
+       a listing has actually been submitted.
+    2. Contact address, in the "For organisations" section: the mailto: link (data-contact).
+    3. Names of the blind testers, in the footer (data-testers).
+    4. SITE URL: if the site moves from GitHub Pages to a domain of its own, update the
+       <link rel="canonical">, the hreflang alternates, og:url, og:image, twitter:image and
+       the JSON-LD url.
+    5. SOCIAL CARD: assets/og.svg is the editable source; assets/og.png (1200 by 630, what
+       the share previews actually show) is rendered from it with `python3 scripts/make_og.py`.
+       Re-run that after changing the SVG.
+-->
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SceneVoice — audio description for YouTube and Bilibili</title>
+<meta name="description" content="Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.">
+<link rel="canonical" href="https://reddynb666.github.io/scenevoice/">
+<link rel="alternate" hreflang="en" href="https://reddynb666.github.io/scenevoice/">
+<link rel="alternate" hreflang="zh-Hans" href="https://reddynb666.github.io/scenevoice/zh-CN/">
+<link rel="alternate" hreflang="x-default" href="https://reddynb666.github.io/scenevoice/">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/logo.png" type="image/png" sizes="128x128">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<link rel="stylesheet" href="styles.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SceneVoice">
+<meta property="og:title" content="SceneVoice — audio description for YouTube and Bilibili">
+<meta property="og:description" content="Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.">
+<meta property="og:url" content="https://reddynb666.github.io/scenevoice/">
+<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta name="twitter:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0b4a8f">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SceneVoice",
+  "url": "https://reddynb666.github.io/scenevoice/",
+  "description": "Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.",
+  "applicationCategory": "Accessibility",
+  "applicationSubCategory": "BrowserExtension",
+  "operatingSystem": "Chrome, Edge and other Chromium browsers (116 or newer)",
+  "inLanguage": ["en", "zh-Hans"],
+  "accessibilityFeature": ["audioDescription", "readingOrder", "structuralNavigation"],
+  "accessibilityControl": ["fullKeyboardControl"],
+  "accessibilityHazard": "none",
+  "license": "https://github.com/reddynb666/scenevoice/blob/main/LICENSE",
+  "sameAs": "https://github.com/reddynb666/scenevoice",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  }
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="./">
+      <img src="assets/logo.png" alt="" width="40" height="40">
+      SceneVoice
+    </a>
+    <nav class="lang-switch" aria-label="Language">
+      <a href="zh-CN/" hreflang="zh-CN" lang="zh-CN" data-lang-switch="zh-CN">简体中文</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap" tabindex="-1">
+
+  <section id="hook" aria-labelledby="hook-heading">
+    <h1 id="hook-heading">Audio description for YouTube and Bilibili, through your own screen reader</h1>
+    <p class="lead">Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.</p>
+    <p>SceneVoice is a browser extension for Chrome and Edge, made for blind and low-vision viewers. It watches the video with an AI model, writes short descriptions of what is on screen, and reads them between lines of dialogue — in your screen reader's voice, at your speed, on your braille display.</p>
+    <nav aria-label="On this page">
+      <ul>
+        <li><a href="#hear">Hear it</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#cost">Who it is for and what it costs</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="#organisations">For organisations and creators</a></li>
+        <li><a href="#press">Press and community kit</a></li>
+      </ul>
+    </nav>
+  </section>
+
+  <section id="hear" aria-labelledby="hear-heading">
+    <h2 id="hear-heading">Hear it</h2>
+    <p>Three sample descriptions, the way SceneVoice places them: a line of dialogue, then a description in the pause. Pick whichever voice you listen with; the words also appear below as they are spoken.</p>
+    <p class="try-web">Try it without installing: the <a href="play/">web player</a> takes a YouTube link and describes the video in this browser, with your own Gemini key.</p>
+    <!-- Hidden until script.js has read the sample data: without it the buttons would do nothing. -->
+    <div class="button-row" id="hear-buttons" hidden>
+      <button type="button" class="button" id="hear-sr" aria-describedby="hear-sr-help">Hear it with your screen reader</button>
+      <button type="button" class="button secondary" id="hear-tts" aria-describedby="hear-tts-help">Hear it with the browser's voice</button>
+    </div>
+    <noscript><p>The buttons need JavaScript. The sample text is below and your screen reader can read it as it is.</p></noscript>
+    <p id="hear-sr-help">Your screen reader reads each line as it appears. This is how SceneVoice works by default.</p>
+    <p id="hear-tts-help">The browser's built-in voice speaks instead. While it speaks, the lines below are not announced, so two voices never talk at once. Needs JavaScript and a browser with speech synthesis.</p>
+    <p id="sample-status" class="status" role="status" aria-live="polite"></p>
+    <div id="sample" class="sample" role="region" aria-live="polite" aria-atomic="false" aria-label="Sample descriptions">
+      <p class="dialogue">Dialogue.</p>
+      <p>A woman in a red coat runs across a rain-soaked street, holding a newspaper over her head.</p>
+      <p class="dialogue">Dialogue.</p>
+      <p>On screen: "Chapter 2 — The Harbour". A fishing boat rounds the pier at dawn.</p>
+      <p class="dialogue">Dialogue.</p>
+      <p>He takes a folded letter from his pocket, hesitates, and puts it back unopened.</p>
+    </div>
+    <script type="application/json" id="sample-data">
+    {
+      "dialogue": "Dialogue.",
+      "lines": [
+        "A woman in a red coat runs across a rain-soaked street, holding a newspaper over her head.",
+        "On screen: \"Chapter 2 — The Harbour\". A fishing boat rounds the pier at dawn.",
+        "He takes a folded letter from his pocket, hesitates, and puts it back unopened."
+      ],
+      "labels": {
+        "sr": "Hear it with your screen reader",
+        "tts": "Hear it with the browser's voice",
+        "stop": "Stop the sample"
+      },
+      "status": {
+        "sr": "Playing three sample descriptions. Each line is read as it appears.",
+        "tts": "Playing three sample descriptions with the browser's voice.",
+        "done": "End of the sample.",
+        "stopped": "Sample stopped.",
+        "unavailable": "This browser has no speech synthesis, so the built-in voice cannot play. The sample text is below; a screen reader can read it."
+      }
+    }
+    </script>
+  </section>
+
+  <section id="how" aria-labelledby="how-heading">
+    <h2 id="how-heading">How it works</h2>
+    <ol class="steps">
+      <li><strong>Install the extension</strong> in Chrome or Edge and add a key for the model (free from Google for YouTube, from Alibaba Cloud for Bilibili), following a guide written for screen reader users.</li>
+      <li><strong>Open a video and press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>.</strong> SceneVoice says what it is doing at every step. The first part is ready in about half a minute; you hear "You can start watching".</li>
+      <li><strong>Descriptions arrive in the pauses.</strong> Each moment is written in three lengths; SceneVoice reads the longest one that fits the silence and keeps quiet rather than talk over dialogue. On-screen text is read word for word. If you prefer, it pauses the video and reads everything.</li>
+      <li><strong>Ask a question.</strong> Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Q</kbd>, type "who is speaking?" or "what does the sign say?", and get an answer about that exact moment. If a description is wrong, say so, and that moment is described again.</li>
+    </ol>
+  </section>
+
+  <section id="install" aria-labelledby="install-heading">
+    <h2 id="install-heading">Install</h2>
+    <p>Works in Chrome, Edge, Brave and other Chromium browsers, version 116 or newer. Store listings are on the way; until they are live, the GitHub release works in every one of these browsers.</p>
+    <div class="button-row">
+      <!-- FILL IN: store links. See the note at the top of this file. -->
+      <span class="button placeholder" data-store="chrome">Chrome Web Store (coming soon)</span>
+      <span class="button placeholder" data-store="edge">Edge Add-ons (coming soon)</span>
+      <a class="button" href="https://github.com/reddynb666/scenevoice/releases" data-store="github">GitHub Releases</a>
+      <span class="button placeholder" data-store="gitee">Gitee, for mainland China (coming soon)</span>
+    </div>
+    <p>From a GitHub release: download the zip, unzip it, open <code>chrome://extensions</code>, turn on Developer mode, choose "Load unpacked" and pick the unzipped folder. The welcome page then opens: hear a sample, then choose “My own key” and the settings page opens at the key field (SceneVoice Cloud will be offered there once it is live). The <a href="https://github.com/reddynb666/scenevoice#install">README</a> has the full steps, including how to get a free key.</p>
+  </section>
+
+  <section id="cost" aria-labelledby="cost-heading">
+    <h2 id="cost-heading">Who it is for and what it costs</h2>
+    <p>For anyone who is blind or has low vision and watches YouTube or Bilibili; for the people who watch with them; and for schools, libraries and employers who need described video. The extension is free and open source (MIT licence), with no account and, with your own key, no server of its own; SceneVoice Cloud, when it opens, is an optional relay (see Privacy).</p>
+    <dl class="plans">
+      <dt>Your own key — free, always</dt>
+      <dd>Bring a Gemini key (YouTube) or a Qwen key (Bilibili). Every feature, no limits from us, nothing leaves your computer except the request to the model. This is the whole product today.</dd>
+      <dt>SceneVoice Cloud, free allowance — planned</dt>
+      <dd>For people who do not want to open an API console: a daily allowance of new descriptions (planned: 60 minutes of video a day), plus unlimited playback of descriptions that someone has already generated for the same video. No account; the extension gets an anonymous token. Not open yet.</dd>
+      <dt>SceneVoice Cloud Plus — planned</dt>
+      <dd>For heavy use: more minutes, faster generation, detailed descriptions for long videos. Planned price: US$4 a month or US$36 a year; in mainland China ¥9.9 a month or ¥88 a year. People in hardship get it free, no proof asked.</dd>
+      <dt>Organisations — planned</dt>
+      <dd>Schools for the blind, libraries, university disability services, rehabilitation centres, employers: a managed key, a budget cap, usage reports and an accessibility conformance report (VPAT). Planned price: US$3 to 5 per seat per year; in mainland China, per school or library by agreement.</dd>
+    </dl>
+    <p class="note"><strong>Nothing about accessibility is ever behind a paywall.</strong> Screen reader output, keyboard control, the pause mode, the question dialog and every setting stay free, and the own-key path is never slowed down or cut back.</p>
+  </section>
+
+  <section id="privacy" aria-labelledby="privacy-heading">
+    <h2 id="privacy-heading">Privacy</h2>
+    <ul>
+      <li><strong>No account, no tracking.</strong> With your own key, SceneVoice has no backend and nothing you do is sent to the developer; there are no analytics, usage statistics, crash reports or identifiers. SceneVoice Cloud (optional, not open yet) will send requests through the project's relay at api.scenevoice.app with an anonymous device token; the privacy policy below says what the relay keeps and what it never keeps. This website has no analytics either, and sets no cookies.</li>
+      <li><strong>The video is never recorded or uploaded.</strong> With Gemini on YouTube, the request carries the video's address, title and the time span to describe, so the model reads the public video itself. With Qwen, or on Bilibili, small pictures of the frame (at most 640 pixels wide) are sent instead, and kept only in the tab's memory for a minute or two.</li>
+      <li><strong>Your key stays yours.</strong> It is kept in the browser's local extension storage, travels only in a request header, is never placed in a web address, and never enters the YouTube or Bilibili page.</li>
+      <li><strong>Only the model you chose sees a request.</strong> With your own key, requests go to Google's Gemini API or Alibaba Cloud's Model Studio, under their terms, and nowhere else; with SceneVoice Cloud they go to the relay, which forwards them to the model without logging them. A Qwen key with the mainland China address keeps requests inside mainland China.</li>
+      <li><strong>Everything is on your computer and you can delete it.</strong> Descriptions, corrections and settings are stored locally; the settings page shows what is kept and deletes it in one step.</li>
+    </ul>
+    <p>The full <a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md">privacy policy</a> lists every request and every permission, and why.</p>
+  </section>
+
+  <section id="organisations" aria-labelledby="organisations-heading">
+    <h2 id="organisations-heading">For organisations and creators</h2>
+    <p>Schools for the blind, public libraries, university disability services and employers can give SceneVoice to everyone at once: one managed key, a budget cap, and a usage report, with no personal data about the viewers. Video platforms and screen reader makers can license the description engine and the shared cache, so a popular video is described once and heard by everyone.</p>
+    <p>Creators and educators: your viewers can describe your videos today, with nothing from you. If you would like a described track to publish with the video, that is on the roadmap.</p>
+    <!-- FILL IN: contact address. -->
+    <p><a href="mailto:your-address@example.com" data-contact>Write to us about an organisation or platform licence</a> (address to be set), or <a href="https://github.com/reddynb666/scenevoice/issues">open an issue on GitHub</a>.</p>
+  </section>
+
+  <section id="press" aria-labelledby="press-heading">
+    <h2 id="press-heading">Press and community kit</h2>
+    <h3>One sentence</h3>
+    <p>Audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader. Free and open source.</p>
+    <h3>Boilerplate</h3>
+    <p>SceneVoice is a free, open-source browser extension that adds AI audio description to YouTube and Bilibili videos for blind and low-vision viewers. Press one key on any video and, about half a minute later, short descriptions of what is on screen are read in the pauses between dialogue — through the viewer's own screen reader, or a built-in voice. Descriptions follow audio description guidelines: what is visible, on-screen text word for word, and "hard to see" when it is. Viewers can ask a question about any moment and correct a wrong description. SceneVoice has no account; with the viewer's own model key it runs in the browser with no server of its own (an optional SceneVoice Cloud relay is planned). Source code is on GitHub under the MIT licence.</p>
+    <h3>Links</h3>
+    <ul>
+      <li><a href="https://github.com/reddynb666/scenevoice#readme">README, in English</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md" hreflang="zh-CN">README, in Chinese</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CHANGELOG.md">Changelog</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/CONTRIBUTING.md">Contributing, with the screen reader test checklist</a></li>
+      <li><a href="assets/logo.png">Logo, 128 by 128 pixels</a> and the <a href="assets/og.png">social card, 1200 by 630 pixels</a> (<a href="assets/og.svg">SVG source</a>)</li>
+    </ul>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul>
+      <li><a href="https://github.com/reddynb666/scenevoice">GitHub</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/LICENSE">MIT licence</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md">Privacy policy</a></li>
+      <li><a href="zh-CN/" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+    </ul>
+    <!-- FILL IN: testers' names, with their permission. -->
+    <p data-testers>Made with blind and low-vision testers. Their names will appear here, with their permission.</p>
+  </div>
+</footer>
+
+<script src="script.js" defer></script>
+</body>
+</html>

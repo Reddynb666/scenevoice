@@ -19,3 +19,17 @@ ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 .skip { position: absolute; left: -9999px; top: 8px; background: var(--surface); padding: 8px 12px; border-radius: 8px; }
 .skip:focus { left: 8px; }
 output { font-weight: 400; color: var(--muted); }
+/* Settings messages ("Default settings restored", save errors) stay in view wherever the page is scrolled.
+   Always rendered, even when empty, so screen readers notice new text. */
+.toast {
+  position: sticky; bottom: 12px; z-index: 1;
+  padding: 10px 14px; border-radius: 10px; font-weight: 600;
+  background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+.toast:empty { padding: 0; border: 0; box-shadow: none; }
+.toast.status-bad { border-color: var(--bad); }
+h3 { font-size: 16px; margin-top: 6px; }
+/* One column per video type, side by side when there is room. */
+.type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.type-grid fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.type-grid fieldset:disabled { opacity: .6; }

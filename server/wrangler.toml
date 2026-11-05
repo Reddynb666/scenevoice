@@ -1,0 +1,76 @@
+# SceneVoice Cloud relay: Cloudflare Worker configuration.
+# Read README.md in this folder before deploying. Every placeholder id below
+# comes from `wrangler kv namespace create <NAME>`.
+
+name = "scenevoice-cloud"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+# Logs stay useful (route, status, token prefix, seconds) and hold no bodies:
+# see handle() in src/worker.js before turning anything else on.
+[observability]
+enabled = true
+
+# Custom domain. The extension's CLOUD_API_BASE must point at the same host.
+# Uncomment after the zone is on Cloudflare; wrangler creates the DNS record.
+# routes = [{ pattern = "api.scenevoice.app", custom_domain = true }]
+
+# Plain settings (not secret). Secrets are set with `wrangler secret put`:
+#   GEMINI_API_KEY         required: the server's Gemini key
+#   DASHSCOPE_API_KEY      optional: enables /compatible-mode/* (mainland China)
+#   STRIPE_WEBHOOK_SECRET  optional: enables /webhooks/stripe
+#   ADMIN_TOKEN            optional: enables GET /admin/licenses/{session}
+#   LICENSE_KEY_SECRET     optional: licence keys are HMAC(secret, session id);
+#                          STRIPE_WEBHOOK_SECRET is used when this is unset
+[vars]
+# Seconds of video a device may have described per UTC day, by plan.
+FREE_SECONDS_PER_DAY = "3600"
+PLUS_SECONDS_PER_DAY = "21600"
+# ORG_SECONDS_PER_DAY = "21600"   # defaults to PLUS_SECONDS_PER_DAY
+# Regular expression (JavaScript) for the Gemini model names a free device may
+# use. Keep it anchored with $: image, TTS, live and native-audio variants of
+# the flash family cost far more than text, and are refused for free devices
+# whatever this says. When both flash and flash-lite are listed the extension
+# picks plain flash; narrow the pattern to the lite family for the cheaper tier
+# (and raise OUTPUT_TOKEN_WEIGHT to 8). See "Cost model" in README.md.
+FREE_MODELS = "^gemini-\\d(\\.\\d)?-flash(-lite)?(-preview(-\\d{2}-\\d{2,4})?|-\\d{3})?$"
+# The same for DashScope (the model is read from the request body on the free plan).
+QWEN_FREE_MODELS = "^qwen\\d(\\.\\d)?-vl-(plus|flash)$"
+# Web origins allowed besides the extension (which sends chrome-extension://
+# or no Origin at all and needs no entry here). Comma separated.
+ALLOWED_ORIGINS = "https://scenevoice.app,https://www.scenevoice.app"
+# New device tokens one network address may create per day.
+DEVICES_PER_IP_PER_DAY = "20"
+# Seconds charged for a successful upstream answer without a token count.
+UNMETERED_RESPONSE_SECONDS = "120"
+# One output or thinking token is charged as this many prompt tokens (the
+# flash output/input price ratio): seconds = ceil((prompt + weight * output) / 100).
+OUTPUT_TOKEN_WEIGHT = "5"
+# Model calls one device may start per minute (the allowance is charged after
+# the answer, so a burst needs its own limit).
+REQUESTS_PER_MINUTE = "60"
+# Shared description scripts one device may upload per day.
+SCRIPT_PUTS_PER_DAY = "20"
+# Upstream addresses; change DASHSCOPE_API_BASE to the per-workspace address
+# (https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1) when
+# Alibaba Cloud retires the legacy one.
+# GEMINI_API_BASE = "https://generativelanguage.googleapis.com"
+# DASHSCOPE_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# Storage. All four are plain KV namespaces; src/store.js is the only file that
+# talks to them, so moving to D1 means rewriting that file and these bindings.
+[[kv_namespaces]]
+binding = "DEVICES"      # token -> { plan, created, licence }
+id = "REPLACE_WITH_DEVICES_ID"
+
+[[kv_namespaces]]
+binding = "USAGE"        # token:day -> seconds; hits:token -> cache hits; ip:hash:day -> registrations; rpm:token:minute, puts:token:day -> counters
+id = "REPLACE_WITH_USAGE_ID"
+
+[[kv_namespaces]]
+binding = "SCRIPTS"      # videoId:lang:version -> script JSON (text only, 180-day TTL)
+id = "REPLACE_WITH_SCRIPTS_ID"
+
+[[kv_namespaces]]
+binding = "LICENSES"     # key -> { plan, seats, used, created, session }; session:<id> -> key
+id = "REPLACE_WITH_LICENSES_ID"

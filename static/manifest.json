@@ -26,7 +26,7 @@
     "type": "module"
   },
   "permissions": ["storage", "unlimitedStorage", "tts", "activeTab", "offscreen"],
-  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*", "https://dashscope.aliyuncs.com/*", "https://api.scenevoice.app/*"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
   "content_scripts": [
     {
@@ -38,6 +38,12 @@
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": true
+    },
+    {
+      "matches": ["https://www.bilibili.com/video/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "commands": {
@@ -57,9 +63,12 @@
       "suggested_key": { "default": "Alt+Shift+Q" },
       "description": "__MSG_cmd_ask__"
     },
+    "report-wrong": { "description": "__MSG_cmd_report_wrong__" },
     "cycle-detail": { "description": "__MSG_cmd_cycle_detail__" },
     "cycle-mode": { "description": "__MSG_cmd_cycle_mode__" },
     "cycle-density": { "description": "__MSG_cmd_cycle_density__" },
+    "speed-up": { "description": "__MSG_cmd_speed_up__" },
+    "speed-down": { "description": "__MSG_cmd_speed_down__" },
     "stop-speaking": { "description": "__MSG_cmd_stop__" }
   }
 }

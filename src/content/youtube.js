@@ -1,5 +1,11 @@
 // Everything that knows about YouTube's page structure lives here,
-// so a YouTube redesign only needs changes in one file.
+// so a YouTube redesign only needs changes in one file. `youtubePlatform` at
+// the end is what the content script uses (bilibili.js has the same shape).
+
+import { pageVideoType } from '../shared/videotype.js';
+import { containerForOverlays } from './dom.js';
+
+export { containerForOverlays };
 
 const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
@@ -77,16 +83,6 @@ export function getMeta() {
   return { title, channel, description: description.slice(0, 2000) };
 }
 
-/**
- * The element to render into while the player is fullscreen, so overlays stay visible
- * and reachable. A <video> element itself cannot hold children, so use its parent.
- */
-export function containerForOverlays() {
-  const fs = document.fullscreenElement;
-  if (!fs) return document.body;
-  return fs.tagName === 'VIDEO' ? fs.parentElement || document.body : fs;
-}
-
 /** Call fn() whenever YouTube's single-page navigation lands on a new page. */
 export function onNavigate(fn) {
   let last = location.href;
@@ -104,6 +100,180 @@ export function onNavigate(fn) {
   setInterval(check, 1000);
 }
 
+// ---------- captions (for real dialogue timing) ----------
+
+/**
+ * The caption tracks listed in a watch page's player response.
+ * @returns {Array<{baseUrl: string, languageCode: string, kind: string}>}
+ */
+export function extractCaptionTracks(html) {
+  const key = '"captionTracks":';
+  const at = typeof html === 'string' ? html.indexOf(key) : -1;
+  if (at < 0) return [];
+  const from = html.indexOf('[', at + key.length);
+  if (from < 0) return [];
+  // Find the matching bracket, skipping over strings.
+  let depth = 0;
+  let inString = false;
+  for (let i = from; i < html.length; i += 1) {
+    const ch = html[i];
+    if (inString) {
+      if (ch === '\\') i += 1;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '[' || ch === '{') depth += 1;
+    else if (ch === ']' || ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          const list = JSON.parse(html.slice(from, i + 1));
+          return Array.isArray(list)
+            ? list
+              .filter((tr) => tr && typeof tr.baseUrl === 'string')
+              .map((tr) => ({ baseUrl: tr.baseUrl, languageCode: tr.languageCode || '', kind: tr.kind || '' }))
+            : [];
+        } catch {
+          return [];
+        }
+      }
+    }
+  }
+  return [];
+}
+
+/**
+ * The track whose timing best follows the spoken dialogue: subtitles written for
+ * the spoken language, then auto-generated captions (always in the spoken
+ * language, timed word by word), then any subtitles.
+ */
+export function pickCaptionTrack(tracks) {
+  if (!tracks?.length) return null;
+  const asr = tracks.find((tr) => tr.kind === 'asr');
+  const manual = tracks.filter((tr) => tr.kind !== 'asr');
+  return (asr && manual.find((tr) => tr.languageCode === asr.languageCode)) || asr || manual[0] || null;
+}
+
+/** A timedtext URL for one track, asking for the json3 format. Null for anything but YouTube's timedtext API. */
+export function timedTextUrl(baseUrl, origin = location.origin) {
+  let url;
+  try {
+    url = new URL(baseUrl, origin);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)youtube\.com$/.test(url.hostname) || url.pathname !== '/api/timedtext') return null;
+  url.searchParams.set('fmt', 'json3');
+  return url.href;
+}
+
+/**
+ * Remember the caption requests the player itself makes (when captions are
+ * turned on). They carry tokens a plain request may lack, so they are the most
+ * reliable source. Calls fn(videoId, url) for each one.
+ */
+export function watchTimedTextRequests(fn) {
+  const seen = (entry) => {
+    if (!entry.name.includes('/api/timedtext')) return;
+    try {
+      const url = new URL(entry.name);
+      const v = url.searchParams.get('v');
+      if (url.origin === location.origin && v) fn(v, url.href);
+    } catch {
+      /* not a URL */
+    }
+  };
+  try {
+    new PerformanceObserver((list) => list.getEntries().forEach(seen)).observe({ type: 'resource', buffered: true });
+  } catch {
+    /* PerformanceObserver unavailable */
+  }
+}
+
+/**
+ * The category the uploader chose ("Education", "Music"…), from a watch page's
+ * player response, or its <meta itemprop="genre">. '' when neither is there.
+ */
+export function extractCategory(html) {
+  if (typeof html !== 'string') return '';
+  const at = html.indexOf('"playerMicroformatRenderer"');
+  // The renderer holds the title, the (escaped) description and then the category.
+  const json = at >= 0 && /"category":("(?:[^"\\]|\\.)*")/.exec(html.slice(at, at + 50000));
+  if (json) {
+    try {
+      return JSON.parse(json[1]); // "Howto \u0026 Style" → "Howto & Style"
+    } catch {
+      /* fall through to the meta tag */
+    }
+  }
+  const meta = /<meta\s+itemprop="genre"\s+content="([^"]*)"/i.exec(html);
+  return meta ? meta[1].replace(/&amp;/g, '&') : '';
+}
+
+/**
+ * YouTube's numeric category id ("27" for Education), when the player
+ * response carries one next to the category name; it does not always, and
+ * the name is read either way. The id is the same in every page language,
+ * so videotype.js prefers it. '' when the page has none.
+ */
+export function extractCategoryId(html) {
+  if (typeof html !== 'string') return '';
+  const at = html.indexOf('"playerMicroformatRenderer"');
+  const m = at >= 0 && /"categoryId":\s*"?(\d{1,3})"?/.exec(html.slice(at, at + 50000));
+  return m ? m[1] : '';
+}
+
+/**
+ * What this video's watch page says about it: caption tracks (for dialogue
+ * timing) and category (for the video type). Same origin as the page.
+ */
+export async function fetchWatchPage(videoId) {
+  const res = await fetch(`${location.origin}/watch?v=${encodeURIComponent(videoId)}`, { credentials: 'same-origin' });
+  if (!res.ok) return { tracks: [], category: '', categoryId: '' };
+  const html = await res.text();
+  return { tracks: extractCaptionTracks(html), category: extractCategory(html), categoryId: extractCategoryId(html) };
+}
+
 export function rightControls() {
   return getPlayer()?.querySelector('.ytp-right-controls') || null;
 }
+
+/**
+ * What the watch page says, for the content script: the category (for the
+ * video type) and the caption file to take dialogue timing from.
+ */
+export async function loadPageInfo(videoId) {
+  const page = await fetchWatchPage(videoId);
+  const track = pickCaptionTrack(page.tracks);
+  const url = track && timedTextUrl(track.baseUrl);
+  return { category: page.category, categoryId: page.categoryId || '', captionUrls: url ? [url] : [] };
+}
+
+/**
+ * Where the progress box goes: just above the control bar, measured because it is
+ * taller in fullscreen. Shorts have no control bar at the bottom, only the title and
+ * channel there, so it goes at the top.
+ */
+export function progressPlacement() {
+  if (isShorts()) return { top: true };
+  const h = getPlayer()?.querySelector('.ytp-chrome-bottom')?.offsetHeight || 0;
+  return h > 0 ? { bottom: `${h + 24}px` } : {};
+}
+
+/** YouTube, as the content script sees it. */
+export const youtubePlatform = Object.freeze({
+  id: 'youtube',
+  videoIdFromUrl,
+  getPlayer,
+  getVideo,
+  isAdShowing,
+  getPageDuration,
+  getMeta,
+  rightControls,
+  progressPlacement,
+  onNavigate,
+  loadPageInfo,
+  watchCaptionRequests: watchTimedTextRequests,
+  videoType: ({ category, categoryId, title }) => pageVideoType({ category, categoryId, title }),
+  buttonClass: 'ytp-button scenevoice-button',
+  buttonStyle: '',
+});

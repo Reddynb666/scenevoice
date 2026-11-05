@@ -1,0 +1,4 @@
+# Local secrets for `wrangler dev` and wrangler's own cache.
+.dev.vars
+.wrangler/
+node_modules/

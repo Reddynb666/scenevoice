@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem (安全问题)
+    url: https://github.com/reddynb666/scenevoice/blob/main/SECURITY.md
+    about: Please do not open a public issue for a security problem. SECURITY.md says how to report one privately. 安全问题请不要公开提交，按 SECURITY.md 私下报告。
+  - name: Privacy policy (隐私说明)
+    url: https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md
+    about: What leaves your computer and what is stored. 中文见 PRIVACY.zh-CN.md。

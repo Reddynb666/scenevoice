@@ -1,0 +1,80 @@
+# GitHub Pages deployment for the website in site/.
+#
+# To turn it on: in the repository settings under Pages set "Source" to
+# "GitHub Actions". The site is then served at
+# https://reddynb666.github.io/scenevoice/ (and /zh-CN/ for Chinese).
+#
+# One thing is built: the web player's script, site/play/player.js, from
+# src/web/ (npm run build:web; the file is not in git). The rest of site/ is
+# uploaded as it is, after site/check.mjs, so a page that fails axe or loses a
+# link never goes live.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'src/web/**'
+      - 'src/shared/**'
+      - 'scripts/locales/**'
+      - 'scripts/build.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned to full commit SHAs; the comment names the tag that SHA was resolved from.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the web player (site/play/player.js)
+        run: npm run build:web
+      - name: Accessibility check (axe-core, WCAG 2.2 AA, links, names, contrast)
+        run: node site/check.mjs
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the web player (site/play/player.js)
+        run: npm run build:web
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

@@ -1,0 +1,211 @@
+<!doctype html>
+<!--
+  SceneVoice web player: paste a YouTube link, hear it described, nothing to install.
+  One page for English and Simplified Chinese: every text carries a data-i18n key and
+  player.js (built by `npm run build:web` from src/web/player.js) fills it in the
+  language chosen at runtime (?lang=, the remembered choice, or the browser's). The
+  English text below is what a visitor without JavaScript sees. The strings live in
+  scripts/locales/en.mjs and zh_CN.mjs under "Web player (site/play)".
+
+  Content-Security-Policy: the page may run its own script and YouTube's player
+  script, talk to Google's Gemini API and the SceneVoice relay, and frame the
+  YouTube player. Nothing else loads, by policy and not only by promise.
+-->
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; connect-src 'self' https://generativelanguage.googleapis.com https://api.scenevoice.app; frame-src https://www.youtube-nocookie.com https://www.youtube.com; img-src 'self' data:; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<title data-i18n="web_title">SceneVoice web player</title>
+<meta name="description" content="Paste a YouTube link and hear AI audio description through your screen reader or the browser’s voice. Nothing to install." data-i18n-attr="content:web_meta_description">
+<link rel="canonical" href="https://reddynb666.github.io/scenevoice/play/">
+<link rel="alternate" hreflang="en" href="https://reddynb666.github.io/scenevoice/play/?lang=en">
+<link rel="alternate" hreflang="zh-Hans" href="https://reddynb666.github.io/scenevoice/play/?lang=zh-CN">
+<link rel="alternate" hreflang="x-default" href="https://reddynb666.github.io/scenevoice/play/">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../assets/logo.png" type="image/png" sizes="128x128">
+<link rel="apple-touch-icon" href="../assets/logo.png">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="play.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SceneVoice">
+<meta property="og:title" content="SceneVoice web player" data-i18n-attr="content:web_title">
+<meta property="og:description" content="Paste a YouTube link and hear AI audio description through your screen reader or the browser’s voice. Nothing to install." data-i18n-attr="content:web_meta_description">
+<meta property="og:url" content="https://reddynb666.github.io/scenevoice/play/">
+<meta property="og:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
+<meta name="twitter:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0b4a8f">
+</head>
+<body>
+<a class="skip-link" href="#main" data-i18n="web_skip">Skip to main content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../">
+      <img src="../assets/logo.png" alt="" width="40" height="40">
+      SceneVoice
+    </a>
+    <nav class="lang-switch" aria-label="Language" data-i18n-attr="aria-label:web_lang_switch_label">
+      <a id="lang-switch" href="?lang=zh-CN" hreflang="zh-CN" lang="zh-CN" data-lang-switch="zh-CN">简体中文</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap" tabindex="-1">
+
+  <h1 data-i18n="web_heading">Hear a YouTube video described, with nothing to install</h1>
+  <p class="lead" data-i18n="web_lead">Paste a YouTube link and press Play. Short descriptions of what is on screen are read in the pauses, through your screen reader or the browser’s voice. The first minutes are ready in about half a minute.</p>
+  <noscript><p data-i18n="web_noscript">The web player needs JavaScript. Without it, the SceneVoice extension does the same job on youtube.com; see the home page.</p></noscript>
+
+  <section id="start" aria-labelledby="start-heading">
+    <h2 id="start-heading" data-i18n="web_start_heading">1. The video</h2>
+    <form id="link-form" action="./" method="get">
+      <label for="link" data-i18n="web_link_label">YouTube link or video id</label>
+      <input id="link" name="v" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="link-hint" required>
+      <p id="link-hint" class="hint" data-i18n="web_link_hint">Any YouTube address works: watch, youtu.be, Shorts, live and embed links, or the 11-character video id. Bilibili is not supported here; the extension is.</p>
+      <button type="submit" class="button" id="play" data-i18n="web_play">Play with descriptions</button>
+    </form>
+  </section>
+
+  <section id="source" aria-labelledby="source-heading">
+    <h2 id="source-heading" data-i18n="web_source_heading">2. Who writes the descriptions</h2>
+    <fieldset>
+      <legend data-i18n="web_source_legend">Descriptions are made by</legend>
+      <div class="choice">
+        <input type="radio" name="source" id="source-own" value="own" aria-describedby="source-own-hint" checked>
+        <label for="source-own" data-i18n="web_source_own">My Gemini key</label>
+        <p id="source-own-hint" class="hint" data-i18n="web_source_own_hint">Free from Google AI Studio, no card needed. The key goes only to Google, in a request header, and never to SceneVoice.</p>
+      </div>
+      <div class="choice">
+        <input type="radio" name="source" id="source-cloud" value="cloud" aria-describedby="source-cloud-hint">
+        <label for="source-cloud" data-i18n="web_source_cloud">SceneVoice Cloud</label>
+        <p id="source-cloud-hint" class="hint" data-i18n="web_source_cloud_hint">The project’s own key through the SceneVoice relay, with an anonymous device token and a free daily allowance. Not open yet: use your own key until it is.</p>
+      </div>
+    </fieldset>
+    <div id="key-block">
+      <label for="key" data-i18n="web_key_label">Gemini API key</label>
+      <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="key-note">
+      <p id="key-note" class="hint" data-i18n="web_key_note">The key is sent only to Google’s Gemini API, in a request header, never in a web address, and never to SceneVoice.</p>
+      <div class="choice">
+        <input type="checkbox" id="remember" aria-describedby="remember-hint">
+        <label for="remember" data-i18n="web_remember">Remember the key on this device</label>
+        <p id="remember-hint" class="hint" data-i18n="web_remember_hint">Checked: the key stays in this browser’s storage until you clear it or untick this. Unchecked: it is forgotten when the tab closes.</p>
+      </div>
+      <p><a id="key-guide" href="https://github.com/reddynb666/scenevoice#getting-a-gemini-api-key" data-i18n="web_key_guide" data-i18n-attr="href:web_key_guide_url">How to get a free Gemini key: the guide in the README</a></p>
+    </div>
+  </section>
+
+  <section id="watch" aria-labelledby="watch-heading">
+    <h2 id="watch-heading" data-i18n="web_watch_heading">3. Watch and listen</h2>
+    <p id="player-help" class="hint" data-i18n="web_player_help">With focus on the player, single keys work: Space plays or pauses, D describes now, R repeats, A asks, S stops speaking, arrows move 5 seconds or change the reading speed, M changes the mode, ? reads the list. Tab still moves between the buttons.</p>
+    <div id="player-region" role="application" tabindex="0" aria-label="SceneVoice player: press ? for the keys" data-i18n-attr="aria-label:web_player_label" aria-describedby="player-help">
+      <div id="player-frame"><div id="player-host"></div></div>
+      <div class="button-row" id="player-controls">
+        <button type="button" class="button" id="play-pause" data-i18n="web_play_pause">Play or pause</button>
+        <button type="button" class="button secondary" id="back" data-i18n="web_back">Back 5 seconds</button>
+        <button type="button" class="button secondary" id="forward" data-i18n="web_forward">Forward 5 seconds</button>
+        <button type="button" class="button secondary" id="describe-now" data-i18n="popup_describe_now">Describe now</button>
+        <button type="button" class="button secondary" id="repeat" data-i18n="web_repeat">Repeat the last description</button>
+        <button type="button" class="button secondary" id="stop-speaking" data-i18n="cmd_stop">Stop speaking</button>
+        <button type="button" class="button secondary" id="help-keys" data-i18n="web_keys_button">Read the keys</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+      <div id="description" class="sample" role="region" aria-live="polite" aria-atomic="true" aria-label="Descriptions" data-i18n-attr="aria-label:web_description_label"></div>
+    </div>
+    <p id="progress" class="hint" aria-hidden="true"></p>
+    <form id="ask-form">
+      <label for="question" data-i18n="ask_label">Your question</label>
+      <input id="question" type="text" autocomplete="off" aria-describedby="ask-hint">
+      <p id="ask-hint" class="hint" data-i18n="ask_hint">For example: Who is speaking? What does the sign say? What just happened? Each answer says which moment it is about.</p>
+      <button type="submit" class="button secondary" id="ask" data-i18n="ask_submit">Ask</button>
+    </form>
+    <p class="again">
+      <button type="button" class="button secondary" id="describe-again" data-i18n="web_describe_again">Describe again</button>
+      <span class="hint" data-i18n="web_describe_again_hint">Forgets the descriptions saved for this video on this device and asks the model again.</span>
+    </p>
+  </section>
+
+  <section id="settings" aria-labelledby="settings-heading">
+    <h2 id="settings-heading" data-i18n="web_settings_heading">4. How to describe</h2>
+    <div class="grid">
+      <div>
+        <label for="mode" data-i18n="set_mode">When a description does not fit</label>
+        <select id="mode">
+          <option value="gaps" data-i18n="mode_gaps">Keep playing</option>
+          <option value="pause" data-i18n="mode_pause">Pause the video</option>
+          <option value="manual" data-i18n="mode_manual">Only when I ask</option>
+        </select>
+      </div>
+      <div>
+        <label for="detail" data-i18n="set_detail">Detail</label>
+        <select id="detail">
+          <option value="brief" data-i18n="detail_brief">Brief</option>
+          <option value="standard" data-i18n="detail_standard">Standard</option>
+          <option value="detailed" data-i18n="detail_detailed">Detailed</option>
+        </select>
+      </div>
+      <div>
+        <label for="density" data-i18n="set_density">How much to describe</label>
+        <select id="density">
+          <option value="essential" data-i18n="density_essential">Essentials only</option>
+          <option value="standard" data-i18n="density_standard">Moderate</option>
+          <option value="full" data-i18n="density_full">As much as possible</option>
+        </select>
+      </div>
+      <div>
+        <label for="output" data-i18n="set_output">Voice</label>
+        <select id="output">
+          <option value="screenreader" data-i18n="output_screenreader">My screen reader</option>
+          <option value="tts" data-i18n="output_tts">Built-in voice</option>
+        </select>
+      </div>
+      <div id="reader-speed-block">
+        <label for="reader-speed" data-i18n="set_reader_speed">How fast does your screen reader speak?</label>
+        <select id="reader-speed">
+          <option value="1" data-i18n="speed_normal">Default speed</option>
+          <option value="1.6" data-i18n="speed_fast">Fast</option>
+          <option value="2.4" data-i18n="speed_very_fast">Very fast</option>
+          <option value="3.2" data-i18n="speed_fastest">Extremely fast</option>
+        </select>
+      </div>
+      <div id="voice-rate-block" hidden>
+        <label for="voice-rate" data-i18n="set_tts_rate">Speaking rate</label>
+        <select id="voice-rate"></select>
+      </div>
+    </div>
+    <p class="hint" data-i18n="set_reader_speed_hint">SceneVoice cannot hear your screen reader, so it uses this to decide which descriptions fit in a pause.</p>
+  </section>
+
+  <section id="privacy" aria-labelledby="privacy-heading">
+    <h2 id="privacy-heading" data-i18n="web_privacy_heading">Privacy</h2>
+    <ul>
+      <li data-i18n="web_privacy_leaves">What leaves this browser: with your own key, the video’s link, the part to describe and your key go to Google’s Gemini API (generativelanguage.googleapis.com), the key in a request header, never in a web address. With SceneVoice Cloud, the link and the part to describe go to the SceneVoice relay (api.scenevoice.app) with an anonymous device token in the same header.</li>
+      <li data-i18n="web_privacy_youtube">The video plays in YouTube’s embedded player from youtube-nocookie.com. YouTube still sets its own cookies and sees that the video was watched, as on any site that embeds one. The player’s script from youtube.com is the only script this page loads from anyone but SceneVoice, and it is loaded only when you press Play.</li>
+      <li data-i18n="web_privacy_local">No analytics, no account, no cookies of its own. Your key (if remembered), the device token, your choices and the finished descriptions stay in this browser’s storage and go with the browser’s site data when you clear it. Descriptions and answers are written by an AI and can be wrong.</li>
+    </ul>
+    <p><a id="privacy-link" href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" data-i18n="web_privacy_policy" data-i18n-attr="href:web_privacy_url">Full privacy policy</a></p>
+    <p><span data-i18n="web_extension_note">For Bilibili, for timing from the real captions and for the shortcuts on youtube.com itself, install the extension:</span> <a href="../#install" data-i18n="web_extension_link">install SceneVoice</a></p>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul>
+      <li><a href="../" data-i18n="web_back_home">SceneVoice home page</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice">GitHub</a></li>
+      <li><a href="https://github.com/reddynb666/scenevoice/blob/main/LICENSE" data-i18n="web_licence">MIT licence</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="player.js" defer></script>
+</body>
+</html>
