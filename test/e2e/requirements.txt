@@ -3,4 +3,4 @@
 # Dependabot (.github/dependabot.yml) proposes updates. After installing Playwright,
 # run: python -m playwright install --with-deps chromium
 playwright==1.60.0
-pillow==11.3.0
+pillow==13.0.0
