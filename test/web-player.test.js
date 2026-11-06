@@ -151,12 +151,12 @@ function fakeSynth() {
 let app = null;
 
 /** The page from its HTML, with init() run against fakes. */
-function openPlayer({ url = '/play/', language = 'en-US', local = memoryStorage(), session = memoryStorage(), gemini = fakeGemini(), yt = fakeYouTube(), speech = null, tickMs = 0 } = {}) {
+function openPlayer({ url = '/play/', language = 'en-US', local = memoryStorage(), session = memoryStorage(), gemini = fakeGemini(), yt = fakeYouTube(), speech = null, tickMs = 0, durationHintMs } = {}) {
   app?.destroy();
   window.history.replaceState(null, '', url);
   document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
   Object.defineProperty(window.navigator, 'language', { value: language, configurable: true });
-  const api = init({ win: window, fetchImpl: gemini.fetchImpl, loadApi: async () => yt.YT, speech: speech || new WebSpeech({ synth: null, Utterance: null }), local, session, version: 'test', tickMs });
+  const api = init({ win: window, fetchImpl: gemini.fetchImpl, loadApi: async () => yt.YT, speech: speech || new WebSpeech({ synth: null, Utterance: null }), local, session, version: 'test', tickMs, ...(durationHintMs ? { durationHintMs } : {}) });
   app = { ...api, local, session, gemini, yt };
   return app;
 }
@@ -502,6 +502,40 @@ describe('web player: playback', () => {
     await vi.waitFor(() => expect(status()).toMatch(/^Paused\.|^Playing\./));
     app.actions['describe-now']();
     await vi.waitFor(() => expect(status()).toBe(`${TABLES.en.web_status_no_descriptions} ${TABLES.en.web_error_network}`));
+  });
+
+  it('asks the model for a short first section and two-minute sections after it (Safari drops answers that take over a minute to begin)', async () => {
+    openPlayer({ yt: fakeYouTube({ duration: 400 }) });
+    await play();
+    const sections = app.gemini.requests.filter((r) => /:generateContent$/.test(r.url)).map((r) => r.body.contents[0].parts[0].videoMetadata).map((m) => [parseInt(m.startOffset, 10), parseInt(m.endOffset, 10)]);
+    expect(sections).toEqual([[0, 60], [60, 180], [180, 300], [300, 400]]);
+  });
+
+  it('when the embedded player does not start by itself (an iPhone), tells the listener to press play there and begins once it runs', async () => {
+    const yt = fakeYouTube({ durationAfterPlay: true });
+    openPlayer({ yt, durationHintMs: 200 });
+    // The player ignores the page's play: the listener must tap it (iOS). The first play call does nothing.
+    const RealPlayer = yt.YT.Player;
+    yt.YT.Player = function (el, opts) {
+      RealPlayer.call(this, el, opts);
+      const realPlay = this.playVideo;
+      this.playVideo = () => {
+        if (!this.ignoredOnce) {
+          this.ignoredOnce = true;
+          return;
+        }
+        realPlay();
+      };
+    };
+    $('key').value = KEY;
+    $('link').value = `https://www.youtube.com/watch?v=${VIDEO}`;
+    $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_status_press_play), { timeout: 3000 });
+    expect(app.state.duration).toBe(0);
+    expect(app.gemini.requests.filter((r) => /:generateContent$/.test(r.url))).toEqual([]);
+    yt.players[0].playVideo(); // the listener's tap
+    await vi.waitFor(() => expect(app.state.script?.complete).toBe(true), { timeout: 3000 });
+    expect(app.state.duration).toBe(60);
   });
 
   it('a second link waits for the player to report the new video before reading its length', async () => {

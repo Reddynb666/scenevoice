@@ -71,9 +71,17 @@ function withUsage(err, usage) {
   return err;
 }
 
+/**
+ * A request that failed on the way after this long is taken as one the browser
+ * gave up on (Safari aborts a fetch whose answer has not begun within about
+ * 60 seconds): the section is split and asked for in two shorter pieces.
+ */
+export const LONG_REQUEST_MS = 40000;
+
 /** One section's descriptions, with what the request(s) cost: { cues, characters, videoType, usage }. */
 async function generateChunk(client, req, chunk, signal, depth = 0) {
   let usage = EMPTY_USAGE;
+  const startedAt = Date.now();
   try {
     const body = await client.generate(buildScriptRequest({ ...req, chunk, model: client.model }), signal);
     usage = usageOf(body);
@@ -82,10 +90,11 @@ async function generateChunk(client, req, chunk, signal, depth = 0) {
   } catch (err) {
     // What the failed reply cost goes with the halves, or with the error.
     const spent = addUsage(usage, err?.usage);
-    // Output cut off or malformed, or the section did not come back before the
-    // deadline: split it in two and try again. Retrying the same long section
-    // is what turns a slow first request into "no descriptions".
-    if (err instanceof GeminiError && ['truncated', 'bad-json', 'too-long', 'timeout'].includes(err.code) && depth < 2 && chunk.end - chunk.start > 90) {
+    // Output cut off or malformed, the section not back before the deadline, or a
+    // long request the browser itself gave up on: split it in two and try again.
+    // Retrying the same long section is what turns a slow first request into "no descriptions".
+    const gaveUp = err instanceof GeminiError && err.code === 'network' && Date.now() - startedAt >= LONG_REQUEST_MS && !signal?.aborted;
+    if (err instanceof GeminiError && (['truncated', 'bad-json', 'too-long', 'timeout'].includes(err.code) || gaveUp) && depth < 2 && chunk.end - chunk.start > 90) {
       const mid = Math.round((chunk.start + chunk.end) / 2);
       let a;
       try {
@@ -120,18 +129,24 @@ const MAX_MODEL_SWITCHES = 2;
  *   called after every section with the merged script (script.usage is the running total; info.usage
  *   and info.seconds are this section's own); the last call has script.complete = true
  * @param {(model: string, reason: string) => void} [o.onModel]  called when a different model takes over
+ * @param {number} [o.chunkSeconds]  length of a section (CHUNK_SECONDS); the web player uses shorter ones,
+ *   since Safari drops a request whose answer takes more than about a minute to begin
+ * @param {number} [o.firstChunkSeconds]  a shorter first section, so the first descriptions come sooner
  * @returns {Promise<object>} the complete script
  */
-export async function runGeneration({ client, videoId, duration, meta, lang, script, signal, onChunk, onModel }) {
+export async function runGeneration({ client, videoId, duration, meta, lang, script, signal, onChunk, onModel, chunkSeconds = CHUNK_SECONDS, firstChunkSeconds = chunkSeconds }) {
   await ensureModel(client);
   let current = script && !script.complete ? script : null;
   if (script?.complete) return script;
   if (!current) {
     current = { version: SCRIPT_VERSION, videoId, lang, duration, cues: [], characters: [], completedUntil: 0, complete: false, model: client.model, createdAt: Date.now() };
   }
-  const chunks = planChunks(duration, CHUNK_SECONDS, current.completedUntil || 0);
+  const from = current.completedUntil || 0;
+  const chunks = from <= 0 && firstChunkSeconds < chunkSeconds && duration > firstChunkSeconds + 60
+    ? [{ start: 0, end: firstChunkSeconds }, ...planChunks(duration, chunkSeconds, firstChunkSeconds)]
+    : planChunks(duration, chunkSeconds, from);
   // Sections are counted over the whole video, so a resumed run reports "3 of 4", not "1 of 2".
-  const before = Math.ceil((current.completedUntil || 0) / CHUNK_SECONDS);
+  const before = Math.ceil(from / chunkSeconds);
   const total = before + chunks.length;
   if (!chunks.length) {
     current = { ...current, complete: true, updatedAt: Date.now() };
@@ -148,7 +163,7 @@ export async function runGeneration({ client, videoId, duration, meta, lang, scr
     let part;
     try {
       // The last descriptions of the section before go along, so this one neither repeats them nor opens the video again.
-      part = await generateChunk(client, { videoId, meta, duration, lang, characters: current.characters, previous: recentCues(current, chunk.start, { seconds: CHUNK_SECONDS, max: PREVIOUS_CUES }) }, chunk, signal);
+      part = await generateChunk(client, { videoId, meta, duration, lang, characters: current.characters, previous: recentCues(current, chunk.start, { seconds: chunkSeconds, max: PREVIOUS_CUES }) }, chunk, signal);
     } catch (err) {
       // The model is gone for this key, has been overloaded through all retries, or
       // has no quota left today: carry on with the next best model rather than giving up.

@@ -216,6 +216,41 @@ describe('runGeneration', () => {
     expect(script.cues.map((c) => c.start)).toEqual([1, 100, 151, 250, 301, 400]);
   });
 
+  it('takes shorter sections when asked, with a shorter first one, and resumes on the longer grid', async () => {
+    const client = fakeClient();
+    const seen = [];
+    await runGeneration({ client, ...params, script: null, chunkSeconds: 120, firstChunkSeconds: 60, onChunk: (sc, info) => seen.push(info.total) });
+    // 570 s: 0-60, then 120 s sections, the last one stretched so no tail under a minute is left.
+    expect(client.calls.map((c) => [c.start, parseInt(c.body.contents[0].parts[0].videoMetadata.endOffset, 10)])).toEqual([[0, 60], [60, 180], [180, 300], [300, 420], [420, 570]]);
+    expect(new Set(seen)).toEqual(new Set([5]));
+    // A video not much longer than the first section is one piece.
+    const short = fakeClient();
+    await runGeneration({ client: short, ...params, duration: 100, script: null, chunkSeconds: 120, firstChunkSeconds: 60 });
+    expect(short.calls.map((c) => c.start)).toEqual([0]);
+  });
+
+  it('splits a long section whose request died on the way (a browser that gives up on slow answers), not a quick failure', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let slowOnce = true;
+      const client = fakeClient({
+        fail: (call) => {
+          if (call.start === 0 && slowOnce && call.body.contents[0].parts[0].videoMetadata.endOffset === '300s') {
+            slowOnce = false;
+            vi.advanceTimersByTime(45000); // the request took 45 s before the browser dropped it
+            return new GeminiError('network', 'The request timed out.');
+          }
+          return null;
+        },
+      });
+      const script = await runGeneration({ client, ...params, script: null });
+      expect(client.calls.map((c) => c.start)).toEqual([0, 0, 150, 300]);
+      expect(script.complete).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stops when aborted', async () => {
     const controller = new AbortController();
     const client = fakeClient({ fail: () => (controller.abort(), null) });

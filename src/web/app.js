@@ -30,8 +30,17 @@ const LANG_KEY = 'scenevoice-lang';
 const SEEK_SECONDS = 5;
 /** Voice rates offered, as the extension's slider steps around its default. */
 const VOICE_RATES = [0.8, 1, 1.2, 1.4, 1.6, 1.8, 2];
-/** How long to wait for the player to know the video's length. */
-const DURATION_WAIT_MS = 10000;
+/**
+ * Sections asked of the model: a short first one so the first descriptions
+ * come within seconds, then two-minute ones. Safari (desktop and iPhone) drops
+ * a request whose answer has not begun within about 60 seconds, which a
+ * five-minute section easily exceeds; the extension, running where that limit
+ * does not apply, keeps CHUNK_SECONDS.
+ */
+export const WEB_FIRST_CHUNK_SECONDS = 60;
+export const WEB_CHUNK_SECONDS = 120;
+/** After this long without the video's length, the listener is told to start the video in the player (iPhone needs a tap there). */
+const DURATION_HINT_MS = 10000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,7 +65,7 @@ function readerSpeedLabel(speed) {
  * @param {string} [o.version]
  * @param {number} [o.tickMs]  0 = no timer (tests call api.tick())
  */
-export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, session, version = '', tickMs = 250 } = {}) {
+export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, session, version = '', tickMs = 250, durationHintMs = DURATION_HINT_MS } = {}) {
   const doc = win.document;
   const $ = (id) => doc.getElementById(id);
   const nav = win.navigator || {};
@@ -294,11 +303,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     }
     state.player.playVideo?.();
     const duration = await waitForDuration(parsed.videoId);
-    if (state.videoId !== parsed.videoId) return;
-    if (!duration) {
-      sayError(new ApiError('bad-duration'));
-      return;
-    }
+    if (state.videoId !== parsed.videoId || !duration) return;
     state.duration = duration;
     if (cached?.complete) {
       output.status(t('web_status_cached', String(cached.cues.length)));
@@ -348,16 +353,27 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     return player;
   }
 
-  /** The video's length, once the player reports this video (after loadVideoById it keeps the previous one's for a moment). */
+  /**
+   * The video's length, once the player reports this video (after loadVideoById
+   * it keeps the previous one's for a moment; before the video has started it
+   * says 0). Waits as long as this video is the current one: on an iPhone the
+   * page's Play may not start the embedded player, so after a while the
+   * listener is told to start it there, and generation begins once it runs.
+   */
   async function waitForDuration(videoId) {
-    const until = Date.now() + DURATION_WAIT_MS;
-    for (;;) {
+    const hintAt = Date.now() + durationHintMs;
+    let hinted = false;
+    while (state.videoId === videoId) {
       const loaded = state.player?.getVideoData?.()?.video_id;
       const d = loaded && loaded !== videoId ? 0 : Number(state.player?.getDuration?.());
       if (Number.isFinite(d) && d > 0) return d;
-      if (Date.now() >= until) return 0;
+      if (!hinted && Date.now() >= hintAt) {
+        hinted = true;
+        output.status(t('web_status_press_play'));
+      }
       await sleep(250);
     }
+    return 0;
   }
 
   // ---------- descriptions ----------
@@ -429,6 +445,8 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
         lang,
         script: resumeFrom,
         signal: controller.signal,
+        chunkSeconds: WEB_CHUNK_SECONDS,
+        firstChunkSeconds: WEB_FIRST_CHUNK_SECONDS,
         onChunk: (sc, { done, total }) => {
           if (!mine()) return;
           state.models[source] = c.model || '';

@@ -261,6 +261,8 @@ async function buildWeb() {
   const outfile = join(root, 'site', 'play', 'player.js');
   const entry = {
     ...common,
+    // The page is for every browser, iPhone Safari first of all; the extension's Chrome-only target does not apply.
+    target: ['chrome100', 'safari15', 'firefox100'],
     sourcemap: false,
     entryPoints: [join(root, 'src/web/player.js')],
     outfile,

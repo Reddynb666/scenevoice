@@ -21,7 +21,8 @@ export function chunkText(text, max = CHUNK_CHARS) {
   const s = String(text || '').replace(/\s+/g, ' ').trim();
   if (!s) return [];
   if (s.length <= max) return [s];
-  const parts = s.split(/(?<=[.!?。！？；;])\s*/).filter(Boolean);
+  // Split after sentence ends without a lookbehind, which Safari before 16.4 cannot parse.
+  const parts = s.replace(/([.!?。！？；;])\s*/g, '$1\u0000').split('\u0000').filter(Boolean);
   const out = [];
   let current = '';
   for (const p of parts) {
