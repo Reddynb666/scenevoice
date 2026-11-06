@@ -194,6 +194,7 @@ export default {
   error_server: 'Geminiのサービスに問題が起きました。しばらくしてからもう一度お試しください。',
   error_request_failed: 'Geminiへのリクエストに失敗しました。もう一度お試しください。',
   error_network: 'Gemini APIに接続できませんでした。インターネット接続か、設定のAPIアドレスを確認してください。',
+  error_timeout: 'Geminiへのリクエストが時間切れになり、解説が返ってきませんでした。しばらくしてからもう一度試してください。ここまでに作成した解説は保存されています。',
   error_no_model: 'このキーで使える適切なGeminiモデルがありません。',
   error_aborted: '停止しました。',
   error_blocked: 'Geminiがこの動画の説明を断りました。',

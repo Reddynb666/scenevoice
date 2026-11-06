@@ -201,6 +201,14 @@ describe('runGeneration', () => {
     expect(modelFamily('gemini-3.8-flash')).toBe('gemini-3.8-flash');
   });
 
+  it('splits a section that timed out instead of giving up on the same long request', async () => {
+    const client = fakeClient({ fail: (call) => (call.start === 0 && client.calls.length === 1 ? new GeminiError('timeout', 'deadline', 504) : null) });
+    const script = await runGeneration({ client, ...params, script: null });
+    expect(client.calls.map((c) => c.start)).toEqual([0, 0, 150, 300]);
+    expect(script.complete).toBe(true);
+    expect(script.cues.map((c) => c.start)).toEqual([1, 100, 151, 250, 301, 400]);
+  });
+
   it('splits a section whose output was cut off', async () => {
     const client = fakeClient({ fail: (call) => (call.start === 0 && client.calls.length === 1 ? new GeminiError('truncated') : null) });
     const script = await runGeneration({ client, ...params, script: null });

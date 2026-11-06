@@ -397,6 +397,22 @@ export const RTL_LANGUAGES = Object.freeze(['ar', 'fa', 'he', 'ur']);
 
 /** Seconds of video per Gemini request. Shorter chunks keep output within limits. */
 export const CHUNK_SECONDS = 300;
+/**
+ * How long one generateContent call may run before SceneVoice calls it timed out.
+ * A five-minute section normally returns in 30–90 seconds. This is longer than
+ * that, and shorter than waiting in silence until a proxy or the server's own
+ * deadline (often many minutes) drops the connection as a generic network error.
+ * A section that hits it is described again in two shorter pieces.
+ */
+export const GEMINI_REQUEST_TIMEOUT_MS = 180000;
+/** The model list is a small GET. Past this the listener hears a timeout instead of nothing. */
+export const GEMINI_LIST_TIMEOUT_MS = 30000;
+/**
+ * Frames per second sampled from a YouTube section. Gemini's default is 1,
+ * which is what its docs warn is heavy for a clip of about five minutes.
+ * Audio description uses the same two-second interval as the picture path.
+ */
+export const VIDEO_SAMPLE_FPS = 0.5;
 /** Progress is said at these fractions of the work, and never twice within PROGRESS_GAP_MS. */
 export const PROGRESS_MILESTONES = Object.freeze([0.25, 0.5, 0.75]);
 export const PROGRESS_GAP_MS = 20000;

@@ -181,6 +181,7 @@ export default {
   error_server: 'Gemini 服務發生問題。請稍後再試。',
   error_request_failed: '向 Gemini 送出的請求失敗。請再試一次。',
   error_network: '無法連上 Gemini API。請檢查網路連線，或設定裡的 API 網址。',
+  error_timeout: '向 Gemini 的請求逾時了，還沒有得到口述。請稍後再試；已經產生的口述已保存。',
   error_no_model: '這個金鑰沒有可用的 Gemini 模型。',
   error_aborted: '已停止。',
   error_blocked: 'Gemini 拒絕描述這部影片。',

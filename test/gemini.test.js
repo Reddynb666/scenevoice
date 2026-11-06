@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { GEMINI_REQUEST_TIMEOUT_MS } from '../src/shared/constants.js';
 import {
   GeminiClient,
   GeminiError,
@@ -137,13 +138,14 @@ describe('request builders', () => {
     const req = buildScriptRequest({ videoId: 'abcdefghijk', meta: { title: 'T' }, chunk: { start: 0, end: 120 }, duration: 120, characters: [], lang: 'zh-CN' });
     const video = req.contents[0].parts[0];
     expect(video.fileData.fileUri).toBe('https://www.youtube.com/watch?v=abcdefghijk');
-    expect(video.videoMetadata).toBeUndefined();
+    // The whole video still has no clip, but it is sampled at half a frame a second, not Gemini's default of 1.
+    expect(video.videoMetadata).toEqual({ fps: 0.5 });
     expect(req.systemInstruction.parts[0].text).toContain('Simplified Chinese');
     expect(req.generationConfig.responseMimeType).toBe('application/json');
   });
   it('clips later chunks and passes known characters', () => {
     const req = buildScriptRequest({ videoId: 'abcdefghijk', meta: {}, chunk: { start: 480, end: 960 }, duration: 2000, characters: [{ label: 'Ann', description: 'red hat' }], lang: 'en' });
-    expect(req.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '480s', endOffset: '960s' });
+    expect(req.contents[0].parts[0].videoMetadata).toEqual({ startOffset: '480s', endOffset: '960s', fps: 0.5 });
     expect(req.contents[0].parts[1].text).toContain('Ann (red hat)');
   });
   it('builds a short clip around the asked moment', () => {
@@ -279,6 +281,8 @@ describe('GeminiClient', () => {
       [{ status: 400, body: { error: { message: 'User location is not supported for the API use.', status: 'FAILED_PRECONDITION' } } }, 'region'],
       [{ status: 403, body: { error: { message: 'Permission denied on resource project.' } } }, 'bad-key'],
       [{ status: 429, body: { error: { message: 'Resource has been exhausted (e.g. check quota).' } } }, 'rate-limited'],
+      [{ status: 504, body: { error: { message: 'Deadline expired before operation could complete.' } } }, 'timeout'],
+      [{ status: 408, body: { error: { message: 'Request timeout' } } }, 'timeout'],
     ];
     for (const [resp, code] of cases) {
       const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: fakeFetch([resp]) });
@@ -355,6 +359,48 @@ describe('GeminiClient', () => {
     expect(usageOf({ usageMetadata: { promptTokenCount: 91234, candidatesTokenCount: 2100, thoughtsTokenCount: 800, totalTokenCount: 94134 } })).toEqual({ input: 91234, output: 2100, thinking: 800, requests: 1 });
     expect(usageOf({ candidates: [] })).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
     expect(usageOf(null)).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
+  });
+
+  it('tries a server deadline once, then stops, and does not retry SceneVoice\'s own deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const deadline = { status: 504, body: { error: { message: 'Deadline expired before operation could complete.' } } };
+      const f = fakeFetch([deadline, deadline, { status: 200, body: { ok: 1 } }]);
+      const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: f });
+      const pending = c.generate({}).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(5000);
+      const missed = await pending;
+      expect(missed).toMatchObject({ code: 'timeout', status: 504 });
+      expect(missed.clientDeadline).toBeFalsy();
+      expect(f).toHaveBeenCalledTimes(2);
+
+      const hung = vi.fn((url, init) => new Promise((resolve, reject) => {
+        init.signal.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }));
+      const slow = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: hung });
+      const pendingTimeout = slow.generate({}).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(GEMINI_REQUEST_TIMEOUT_MS);
+      const timed = await pendingTimeout;
+      expect(timed).toMatchObject({ code: 'timeout', clientDeadline: true });
+      expect(hung).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a stop from the listener is aborted, not reported as a timeout', async () => {
+    const controller = new AbortController();
+    const f = vi.fn((url, init) => new Promise((resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }));
+    const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: f });
+    const p = c.generate({}, controller.signal);
+    controller.abort();
+    await expect(p).rejects.toMatchObject({ code: 'aborted' });
   });
 
   it('retries server errors, then succeeds', async () => {

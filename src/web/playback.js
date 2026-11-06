@@ -32,13 +32,15 @@ export class Playback {
    * @param {() => {mode: string, detail: string, density: string, output: string, readerSpeed: number, ttsRate: number}} o.getSettings
    * @param {() => string} o.aiNotice     the "AI-generated audio description follows." sentence, in the interface language
    * @param {(skipped: number) => void} [o.onSkipped]  more than a few descriptions found no pause (gaps mode), once per video
+   * @param {() => string} [o.latePrefix]  "Earlier: " when a description arrives after its moment
    */
-  constructor({ player, output, getSettings, aiNotice, onSkipped = () => {} }) {
+  constructor({ player, output, getSettings, aiNotice, onSkipped = () => {}, latePrefix = () => '' }) {
     this.player = player;
     this.output = output;
     this.getSettings = getSettings;
     this.aiNotice = aiNotice;
     this.onSkipped = onSkipped;
+    this.latePrefix = latePrefix;
     this.scheduler = new CueScheduler([]);
     this.enabled = true;
     this.setVideo();
@@ -57,12 +59,32 @@ export class Playback {
     this.speakingCue = null;
     this.speechToken = 0;
     this.pausedByUs = null;
+    this.caughtUpStart = null;
   }
 
   setScript(script) {
     this.script = script;
     this.scheduler.setCues(script?.cues || []);
     this.scheduler.reset(this.lastTime);
+    this.catchUp();
+  }
+
+  /**
+   * Descriptions for time already played never cross the scheduler, which
+   * only fires cues it sees playback pass. When a section arrives late, say
+   * the one for the moment on screen so the opening is not silent.
+   */
+  catchUp() {
+    if (!this.enabled || this.setting('mode') === 'manual') return;
+    const t = Number(this.player()?.getCurrentTime?.());
+    if (!Number.isFinite(t)) return;
+    const cue = cueAt(this.cues, t);
+    if (!cue || t - cue.start <= SEEK_JUMP) return;
+    const start = (cue.source || cue).start;
+    if (this.caughtUpStart === start) return;
+    this.caughtUpStart = start;
+    const prefix = t - start > 6 && this.latePrefix ? this.latePrefix() : '';
+    this.deliver(cue, { manual: true, prefix });
   }
 
   get cues() {
@@ -155,13 +177,13 @@ export class Playback {
    * Say a cue now. The first description of a video is led by the AI notice.
    * Returns whether it was said (false: it did not fit and the mode says skip).
    */
-  deliver(cue, { manual = false } = {}) {
+  deliver(cue, { manual = false, prefix = '' } = {}) {
     const u = this.utteranceFor(cue, manual);
     if (!u) {
       this.noteSkipped();
       return false;
     }
-    let text = u.text;
+    let text = prefix ? `${prefix}${u.text}` : u.text;
     if (!this.noticeSaid) {
       this.noticeSaid = true;
       text = `${this.aiNotice()} ${text}`;

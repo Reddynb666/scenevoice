@@ -90,9 +90,11 @@ async function generateChunk(client, req, chunk, signal, depth = 0) {
   } catch (err) {
     // What the failed reply cost goes with the halves, or with the error.
     const spent = addUsage(usage, err?.usage);
-    // Output cut off or malformed, or a long request the browser gave up on: split the section in two and try again.
+    // Output cut off or malformed, the section not back before the deadline, or a
+    // long request the browser itself gave up on: split it in two and try again.
+    // Retrying the same long section is what turns a slow first request into "no descriptions".
     const gaveUp = err instanceof GeminiError && err.code === 'network' && Date.now() - startedAt >= LONG_REQUEST_MS && !signal?.aborted;
-    if (err instanceof GeminiError && (['truncated', 'bad-json', 'too-long'].includes(err.code) || gaveUp) && depth < 2 && chunk.end - chunk.start > 90) {
+    if (err instanceof GeminiError && (['truncated', 'bad-json', 'too-long', 'timeout'].includes(err.code) || gaveUp) && depth < 2 && chunk.end - chunk.start > 90) {
       const mid = Math.round((chunk.start + chunk.end) / 2);
       let a;
       try {
