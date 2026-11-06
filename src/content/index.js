@@ -67,9 +67,9 @@ const PRESS_AGAIN_MS = 3000;
  * carry on. Not among them: the day's quota, the day's limit set here, and the
  * Cloud allowance, which come back tomorrow, not on the next press.
  */
-const RESUMABLE_ERRORS = new Set(['quota', 'rate-limited', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
+const RESUMABLE_ERRORS = new Set(['quota', 'rate-limited', 'server', 'network', 'timeout', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'too-long', 'unknown', 'offscreen-unavailable']);
 /** Errors after which taking frames carries on (the stretch is skipped); any other stops it. */
-const PASSING_FRAME_ERRORS = new Set(['quota', 'rate-limited', 'server', 'network', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable', 'busy']);
+const PASSING_FRAME_ERRORS = new Set(['quota', 'rate-limited', 'server', 'network', 'timeout', 'request-failed', 'bad-json', 'truncated', 'empty-response', 'blocked', 'too-long', 'unknown', 'frames-missing', 'offscreen-unavailable', 'busy']);
 /** After these, frames wait a minute rather than 15 seconds before the next try. */
 const SLOW_RETRY_ERRORS = new Set(['quota', 'rate-limited']);
 
@@ -123,6 +123,8 @@ function main() {
   let typeUndoHintGiven = false;
   /** {text, kind, cue}: cue is the saved description it came from, null for an answer to a question. */
   let lastSpoken = null;
+  /** Start time of the cue already said because playback had moved past it. */
+  let caughtUpStart = null;
   /** Video id while a description marked as wrong is being made again. */
   let revisingFor = null;
   /** The cue being spoken during playback ({kind, priority}; priority 0 = what the user asked for), or null. */
@@ -419,6 +421,7 @@ function main() {
     progressPressAt = 0;
     ui.hideProgress();
     lastSpoken = null;
+    caughtUpStart = null;
     pendingLate = null;
     deferred = null;
     skipped = 0;
@@ -812,6 +815,26 @@ function main() {
     return undefined;
   }
 
+  /**
+   * A section finished while the video was already playing past its cues.
+   * The scheduler only fires cues it sees playback cross, so without this the
+   * opening stays silent for as long as the first request took. Say the cue
+   * for the moment on screen now, once.
+   */
+  function catchUpLink() {
+    if (framesMode() || !settings.enabled || setting('mode') === 'manual') return;
+    const video = getVideo();
+    if (!video || video.seeking || isAdShowing()) return;
+    const now = video.currentTime;
+    const cue = cueAt(scheduler.cues, now);
+    if (!cue || now - cue.start <= SEEK_JUMP) return;
+    const start = (cue.source || cue).start;
+    if (caughtUpStart === start) return;
+    caughtUpStart = start;
+    const prefix = now - start > LATE_PREFIX_AFTER ? t('late_prefix') : '';
+    deliver(cue, { manual: true, prefix });
+  }
+
   /** A section finished (in this tab's job or another tab's). */
   async function onGenerationChunk(ev) {
     following = true;
@@ -821,6 +844,7 @@ function main() {
     if (sc?.cues?.length) {
       setScript(sc);
       status = 'generating';
+      catchUpLink();
     }
     const { done, total } = progress;
     if (done >= 1 && done < total) {
@@ -842,6 +866,7 @@ function main() {
     announcedPartial = false;
     ui.hideProgress();
     setScript(sc);
+    catchUpLink();
     status = 'ready';
     const n = sc.cues.length;
     console.info(`[SceneVoice] done: ${n} descriptions, model ${sc.model}`, sc.cues.slice(0, 5));

@@ -467,6 +467,30 @@ describe('web player: playback', () => {
     expect(app.state.script?.complete).toBe(true);
   });
 
+  it('says the description for the moment already on screen when the first section arrives late', async () => {
+    let release;
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    const gemini = fakeGemini();
+    const inner = gemini.fetchImpl;
+    gemini.fetchImpl = async (url, init) => {
+      if (String(url).includes(':generateContent')) await gate;
+      return inner(url, init);
+    };
+    openPlayer({ gemini, yt: fakeYouTube({ duration: 120 }) });
+    $('key').value = KEY;
+    $('link').value = `https://www.youtube.com/watch?v=${VIDEO}`;
+    $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(app.yt.players[0]).toBeTruthy());
+    const player = app.yt.players[0];
+    player.time = 20;
+    player.state = 1;
+    release();
+    await vi.waitFor(() => expect(description()).toMatch(/Earlier: .*red coat/));
+    expect(description()).toMatch(/AI-generated audio description follows/);
+  });
+
   it('keeps the reason descriptions failed: D says it again later, and it stays in view under the player', async () => {
     openPlayer({ gemini: fakeGemini({ fail: true }) });
     $('key').value = KEY;

@@ -193,6 +193,7 @@ export default {
   error_server: 'Dịch vụ Gemini gặp sự cố. Hãy thử lại sau giây lát.',
   error_request_failed: 'Yêu cầu gửi tới Gemini thất bại. Hãy thử lại.',
   error_network: 'Không kết nối được với API Gemini. Hãy kiểm tra kết nối mạng hoặc địa chỉ API trong cài đặt.',
+  error_timeout: 'Yêu cầu gửi tới Gemini đã hết thời gian chờ trước khi có mô tả trả về. Hãy thử lại sau một lát; các mô tả đã tạo được lưu lại.',
   error_no_model: 'Không có mô hình Gemini phù hợp cho khóa này.',
   error_aborted: 'Đã dừng.',
   error_blocked: 'Gemini từ chối mô tả video này.',

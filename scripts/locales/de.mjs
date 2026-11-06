@@ -193,6 +193,7 @@ export default {
   error_server: 'Der Gemini-Dienst hatte ein Problem. Versuchen Sie es gleich noch einmal.',
   error_request_failed: 'Die Anfrage an Gemini ist fehlgeschlagen. Versuchen Sie es noch einmal.',
   error_network: 'Die Gemini-API ist nicht erreichbar. Prüfen Sie Ihre Internetverbindung oder die API-Adresse in den Einstellungen.',
+  error_timeout: 'Die Anfrage an Gemini hat zu lange gedauert, und es kam keine Beschreibung zurück. Versuchen Sie es gleich noch einmal; bisher erstellte Beschreibungen sind gespeichert.',
   error_no_model: 'Für diesen Schlüssel ist kein passendes Gemini-Modell verfügbar.',
   error_aborted: 'Gestoppt.',
   error_blocked: 'Gemini hat es abgelehnt, dieses Video zu beschreiben.',

@@ -193,6 +193,7 @@ export default {
   error_server: 'Layanan Gemini bermasalah. Coba sebentar lagi.',
   error_request_failed: 'Permintaan ke Gemini gagal. Coba lagi.',
   error_network: 'Tidak bisa menghubungi API Gemini. Periksa koneksi internet Anda atau alamat API di pengaturan.',
+  error_timeout: 'Permintaan ke Gemini kehabisan waktu sebelum ada deskripsi yang kembali. Coba lagi sebentar lagi; deskripsi yang sudah dibuat tersimpan.',
   error_no_model: 'Tidak ada model Gemini yang cocok untuk kunci ini.',
   error_aborted: 'Berhenti.',
   error_blocked: 'Gemini menolak mendeskripsikan video ini.',
