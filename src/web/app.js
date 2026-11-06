@@ -41,6 +41,8 @@ export const WEB_FIRST_CHUNK_SECONDS = 60;
 export const WEB_CHUNK_SECONDS = 120;
 /** After this long without the video's length, the listener is told to start the video in the player (iPhone needs a tap there). */
 const DURATION_HINT_MS = 10000;
+/** While a section is being made, how often the listener hears that it still is (and the visible line counts the seconds). */
+const WAITING_SAY_MS = 30000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -65,7 +67,7 @@ function readerSpeedLabel(speed) {
  * @param {string} [o.version]
  * @param {number} [o.tickMs]  0 = no timer (tests call api.tick())
  */
-export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, session, version = '', tickMs = 250, durationHintMs = DURATION_HINT_MS } = {}) {
+export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, session, version = '', tickMs = 250, durationHintMs = DURATION_HINT_MS, waitingSayMs = WAITING_SAY_MS } = {}) {
   const doc = win.document;
   const $ = (id) => doc.getElementById(id);
   const nav = win.navigator || {};
@@ -435,6 +437,16 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     output.status(resumeFrom ? t('web_status_resuming', String(Math.max(1, Math.round((resumeFrom.completedUntil || 0) / 60)))) : t('web_status_generating'));
     const mine = () => state.generating === controller && state.videoId === videoId;
     let firstSaid = Boolean(resumeFrom);
+    // A slow section is not silence: the visible line counts the seconds, and
+    // every WAITING_SAY_MS the listener hears that the section is still being made.
+    let sectionStartedAt = Date.now();
+    let sectionLabel = resumeFrom ? '' : t('progress_working');
+    const waitTimer = setInterval(() => {
+      if (!mine()) return;
+      const seconds = Math.round((Date.now() - sectionStartedAt) / 1000);
+      el.progress.textContent = t('web_status_waiting', sectionLabel || t('progress_working'), String(seconds));
+      if (seconds > 0 && (seconds * 1000) % waitingSayMs < 1000) output.status(t('web_status_still_working', String(seconds)));
+    }, 1000);
     try {
       const meta = videoMeta();
       await runGeneration({
@@ -447,6 +459,12 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
         signal: controller.signal,
         chunkSeconds: WEB_CHUNK_SECONDS,
         firstChunkSeconds: WEB_FIRST_CHUNK_SECONDS,
+        onModel: (model, reason) => {
+          // The model was overloaded, gone, or out of quota: another one carries on. Said, so the wait is explained.
+          if (!mine()) return;
+          sectionStartedAt = Date.now();
+          output.status(t(reason === 'server' ? 'web_status_model_busy' : 'web_status_model_switched', model));
+        },
         onChunk: (sc, { done, total }) => {
           if (!mine()) return;
           state.models[source] = c.model || '';
@@ -454,7 +472,9 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
           saveScript(local, sc);
           playback.setScript(sc);
           const percent = Math.round((100 * done) / Math.max(1, total));
-          el.progress.textContent = sc.complete ? '' : `${total > 1 ? t('progress_section', String(Math.min(done + 1, total)), String(total)) : t('progress_working')} ${percent}%`;
+          sectionStartedAt = Date.now();
+          sectionLabel = total > 1 ? t('progress_section', String(Math.min(done + 1, total)), String(total)) : t('progress_working');
+          el.progress.textContent = sc.complete ? '' : `${sectionLabel} ${percent}%`;
           if (sc.complete) return;
           if (!firstSaid) {
             firstSaid = true;
@@ -469,6 +489,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
           }
         },
       });
+      clearInterval(waitTimer);
       if (!mine()) return;
       state.models[source] = c.model || '';
       state.generating = null;
@@ -476,6 +497,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
       const n = state.script?.cues?.length || 0;
       output.status(n ? t('web_status_ready', String(n)) : t('status_ready_empty'));
     } catch (err) {
+      clearInterval(waitTimer);
       if (!mine()) return;
       state.generating = null;
       el.progress.textContent = '';

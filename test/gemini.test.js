@@ -414,6 +414,25 @@ describe('GeminiClient', () => {
     vi.useRealTimers();
   });
 
+  it('tries an overloaded model (503) once more, then gives up on it so another model can take over; a 500 still gets three tries', async () => {
+    vi.useFakeTimers();
+    const busy = { status: 503, body: { error: { code: 503, status: 'UNAVAILABLE', message: 'This model is currently experiencing high demand.' } } };
+    const f = fakeFetch([busy, busy, busy, busy]);
+    const c = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'gemini-3.8-flash', fetchImpl: f });
+    const p = c.generate({});
+    p.catch(() => {});
+    await vi.advanceTimersByTimeAsync(2500);
+    await expect(p).rejects.toMatchObject({ code: 'server', status: 503 });
+    expect(f).toHaveBeenCalledTimes(2);
+    const f2 = fakeFetch([{ status: 500, body: {} }, { status: 500, body: {} }, { status: 500, body: {} }, { status: 200, body: { ok: 1 } }]);
+    const c2 = new GeminiClient({ apiKey: 'k', apiBase: 'https://x', model: 'm', fetchImpl: f2 });
+    const p2 = c2.generate({});
+    await vi.advanceTimersByTimeAsync(15000);
+    await expect(p2).resolves.toEqual({ ok: 1 });
+    expect(f2).toHaveBeenCalledTimes(4);
+    vi.useRealTimers();
+  });
+
   it('drops thinking settings a model rejects, then succeeds', async () => {
     const f = fakeFetch([
       { status: 400, body: { error: { message: 'Invalid JSON payload received. Unknown name "thinking_config" at generation_config' } } },

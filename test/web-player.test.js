@@ -151,12 +151,12 @@ function fakeSynth() {
 let app = null;
 
 /** The page from its HTML, with init() run against fakes. */
-function openPlayer({ url = '/play/', language = 'en-US', local = memoryStorage(), session = memoryStorage(), gemini = fakeGemini(), yt = fakeYouTube(), speech = null, tickMs = 0, durationHintMs } = {}) {
+function openPlayer({ url = '/play/', language = 'en-US', local = memoryStorage(), session = memoryStorage(), gemini = fakeGemini(), yt = fakeYouTube(), speech = null, tickMs = 0, durationHintMs, waitingSayMs } = {}) {
   app?.destroy();
   window.history.replaceState(null, '', url);
   document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
   Object.defineProperty(window.navigator, 'language', { value: language, configurable: true });
-  const api = init({ win: window, fetchImpl: gemini.fetchImpl, loadApi: async () => yt.YT, speech: speech || new WebSpeech({ synth: null, Utterance: null }), local, session, version: 'test', tickMs, ...(durationHintMs ? { durationHintMs } : {}) });
+  const api = init({ win: window, fetchImpl: gemini.fetchImpl, loadApi: async () => yt.YT, speech: speech || new WebSpeech({ synth: null, Utterance: null }), local, session, version: 'test', tickMs, ...(durationHintMs ? { durationHintMs } : {}), ...(waitingSayMs ? { waitingSayMs } : {}) });
   app = { ...api, local, session, gemini, yt };
   return app;
 }
@@ -537,6 +537,31 @@ describe('web player: playback', () => {
     await vi.waitFor(() => expect(app.state.script?.complete).toBe(true), { timeout: 3000 });
     expect(app.state.duration).toBe(60);
   });
+
+  it('says when an overloaded model is replaced, and while a slow section is being made that it still is', async () => {
+    let busy = 2; // the first model (the newest flash, gemini-3.5-flash) answers 503 twice: one try, one retry
+    const gemini = fakeGemini();
+    const inner = gemini.fetchImpl;
+    gemini.fetchImpl = async (url, init) => {
+      if (/gemini-3\.5-flash:generateContent$/.test(url) && busy > 0) {
+        busy -= 1;
+        return { ok: false, status: 503, json: async () => ({ error: { code: 503, status: 'UNAVAILABLE', message: 'This model is currently experiencing high demand.' } }) };
+      }
+      if (/gemini-2\.5-flash:generateContent$/.test(url)) await sleep(3600); // the model it moves to is slow
+      return inner(url, init);
+    };
+    // The model list offers a second model to move to.
+    gemini.fetchImpl = ((f) => async (url, init) => (/\/v1beta\/models(\?|$)/.test(url) ? { ok: true, status: 200, json: async () => ({ models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-3.5-flash', supportedGenerationMethods: ['generateContent'] }] }) } : f(url, init)))(gemini.fetchImpl);
+    openPlayer({ gemini, waitingSayMs: 2000 });
+    $('key').value = KEY;
+    $('link').value = `https://www.youtube.com/watch?v=${VIDEO}`;
+    $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_status_model_busy.replace('$1', 'gemini-2.5-flash')), { timeout: 6000 });
+    await vi.waitFor(() => expect(status()).toMatch(/^Still creating the descriptions: \d+ seconds/), { timeout: 6000 });
+    expect($('progress').textContent).toMatch(/seconds so far/);
+    await vi.waitFor(() => expect(app.state.script?.complete).toBe(true), { timeout: 8000 });
+    expect($('progress').textContent).toBe('');
+  }, 20000);
 
   it('a second link waits for the player to report the new video before reading its length', async () => {
     openPlayer();
