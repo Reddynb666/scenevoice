@@ -733,9 +733,9 @@ def main():
             first, second = gen[0]["body"], gen[1]["body"]
             check(gen[0]["origin"].startswith("chrome-extension://"), f"requests come from the extension's offscreen document, not the YouTube page ({gen[0]['origin'][:30]})")
             check(gen[0]["path"].startswith("/v1beta/models/gemini-3.5-flash:generateContent"), "uses the selected model")
-            check(first["contents"][0]["parts"][0]["videoMetadata"] == {"startOffset": "0s", "endOffset": "300s"}, "chunk 1 covers 0–300s")
+            check(first["contents"][0]["parts"][0]["videoMetadata"] == {"startOffset": "0s", "endOffset": "300s", "fps": 0.5}, "chunk 1 covers 0–300s at half a frame a second")
             meta2 = second["contents"][0]["parts"][0]["videoMetadata"]
-            check(meta2 == {"startOffset": "300s", "endOffset": "571s"}, f"chunk 2 covers 300s to the end ({meta2})")
+            check(meta2 == {"startOffset": "300s", "endOffset": "571s", "fps": 0.5}, f"chunk 2 covers 300s to the end ({meta2})")
             check("Chef Lin (woman in a white apron)" in second["contents"][0]["parts"][1]["text"], "chunk 2 is told about people found in chunk 1")
             check("Dumplings 101 with Chef Lin" in first["contents"][0]["parts"][1]["text"], "page title is sent as context")
             check(first["contents"][0]["parts"][0]["fileData"]["fileUri"] == WATCH, "the video is passed by YouTube URL")

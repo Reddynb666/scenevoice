@@ -82,8 +82,10 @@ async function generateChunk(client, req, chunk, signal, depth = 0) {
   } catch (err) {
     // What the failed reply cost goes with the halves, or with the error.
     const spent = addUsage(usage, err?.usage);
-    // Output cut off or malformed: split the section in two and try again.
-    if (err instanceof GeminiError && ['truncated', 'bad-json', 'too-long'].includes(err.code) && depth < 2 && chunk.end - chunk.start > 90) {
+    // Output cut off or malformed, or the section did not come back before the
+    // deadline: split it in two and try again. Retrying the same long section
+    // is what turns a slow first request into "no descriptions".
+    if (err instanceof GeminiError && ['truncated', 'bad-json', 'too-long', 'timeout'].includes(err.code) && depth < 2 && chunk.end - chunk.start > 90) {
       const mid = Math.round((chunk.start + chunk.end) / 2);
       let a;
       try {

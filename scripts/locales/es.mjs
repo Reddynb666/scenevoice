@@ -193,6 +193,7 @@ export default {
   error_server: 'El servicio de Gemini tuvo un problema. Vuelve a intentarlo en un momento.',
   error_request_failed: 'La solicitud a Gemini falló. Vuelve a intentarlo.',
   error_network: 'No se pudo conectar con la API de Gemini. Revisa tu conexión a internet o la dirección de la API en los ajustes.',
+  error_timeout: 'La solicitud a Gemini tardó demasiado y no llegó ninguna descripción. Inténtalo de nuevo en un momento; las descripciones hechas hasta ahora están guardadas.',
   error_no_model: 'No hay ningún modelo de Gemini adecuado disponible para esta clave.',
   error_aborted: 'Detenido.',
   error_blocked: 'Gemini se negó a describir este video.',

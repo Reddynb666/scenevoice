@@ -1,7 +1,7 @@
 // Gemini API client. Request builders are pure functions so they can be tested;
 // network calls take an injectable fetch.
 
-import { ANSWER_AT, HEDGE_WORDS, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD } from './constants.js';
+import { ANSWER_AT, GEMINI_LIST_TIMEOUT_MS, GEMINI_REQUEST_TIMEOUT_MS, HEDGE_WORDS, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, VIDEO_SAMPLE_FPS } from './constants.js';
 import { ApiError } from './errors.js';
 import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
 import { askHistoryText } from './ask.js';
@@ -268,12 +268,27 @@ export function outputLimit(model = '') {
   return /^gemini-(1\.|2\.0)/.test(model) ? 8192 : 32768;
 }
 
-export function buildScriptRequest({ videoId, meta, chunk, duration, characters, previous, lang, model }) {
-  const isWhole = chunk.start <= 0 && Number.isFinite(duration) && chunk.end >= duration - 1;
-  const videoPart = { fileData: { fileUri: youtubeUrl(videoId) } };
-  if (!isWhole) {
-    videoPart.videoMetadata = { startOffset: `${chunk.start}s`, endOffset: `${chunk.end}s` };
+/**
+ * The YouTube video part for one section. A section that is the whole video
+ * carries no clip offsets. Every section asks for VIDEO_SAMPLE_FPS rather than
+ * Gemini's default of one frame a second: five minutes at that default is the
+ * request the API's own video docs say can come back as a deadline error.
+ */
+export function videoPartFor(videoId, { start, end, duration, fps = VIDEO_SAMPLE_FPS } = {}) {
+  const part = { fileData: { fileUri: youtubeUrl(videoId) } };
+  const whole = start <= 0 && Number.isFinite(duration) && end >= duration - 1;
+  const meta = {};
+  if (!whole) {
+    meta.startOffset = `${start}s`;
+    meta.endOffset = `${end}s`;
   }
+  if (fps) meta.fps = fps;
+  if (Object.keys(meta).length) part.videoMetadata = meta;
+  return part;
+}
+
+export function buildScriptRequest({ videoId, meta, chunk, duration, characters, previous, lang, model }) {
+  const videoPart = videoPartFor(videoId, { start: chunk.start, end: chunk.end, duration });
   return {
     systemInstruction: { parts: [{ text: scriptInstructions(lang) }] },
     contents: [
@@ -580,6 +595,9 @@ function classifyHttp(status, body) {
     return new GeminiError('video-unsupported', msg, status);
   }
   if (status === 400 && /(token|too long|exceeds)/i.test(msg)) return new GeminiError('too-long', msg, status);
+  // 504 DEADLINE_EXCEEDED and 408 are a section that did not finish, not a
+  // broken key and not a generic outage. generation.js splits that section.
+  if (status === 504 || status === 408 || (status >= 500 && /deadline|timed out|\btimeout\b/i.test(msg))) return new GeminiError('timeout', msg, status);
   if (status >= 500) return new GeminiError('server', msg, status);
   return new GeminiError('request-failed', msg || `HTTP ${status}`, status);
 }
@@ -618,7 +636,7 @@ export class GeminiClient {
     let pageToken = '';
     for (let i = 0; i < 5; i += 1) {
       const url = `${this.apiBase}/v1beta/models?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
-      const res = await this.request(url, { method: 'GET' }, signal);
+      const res = await this.request(url, { method: 'GET' }, signal, { timeoutMs: GEMINI_LIST_TIMEOUT_MS });
       all.push(...(res.models || []));
       if (!res.nextPageToken) break;
       pageToken = res.nextPageToken;
@@ -632,16 +650,18 @@ export class GeminiClient {
    * 2, 4, 8 s for server and network errors, 6, 12, 24 s for rate limits, or
    * the wait the server itself asks for (RetryInfo) when it gives one. A used-up
    * daily quota, or a used-up Cloud allowance, is not retried: it will not
-   * come back within the minute.
+   * come back within the minute. A deadline the server already reported (504)
+   * is tried once more; a call that hits SceneVoice's own deadline is not sent
+   * again unchanged (generation.js splits that section instead).
    */
-  async generate(body, signal, { retries = 3 } = {}) {
+  async generate(body, signal, { retries = 3, timeoutMs = GEMINI_REQUEST_TIMEOUT_MS } = {}) {
     if (!this.model) throw new GeminiError('no-model');
     const url = `${this.apiBase}/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
     let attempt = 0;
     let payload = body;
     for (;;) {
       try {
-        return await this.request(url, { method: 'POST', body: JSON.stringify(payload) }, signal);
+        return await this.request(url, { method: 'POST', body: JSON.stringify(payload) }, signal, { timeoutMs });
       } catch (err) {
         if (!(err instanceof GeminiError)) throw err;
         // A model that does not accept thinking settings rejects the whole request: drop them and retry.
@@ -650,26 +670,50 @@ export class GeminiClient {
           payload = { ...payload, generationConfig: rest };
           continue;
         }
-        const retryable = ['server', 'rate-limited', 'network'].includes(err.code);
-        if (!retryable || attempt >= retries) throw err;
+        // Our own deadline means this payload is too slow to finish as it is.
+        const retryable = ['server', 'rate-limited', 'network'].includes(err.code) || (err.code === 'timeout' && !err.clientDeadline);
+        // A server deadline is tried once more at most, and never when the caller asked for no retries.
+        const limit = err.code === 'timeout' ? Math.min(1, retries) : retries;
+        if (!retryable || attempt >= limit) throw err;
         attempt += 1;
         await sleep(retryWait(err, attempt), signal);
       }
     }
   }
 
-  async request(url, init, signal) {
+  async request(url, init, signal, { timeoutMs = 0 } = {}) {
     if (!this.apiKey) throw new GeminiError('no-key');
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+    let timedOut = false;
+    const timer = timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : null;
     let res;
     try {
       res = await this.fetch(url, {
         ...init,
-        signal,
+        signal: controller.signal,
         headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
       });
     } catch (err) {
       if (signal?.aborted) throw new GeminiError('aborted');
+      if (timedOut || err?.name === 'TimeoutError') {
+        const timeout = new GeminiError('timeout', String(err?.message || err));
+        timeout.clientDeadline = true;
+        throw timeout;
+      }
       throw new GeminiError('network', String(err?.message || err));
+    } finally {
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
     }
     let body = null;
     try {

@@ -199,6 +199,7 @@ export default {
   error_server: 'حدثت مشكلة في خدمة Gemini. حاول مجددًا بعد قليل.',
   error_request_failed: 'فشل الطلب إلى Gemini. حاول مجددًا.',
   error_network: 'تعذّر الوصول إلى Gemini API. تحقق من اتصالك بالإنترنت أو من عنوان API في الإعدادات.',
+  error_timeout: 'انتهت مهلة الطلب إلى Gemini قبل أن يعود أي وصف. حاول مرة أخرى بعد قليل؛ الأوصاف المنشأة حتى الآن محفوظة.',
   error_no_model: 'لا يوجد نموذج Gemini مناسب متاح لهذا المفتاح.',
   error_aborted: 'توقف.',
   error_blocked: 'رفض Gemini وصف هذا الفيديو.',

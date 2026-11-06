@@ -237,6 +237,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     getSettings: () => settings,
     aiNotice: () => t('ai_notice'),
     onSkipped: (n) => output.status(t('web_skipped_no_pause', String(n))),
+    latePrefix: () => t('late_prefix'),
   });
   const timer = tickMs > 0 ? setInterval(() => playback.tick(), tickMs) : null;
 

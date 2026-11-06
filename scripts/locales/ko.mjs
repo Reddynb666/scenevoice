@@ -192,6 +192,7 @@ export default {
   error_server: 'Gemini 서비스에 문제가 있습니다. 잠시 뒤에 다시 시도해 주세요.',
   error_request_failed: 'Gemini에 보낸 요청이 실패했습니다. 다시 시도해 주세요.',
   error_network: 'Gemini API에 연결할 수 없습니다. 인터넷 연결이나 설정의 API 주소를 확인해 주세요.',
+  error_timeout: 'Gemini에 보낸 요청이 시간 초과되어 해설이 돌아오지 않았습니다. 잠시 후 다시 시도하세요. 지금까지 만든 해설은 저장되어 있습니다.',
   error_no_model: '이 키로 쓸 수 있는 Gemini 모델이 없습니다.',
   error_aborted: '멈췄습니다.',
   error_blocked: 'Gemini가 이 동영상의 해설을 거부했습니다.',
