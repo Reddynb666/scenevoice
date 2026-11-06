@@ -672,8 +672,10 @@ export class GeminiClient {
         }
         // Our own deadline means this payload is too slow to finish as it is.
         const retryable = ['server', 'rate-limited', 'network'].includes(err.code) || (err.code === 'timeout' && !err.clientDeadline);
-        // A server deadline is tried once more at most, and never when the caller asked for no retries.
-        const limit = err.code === 'timeout' ? Math.min(1, retries) : retries;
+        // A server deadline, or a model that says it is overloaded (503, which Google
+        // can take over a minute to answer), is tried once more at most: generation.js
+        // then moves to another model, instead of waiting through three more such answers.
+        const limit = err.code === 'timeout' || (err.code === 'server' && err.status === 503) ? Math.min(1, retries) : retries;
         if (!retryable || attempt >= limit) throw err;
         attempt += 1;
         await sleep(retryWait(err, attempt), signal);
