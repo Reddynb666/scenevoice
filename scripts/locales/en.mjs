@@ -680,6 +680,8 @@ export default {
   web_status_waiting: '$1: $2 seconds so far…',
   web_status_still_working: 'Still creating the descriptions: $1 seconds. Gemini is slow right now; the video keeps playing.',
   web_status_model_busy: 'That Gemini model is overloaded right now. Carrying on with $1.',
+  web_status_model_slow: 'That Gemini model is slower than the video right now. Carrying on with $1.',
+  web_status_first_arriving: 'You can start watching: the first descriptions have arrived, and the rest follow as they are written.',
   web_status_model_switched: 'Carrying on with the model $1.',
   web_status_first_ready: 'You can start watching: the first $1 minutes are described, the rest is on the way.',
   web_status_ready: 'Descriptions ready: $1 in total. Press D in the player at any time to describe the current moment.',

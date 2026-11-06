@@ -202,9 +202,32 @@ class Gemini(BaseHTTPRequestHandler):
         else:
             text = json.dumps(script_for(start))
         try:
-            self.reply(200, {"candidates": [{"content": {"parts": [{"text": text}], "role": "model"}, "finishReason": "STOP"}]})
+            if ":streamGenerateContent" in self.path:
+                self.stream(text)
+            else:
+                self.reply(200, {"candidates": [{"content": {"parts": [{"text": text}], "role": "model"}, "finishReason": "STOP"}]})
         except Exception:
             pass  # the tab aborted the request (stop / navigation)
+
+    def stream(self, text):
+        """streamGenerateContent?alt=sse: the answer in three server-sent events, as Gemini sends it."""
+        self.send_response(200)
+        for k, v in CORS.items():
+            self.send_header(k, v)
+        self.send_header("content-type", "text/event-stream")
+        # No length is known ahead: the stream ends when the connection closes (Gemini itself sends it chunked).
+        self.send_header("connection", "close")
+        self.close_connection = True
+        self.end_headers()
+        cut = [0, len(text) // 3, 2 * len(text) // 3, len(text)]
+        for i in range(3):
+            piece = {"candidates": [{"content": {"parts": [{"text": text[cut[i]:cut[i + 1]]}], "role": "model"}}]}
+            if i == 2:
+                piece["candidates"][0]["finishReason"] = "STOP"
+                piece["usageMetadata"] = {"promptTokenCount": 1000, "candidatesTokenCount": 200}
+            self.wfile.write(f"data: {json.dumps(piece)}\r\n\r\n".encode())
+            self.wfile.flush()
+            time.sleep(0.05)
 
     def qwen(self, body):
         """DashScope in OpenAI-compatible mode: the key as a Bearer token, a chat completion back."""
@@ -732,7 +755,7 @@ def main():
         if len(gen) == 2:
             first, second = gen[0]["body"], gen[1]["body"]
             check(gen[0]["origin"].startswith("chrome-extension://"), f"requests come from the extension's offscreen document, not the YouTube page ({gen[0]['origin'][:30]})")
-            check(gen[0]["path"].startswith("/v1beta/models/gemini-3.5-flash:generateContent"), "uses the selected model")
+            check(gen[0]["path"].startswith("/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse"), f"uses the selected model, and asks for the answer as a stream ({gen[0]['path'][:70]})")
             check(first["contents"][0]["parts"][0]["videoMetadata"] == {"startOffset": "0s", "endOffset": "300s", "fps": 0.5}, "chunk 1 covers 0–300s at half a frame a second")
             meta2 = second["contents"][0]["parts"][0]["videoMetadata"]
             check(meta2 == {"startOffset": "300s", "endOffset": "571s", "fps": 0.5}, f"chunk 2 covers 300s to the end ({meta2})")

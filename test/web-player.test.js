@@ -19,6 +19,7 @@ import { keyAction } from '../src/web/keys.js';
 import { parseVideoLink } from '../src/web/link.js';
 import { WebSpeech, chunkText } from '../src/web/speech.js';
 import { scriptKey } from '../src/web/store.js';
+import { modelHealth } from '../src/shared/modelhealth.js';
 import { loadPage } from '../site/check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,7 +106,7 @@ function fakeGemini({ cues = CUES, fail = null } = {}) {
     if (fail) throw new TypeError('Failed to fetch');
     if (/\/v1\/devices$/.test(url)) return reply(201, { token: 'svd_0123456789abcdef0123456789abcdef', plan: 'free', allowance: { secondsPerDay: 3600, usedToday: 0 } });
     if (/\/v1beta\/models(\?|$)/.test(url)) return reply(200, { models: [{ name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] }] });
-    if (/:generateContent$/.test(url)) {
+    if (/:(?:streamG|g)enerateContent(\?alt=sse)?$/.test(url)) {
       const body = JSON.parse(init.body);
       const ask = body.generationConfig?.responseSchema?.properties?.answer;
       const text = ask ? JSON.stringify({ time: 12, confidence: 'high', answer: 'A man in a blue shirt is speaking.' }) : JSON.stringify({ videoType: 'other', characters: [], cues });
@@ -188,6 +189,8 @@ function press(target, key, mods = {}) {
 afterEach(() => {
   app?.destroy();
   app = null;
+  // What one test's fake models did must not steer the next test's choice.
+  modelHealth.clear();
 });
 
 describe('web player: links', () => {
@@ -288,7 +291,7 @@ describe('web player: the key and the token', () => {
     expect(app.gemini.requests).toEqual([]);
     expect(app.state.script.complete).toBe(true);
     $('describe-again').click();
-    await vi.waitFor(() => expect(app.gemini.requests.some((r) => /generateContent/.test(r.url))).toBe(true));
+    await vi.waitFor(() => expect(app.gemini.requests.some((r) => /enerateContent/.test(r.url))).toBe(true));
     await vi.waitFor(() => expect(app.state.script?.complete).toBe(true));
     expect(before).toBeGreaterThan(0);
   });
@@ -475,7 +478,7 @@ describe('web player: playback', () => {
     const gemini = fakeGemini();
     const inner = gemini.fetchImpl;
     gemini.fetchImpl = async (url, init) => {
-      if (String(url).includes(':generateContent')) await gate;
+      if (/enerateContent/.test(String(url))) await gate;
       return inner(url, init);
     };
     openPlayer({ gemini, yt: fakeYouTube({ duration: 120 }) });
@@ -507,7 +510,7 @@ describe('web player: playback', () => {
   it('asks the model for a short first section and two-minute sections after it (Safari drops answers that take over a minute to begin)', async () => {
     openPlayer({ yt: fakeYouTube({ duration: 400 }) });
     await play();
-    const sections = app.gemini.requests.filter((r) => /:generateContent$/.test(r.url)).map((r) => r.body.contents[0].parts[0].videoMetadata).map((m) => [parseInt(m.startOffset, 10), parseInt(m.endOffset, 10)]);
+    const sections = app.gemini.requests.filter((r) => /:(?:streamG|g)enerateContent(\?alt=sse)?$/.test(r.url)).map((r) => r.body.contents[0].parts[0].videoMetadata).map((m) => [parseInt(m.startOffset, 10), parseInt(m.endOffset, 10)]);
     expect(sections).toEqual([[0, 60], [60, 180], [180, 300], [300, 400]]);
   });
 
@@ -532,7 +535,7 @@ describe('web player: playback', () => {
     $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_status_press_play), { timeout: 3000 });
     expect(app.state.duration).toBe(0);
-    expect(app.gemini.requests.filter((r) => /:generateContent$/.test(r.url))).toEqual([]);
+    expect(app.gemini.requests.filter((r) => /:(?:streamG|g)enerateContent(\?alt=sse)?$/.test(r.url))).toEqual([]);
     yt.players[0].playVideo(); // the listener's tap
     await vi.waitFor(() => expect(app.state.script?.complete).toBe(true), { timeout: 3000 });
     expect(app.state.duration).toBe(60);
@@ -543,11 +546,11 @@ describe('web player: playback', () => {
     const gemini = fakeGemini();
     const inner = gemini.fetchImpl;
     gemini.fetchImpl = async (url, init) => {
-      if (/gemini-3\.5-flash:generateContent$/.test(url) && busy > 0) {
+      if (/gemini-3\.5-flash:(?:streamG|g)enerateContent(\?alt=sse)?$/.test(url) && busy > 0) {
         busy -= 1;
         return { ok: false, status: 503, json: async () => ({ error: { code: 503, status: 'UNAVAILABLE', message: 'This model is currently experiencing high demand.' } }) };
       }
-      if (/gemini-2\.5-flash:generateContent$/.test(url)) await sleep(3600); // the model it moves to is slow
+      if (/gemini-2\.5-flash:(?:streamG|g)enerateContent(\?alt=sse)?$/.test(url)) await sleep(3600); // the model it moves to is slow
       return inner(url, init);
     };
     // The model list offers a second model to move to.
@@ -562,6 +565,46 @@ describe('web player: playback', () => {
     await vi.waitFor(() => expect(app.state.script?.complete).toBe(true), { timeout: 8000 });
     expect($('progress').textContent).toBe('');
   }, 20000);
+
+  it('plays the first descriptions while the answer is still streaming in, and says so', async () => {
+    const enc = new TextEncoder();
+    const gemini = fakeGemini();
+    const inner = gemini.fetchImpl;
+    let release;
+    const held = new Promise((r) => {
+      release = r;
+    });
+    gemini.fetchImpl = async (url, init) => {
+      if (!/:streamGenerateContent\?alt=sse$/.test(url)) return inner(url, init);
+      gemini.requests.push({ url: String(url), init, headers: init.headers || {}, body: JSON.parse(init.body) });
+      const text = JSON.stringify({ videoType: 'other', characters: [], cues: CUES });
+      const firstCueEnd = text.indexOf('}', text.indexOf('"cues"')) + 1;
+      const body = new ReadableStream({
+        async start(controller) {
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: text.slice(0, firstCueEnd) }] } }] })}\n\n`));
+          await held; // the rest of the answer is still being written
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: text.slice(firstCueEnd) }] }, finishReason: 'STOP' }] })}\n\n`));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    };
+    openPlayer({ gemini });
+    $('key').value = KEY;
+    $('link').value = `https://www.youtube.com/watch?v=${VIDEO}`;
+    $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_status_first_arriving), { timeout: 3000 });
+    expect(app.state.generating).not.toBeNull();
+    expect(app.state.script.cues.map((c) => c.start)).toEqual([0.5]);
+    expect(app.state.script.complete).toBe(false);
+    // The first description is spoken before the section is done.
+    app.yt.players[0].time = 0.6;
+    app.tick();
+    await vi.waitFor(() => expect(description()).toMatch(/A dog runs on a beach\./));
+    release();
+    await vi.waitFor(() => expect(app.state.script?.complete).toBe(true));
+    expect(app.state.script.cues).toHaveLength(3);
+  });
 
   it('a second link waits for the player to report the new video before reading its length', async () => {
     openPlayer();

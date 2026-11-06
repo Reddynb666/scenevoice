@@ -861,6 +861,21 @@ function main() {
     announceType();
   }
 
+  /**
+   * The section being written, while its answer streams in: its cues so far
+   * join the saved ones in memory, so the first descriptions play before the
+   * section is finished. The next 'chunk' event loads the saved script instead.
+   */
+  function onGenerationPartial(ev) {
+    if (dead || !(following || status === 'generating') || !Array.isArray(ev.cues)) return;
+    const from = Number(ev.from) || 0;
+    const fresh = ev.cues.filter((c) => c && Number.isFinite(c.start) && typeof c.standard === 'string' && c.start >= from);
+    if (!fresh.length) return;
+    const kept = (script?.cues || []).filter((c) => c.start < from);
+    setScript({ ...(script || { videoId, lang, characters: [], completedUntil: 0 }), cues: [...kept, ...fresh].sort((a, b) => a.start - b.start), complete: false });
+    status = 'generating';
+  }
+
   function onGenerationDone(sc, { fromCloud = false } = {}) {
     following = false;
     announcedPartial = false;
@@ -927,6 +942,9 @@ function main() {
         break;
       case 'chunk':
         await onGenerationChunk(ev);
+        break;
+      case 'partial':
+        onGenerationPartial(ev);
         break;
       case 'done': {
         const sc = await fetchScript(ev.videoId, ev.lang);

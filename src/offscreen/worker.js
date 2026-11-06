@@ -24,6 +24,7 @@ import { askFrames, createClient, describeFrames, reviseFrames } from '../shared
 import { ApiError } from '../shared/errors.js';
 import { GeminiClient } from '../shared/gemini.js';
 import { runAsk, runGeneration, runRevision } from '../shared/generation.js';
+import { modelHealth } from '../shared/modelhealth.js';
 
 /** @type {Map<string, {done:number,total:number,chunkStartedAt:number,chunkMs:number[],controller:AbortController,videoId:string,lang:string,provider:string}>} */
 const jobs = new Map();
@@ -47,7 +48,8 @@ const chosenKey = (config) => `${config?.apiBase || ''}|${config?.apiKey || ''}`
 function seeded(config) {
   if (config?.model) return config;
   const model = chosenModels.get(chosenKey(config));
-  return model ? { ...config, model } : config;
+  // A remembered model that was overloaded or slow just now is not reused: the next request chooses again.
+  return model && !modelHealth.penalty(model) ? { ...config, model } : config;
 }
 
 /** Keep the model the client has now (after ensureModel or a switch) for the next request with this key. */
@@ -128,6 +130,10 @@ function start({ key, provider, config, params, script, force, newJobsAllowed })
     onModel: (model, reason) => {
       // The service worker keeps a model this key cannot use any more, for the key's own provider only.
       if (mine()) self.postMessage({ event: 'model', key, videoId: job.videoId, lang: job.lang, model, reason, provider: job.provider });
+    },
+    // The section being written: its cues so far, for the tab to play before the section is saved.
+    onPartial: (_sc, { from, cues }) => {
+      if (mine()) self.postMessage({ event: 'partial', key, videoId: job.videoId, lang: job.lang, from, cues, provider: job.provider });
     },
     onChunk: (sc, { done, total, usage, seconds }) => {
       if (!mine()) return;

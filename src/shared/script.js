@@ -268,6 +268,50 @@ export function mergeScript(script, chunk, untilSeconds) {
   };
 }
 
+/**
+ * The cue objects already complete in a script answer that is still being
+ * written ({"videoType": …, "characters": […], "cues": [{…}, {…}, {… ): every
+ * object of the "cues" array whose closing brace has arrived, parsed. The
+ * unfinished one at the end, and anything that does not parse, is left out.
+ */
+export function streamedCues(text) {
+  const s = String(text || '');
+  const key = s.search(/"cues"\s*:\s*\[/);
+  if (key < 0) return [];
+  const out = [];
+  let i = s.indexOf('[', key) + 1;
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (; i < s.length; i += 1) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        try {
+          const cue = JSON.parse(s.slice(start, i + 1));
+          if (cue && typeof cue === 'object') out.push(cue);
+        } catch {
+          /* not a whole object after all */
+        }
+        start = -1;
+      }
+    } else if (ch === ']' && depth === 0) break;
+  }
+  return out;
+}
+
 /** Split a video into request chunks. The last short remainder joins the previous chunk. */
 export function planChunks(duration, chunkSeconds, from = 0) {
   if (!Number.isFinite(duration) || duration <= 0) throw new Error('bad-duration');
