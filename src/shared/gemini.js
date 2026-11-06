@@ -1,7 +1,7 @@
 // Gemini API client. Request builders are pure functions so they can be tested;
 // network calls take an injectable fetch.
 
-import { ANSWER_AT, GEMINI_LIST_TIMEOUT_MS, GEMINI_REQUEST_TIMEOUT_MS, HEDGE_WORDS, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, VIDEO_SAMPLE_FPS } from './constants.js';
+import { ANSWER_AT, DEFAULT_API_BASE, GEMINI_LIST_TIMEOUT_MS, GEMINI_REQUEST_TIMEOUT_MS, HEDGE_WORDS, LANGUAGE_NAMES_EN, UNCERTAIN_LEAD, VIDEO_SAMPLE_FPS } from './constants.js';
 import { ApiError } from './errors.js';
 import { CONFIDENCES, cleanText, extractJson, formatTime, hedged, parseTime } from './script.js';
 import { askHistoryText } from './ask.js';
@@ -513,8 +513,13 @@ function textModelIds(models) {
     .filter((n) => /^gemini-\d/.test(n) && !UNSUITABLE.test(n));
 }
 
-/** Pick a good default model from the list the key can use. */
-export function chooseModel(models) {
+/**
+ * Pick a good default model from the list the key can use. With `health`
+ * (modelhealth.js), a model that was overloaded or slow just now goes to the
+ * back: the newest model is often the busiest, and a listener waiting a minute
+ * and a half for a 503 hears nothing at all.
+ */
+export function chooseModel(models, health = null) {
   const usable = textModelIds(models);
   const score = (n) => {
     const v = parseFloat((n.match(/^gemini-(\d+(?:\.\d+)?)/) || [])[1] || '0');
@@ -526,7 +531,8 @@ export function chooseModel(models) {
     // then newer versions, then the plain alias over dated snapshots.
     return flash * 1000 - lite * 500 - preview * 100 + v * 10 - dated;
   };
-  usable.sort((a, b) => score(b) - score(a));
+  const penalty = (n) => health?.penalty(n) || 0;
+  usable.sort((a, b) => penalty(a) - penalty(b) || score(b) - score(a));
   return usable[0] || '';
 }
 
@@ -624,11 +630,18 @@ export function retryWait(err, attempt) {
 }
 
 export class GeminiClient {
-  constructor({ apiKey, apiBase, model, fetchImpl }) {
+  /**
+   * @param {object} o
+   * @param {boolean} [o.stream]  ask for the answer as it is written (streamGenerateContent, server-sent
+   *   events). On by default for Google's own address; off for a relay or a custom address, which may not
+   *   pass a stream through (the SceneVoice Cloud relay meters whole answers).
+   */
+  constructor({ apiKey, apiBase, model, fetchImpl, stream }) {
     this.apiKey = apiKey;
     this.apiBase = (apiBase || '').replace(/\/+$/, '');
     this.model = model;
     this.fetch = fetchImpl || ((...a) => fetch(...a));
+    this.stream = typeof stream === 'boolean' ? stream : this.apiBase === DEFAULT_API_BASE;
   }
 
   async listModels(signal) {
@@ -654,14 +667,19 @@ export class GeminiClient {
    * is tried once more; a call that hits SceneVoice's own deadline is not sent
    * again unchanged (generation.js splits that section instead).
    */
-  async generate(body, signal, { retries = 3, timeoutMs = GEMINI_REQUEST_TIMEOUT_MS } = {}) {
+  async generate(body, signal, { retries = 3, timeoutMs = GEMINI_REQUEST_TIMEOUT_MS, firstAnswerMs = 0, onText } = {}) {
     if (!this.model) throw new GeminiError('no-model');
-    const url = `${this.apiBase}/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
+    const model = encodeURIComponent(this.model);
+    const url = this.stream
+      ? `${this.apiBase}/v1beta/models/${model}:streamGenerateContent?alt=sse`
+      : `${this.apiBase}/v1beta/models/${model}:generateContent`;
     let attempt = 0;
     let payload = body;
     for (;;) {
       try {
-        return await this.request(url, { method: 'POST', body: JSON.stringify(payload) }, signal, { timeoutMs });
+        const init = { method: 'POST', body: JSON.stringify(payload) };
+        if (this.stream) return await this.requestStream(url, init, signal, { timeoutMs, firstAnswerMs, onText });
+        return await this.request(url, init, signal, { timeoutMs });
       } catch (err) {
         if (!(err instanceof GeminiError)) throw err;
         // A model that does not accept thinking settings rejects the whole request: drop them and retry.
@@ -680,6 +698,116 @@ export class GeminiClient {
         attempt += 1;
         await sleep(retryWait(err, attempt), signal);
       }
+    }
+  }
+
+  /**
+   * A streamed generateContent: server-sent events, each a piece of the
+   * answer. Resolves to one response shaped like generateContent's (the text
+   * of every piece joined, the last finishReason and usageMetadata), so the
+   * parsers do not care how it came. `onText(textSoFar)` is called as pieces
+   * arrive. `timeoutMs` is the longest silence allowed once the answer has
+   * begun; `firstAnswerMs` (when set) the longest wait for its first piece, after
+   * which the error says no answer began (`noAnswer`: an overloaded model, not
+   * a section too long). A reply that is not a stream (a test, a proxy) is read
+   * as plain JSON.
+   */
+  async requestStream(url, init, signal, { timeoutMs = 0, firstAnswerMs = 0, onText } = {}) {
+    if (!this.apiKey) throw new GeminiError('no-key');
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+    let timedOut = false;
+    let began = false;
+    let timer = null;
+    const arm = (ms) => {
+      clearTimeout(timer);
+      timer = ms > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+          }, ms)
+        : null;
+    };
+    arm(firstAnswerMs > 0 ? firstAnswerMs : timeoutMs);
+    const deadline = (err) => {
+      const timeout = new GeminiError('timeout', String(err?.message || err || 'timeout'));
+      timeout.clientDeadline = true;
+      if (!began) timeout.noAnswer = true;
+      return timeout;
+    };
+    try {
+      let res;
+      try {
+        res = await this.fetch(url, { ...init, signal: controller.signal, headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey } });
+      } catch (err) {
+        if (signal?.aborted) throw new GeminiError('aborted');
+        if (timedOut || err?.name === 'TimeoutError') throw deadline(err);
+        throw new GeminiError('network', String(err?.message || err));
+      }
+      const type = String(res.headers?.get?.('content-type') || '');
+      const reader = /event-stream/i.test(type) && res.ok ? res.body?.getReader?.() : null;
+      if (!reader) {
+        // Not a stream: an error body, or a whole answer (or an array of pieces) at once.
+        let body = null;
+        try {
+          body = await res.json();
+        } catch {
+          body = null;
+        }
+        if (!res.ok) throw classifyHttp(res.status, Array.isArray(body) ? body[0] : body);
+        const merged = mergeStreamed(Array.isArray(body) ? body : [body || {}]);
+        onText?.(streamedText(merged));
+        return merged;
+      }
+      const decoder = new TextDecoder();
+      const pieces = [];
+      let buffer = '';
+      let text = '';
+      // The piece with a finish reason is the last: stop there even if the connection stays open.
+      let finished = false;
+      while (!finished) {
+        let chunk;
+        try {
+          chunk = await reader.read();
+        } catch (err) {
+          if (signal?.aborted) throw new GeminiError('aborted');
+          if (timedOut) throw deadline(err);
+          throw new GeminiError('network', String(err?.message || err));
+        }
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop();
+        for (const event of events) {
+          const data = event.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trimStart()).join('\n');
+          if (!data) continue;
+          let piece;
+          try {
+            piece = JSON.parse(data);
+          } catch {
+            continue;
+          }
+          if (piece?.error) throw classifyHttp(Number(piece.error.code) || 500, piece);
+          began = true;
+          arm(timeoutMs);
+          pieces.push(piece);
+          const more = streamedText(mergeStreamed([piece]));
+          if (more) {
+            text += more;
+            onText?.(text);
+          }
+          if (piece?.candidates?.[0]?.finishReason) finished = true;
+        }
+      }
+      if (finished) reader.cancel().catch(() => {});
+      return mergeStreamed(pieces);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
     }
   }
 
@@ -727,6 +855,35 @@ export class GeminiClient {
     return body || {};
   }
 }
+
+/**
+ * Pieces of a streamed answer as one generateContent response: the text of
+ * every piece joined (thoughts left out), the last finish reason, the last
+ * usage (Gemini sends running totals) and any prompt feedback.
+ */
+export function mergeStreamed(pieces) {
+  let text = '';
+  let finishReason = '';
+  let usageMetadata;
+  let promptFeedback;
+  let any = false;
+  for (const p of pieces || []) {
+    if (p?.promptFeedback) promptFeedback = p.promptFeedback;
+    if (p?.usageMetadata) usageMetadata = p.usageMetadata;
+    const cand = p?.candidates?.[0];
+    if (!cand) continue;
+    any = true;
+    for (const part of cand.content?.parts || []) if (typeof part.text === 'string' && !part.thought) text += part.text;
+    if (cand.finishReason) finishReason = cand.finishReason;
+  }
+  const out = {};
+  if (any) out.candidates = [{ content: { role: 'model', parts: text ? [{ text }] : [] }, ...(finishReason ? { finishReason } : {}) }];
+  if (usageMetadata) out.usageMetadata = usageMetadata;
+  if (promptFeedback) out.promptFeedback = promptFeedback;
+  return out;
+}
+
+const streamedText = (body) => (body?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
 
 /** What one reply cost, from its usageMetadata (zeros when the server sent none): see usage.js. */
 export function usageOf(body) {

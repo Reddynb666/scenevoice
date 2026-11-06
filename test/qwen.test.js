@@ -204,7 +204,8 @@ describe('descriptions from frames', () => {
     expect(chunk.cues.map((c) => c.standard)).toEqual(['A man dices chicken.']);
     expect(chunk.usage).toEqual({ input: 0, output: 0, thinking: 0, requests: 1 });
     const { url, body } = fetchImpl.calls[0];
-    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+    // Google's own address streams the answer (server-sent events), so descriptions can play as they are written.
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse');
     const parts = body.contents[0].parts;
     expect(parts[0]).toEqual({ text: 'Frame at 0:12 (12.2 s):' });
     expect(parts[1]).toEqual({ inlineData: { mimeType: 'image/jpeg', data: '/9j/AAA1' } });

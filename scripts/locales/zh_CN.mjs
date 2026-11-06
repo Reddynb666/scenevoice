@@ -636,6 +636,8 @@ export default {
   web_status_waiting: '$1：已等待 $2 秒……',
   web_status_still_working: '口述还在生成：已等待 $1 秒。Gemini 现在比较慢，视频会继续播放。',
   web_status_model_busy: '这个 Gemini 模型现在过载，改用 $1 继续。',
+  web_status_model_slow: '这个 Gemini 模型现在比视频播放还慢，改用 $1 继续。',
+  web_status_first_arriving: '可以开始看了：第一批口述已经到了，其余的边生成边送达。',
   web_status_model_switched: '改用模型 $1 继续。',
   web_status_first_ready: '可以开始看了：前 $1 分钟已有口述，其余的正在生成。',
   web_status_ready: '口述已就绪：共 $1 条。在播放器里随时按 D 可以描述当前画面。',

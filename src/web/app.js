@@ -11,6 +11,7 @@
 import { MODES } from '../shared/constants.js';
 import { ApiError } from '../shared/errors.js';
 import { runAsk, runGeneration } from '../shared/generation.js';
+import { modelHealth } from '../shared/modelhealth.js';
 import { progressMilestone } from '../shared/progress.js';
 import { formatTime } from '../shared/script.js';
 import { nextValue, stepSpeed } from '../shared/settings.js';
@@ -379,6 +380,9 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
   }
 
   // ---------- descriptions ----------
+  /** A remembered model, unless it was overloaded or slow just now: then '' and the next request chooses again. */
+  const healthy = (model) => (model && !modelHealth.penalty(model) ? model : '');
+
   async function client() {
     const source = settings.source;
     if (source === 'cloud') {
@@ -387,9 +391,9 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
         token = (await registerWebDevice(fetchImpl, { version, locale: interfaceLocale() })).token;
         saveToken(local, token);
       }
-      return makeClient({ source, token, model: state.models.cloud, fetchImpl });
+      return makeClient({ source, token, model: healthy(state.models.cloud), fetchImpl });
     }
-    return makeClient({ source, key: el.key.value.trim(), model: state.models.own, fetchImpl });
+    return makeClient({ source, key: el.key.value.trim(), model: healthy(state.models.own), fetchImpl });
   }
 
   /** An error from the model or the relay, said in plain words with the next step. */
@@ -463,7 +467,18 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
           // The model was overloaded, gone, or out of quota: another one carries on. Said, so the wait is explained.
           if (!mine()) return;
           sectionStartedAt = Date.now();
-          output.status(t(reason === 'server' ? 'web_status_model_busy' : 'web_status_model_switched', model));
+          output.status(t(reason === 'server' ? 'web_status_model_busy' : reason === 'slow' ? 'web_status_model_slow' : 'web_status_model_switched', model));
+        },
+        // The answer streams in: its finished cues play at once, before the section is saved.
+        onPartial: (preview) => {
+          if (!mine()) return;
+          state.script = preview;
+          playback.setScript(preview);
+          if (!firstSaid && preview.cues.length) {
+            firstSaid = true;
+            state.progressSaid = { milestone: 0, at: Date.now() };
+            output.status(t('web_status_first_arriving'));
+          }
         },
         onChunk: (sc, { done, total }) => {
           if (!mine()) return;

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { modelHealth } from '../src/shared/modelhealth.js';
 import { GeminiError } from '../src/shared/gemini.js';
 import { modelFamily, runAsk, runGeneration, runRevision } from '../src/shared/generation.js';
 
@@ -41,6 +42,9 @@ function fakeClient({ model = 'gemini-2.5-flash', models = ['gemini-2.5-flash', 
 }
 
 const params = { videoId: 'abcdefghijk', duration: 570, meta: { title: 'T' }, lang: 'en' };
+
+// What one test's fake models did must not steer the next test's choice.
+beforeEach(() => modelHealth.clear());
 
 describe('runGeneration', () => {
   it('describes a video in sections and reports progress over the whole video', async () => {
