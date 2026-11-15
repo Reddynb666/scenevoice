@@ -73,8 +73,9 @@ describe('the extension is unchanged by the film product', () => {
     expect(SCRIPT_VERSION).toBe(2);
   });
 
-  it('runs the root tests without the desktop app: desktop/ is excluded from collection', () => {
+  it('runs the root tests without the desktop app or the film tools: desktop/ and tools/ are excluded from collection', () => {
     expect(config.test.exclude).toContain('desktop/**');
+    expect(config.test.exclude).toContain('tools/**');
     expect(config.test.exclude).toContain('**/node_modules/**');
   });
 });

@@ -47,7 +47,10 @@ validateCast(raw) -> Cast                          drops unknown fields; throws 
 getCharacter(cast, id) -> Character | undefined
 addCharacter(cast, fields?) -> { cast, id }        id is 'P' + (highest number in use + 1); defaults: name null, level 0,
                                                    aliases [], descriptor {}, revealAt null, spoilerLock false,
-                                                   neverName false, main false, screenSec 0, evidence [], clusters []
+                                                   neverName false, main false, screenSec 0, evidence [], clusters [].
+                                                   An id has six digits at most (what a token is read with): longer ones
+                                                   are no ids anywhere in the engine, and addCharacter throws
+                                                   Error('cast-full') once P999999 was given out
 updateCharacter(cast, id, patch) -> Cast           only descriptor, say, main, screenSec, revealAt, spoilerLock, neverName, aliases, clusters
 levelFromEvidence(evidence, { independentGapSec }) -> { name, level }
     a 'human' entry (not rejected) wins: its name, level 3 (the latest one when there are several);
@@ -56,14 +59,20 @@ levelFromEvidence(evidence, { independentGapSec }) -> { name, level }
     the name with most independent clues -> level 1 (one) or 2 (two or more); a tie between two names -> level 1
     with the earlier-evidenced name.
 addEvidence(cast, id, evidence) -> Cast            appends, then sets name and level from levelFromEvidence;
-                                                   sets revealAt to the earliest clue time when it is null
+                                                   sets revealAt, when it is null or came from a clue for a name that no longer
+                                                   stands, to the earliest clue for the name that stands (null when there is
+                                                   none). A time no clue has was set by a person and is never moved.
 confirmName(cast, id, { name, by, t }) -> Cast     adds { kind: 'human', by: 'ear'|'sight', name, t }; level 3. Also how a person renames.
+                                                   The reveal point is worked out again as in addEvidence.
 rejectName(cast, id, name) -> Cast                 marks every entry for that name rejected (a human entry too), then recomputes
+                                                   name, level and, as in addEvidence, the reveal point
 neverName(cast, id, on = true) -> Cast
 mergeCharacters(cast, keepId, dropId) -> { cast, remap }   remap is { [dropId]: keepId }; evidence, aliases, clusters and
                                                    appearances move to keepId; the kept character's name and level are recomputed
                                                    (a confirmed name on either side survives; the kept side wins a conflict);
-                                                   screenSec adds up; main is true if either was
+                                                   screenSec adds up; main is true if either was; the reveal point is the locked
+                                                   side's (the later when both are locked), else the kept side's, and when a clue
+                                                   for a name that lost the merge set it, the earliest clue for the name that stands
 setAppearance(cast, { char, from, outfit, scene?, src }) -> Cast
     the outfit a character wears from `from` on; closes that character's open appearance at `from`;
     no change when the outfit equals the one current at `from`
@@ -82,7 +91,7 @@ unlocked(character, t, policy, { demoted }?) -> boolean
     policy.naming is 'on-reveal' and revealAt is not null and t < revealAt.
 renderScript(script, cast, policy?, { lang?, rate?, include?, fits? }?) -> { cues: RenderedCue[], report }
     Walks the cues in time order (those `include(cue)` accepts; default all) and fills every token.
-    State kept per character: introduced, the outfit last said, the time last mentioned.
+    State kept per character: introduced, the outfit last said, the time last mentioned, whether the label was said.
     The form of the first token of a character in a cue:
       'label'         not unlocked: the descriptor ("长发女人" / "the woman with long hair")
       'label-outfit'  not unlocked, and the outfit current at the cue has not been said yet (first mention, or it changed):
@@ -90,28 +99,44 @@ renderScript(script, cast, policy?, { lang?, rate?, include?, fits? }?) -> { cue
       'intro'         unlocked and not yet introduced:
                         first-appearance: "马修，长发女人，穿着红裙子，" / "Matthew, a woman with long hair in a red dress,"
                         on-reveal:        "长发女人，马修，" / "the woman with long hair, Matthew,"
-                      (the outfit part only when one is known)
+                      (the outfit part only when one is known; with an outfit and no label the name comes first under
+                      either policy: "马修，穿着红裙子，" / "Matthew, in a red dress,")
       'reanchor'      unlocked, introduced, and the outfit changed since it was last said: "马修，换了灰大衣，" / "Matthew, now in a grey coat,";
                       or not mentioned for policy.reanchorAfterSec: "马修，长发女人，" / "Matthew, the woman with long hair,"
       'name'          otherwise: the name
     Later tokens of the same character in the same cue take the short form (the name when unlocked, else the descriptor).
     The three versions of a cue (brief, standard, detailed) are rendered from the same state; the state moves on once per cue.
-    When the long form makes even the brief version too long for the slot (`fits(text, room)`, default
-    estimateSeconds(text, rate) <= room from shared/script.js), the cue is rendered with short forms and the long form waits
-    for the next cue that mentions the character (report.deferred).
-    A descriptor that is missing in the language falls back to the other language, then to "某人" / "someone".
+    A long form is said in all three versions of a cue or in none (the player speaks whichever version fits). It is taken,
+    and the state moved, only in a cue where all three versions hold the character's token (an introduction that is the
+    name alone needs none to carry it) and the brief version worded with it fits the slot (`fits(text, room)`, default
+    estimateSeconds(text, rate) <= room from shared/script.js; a cue with no room to measure is not measured). It also
+    waits when its token carries a possessive in mid-sentence ("握住{P2}的手", "down {P2}'s cheek") and the form ends in
+    a comma: the outfit or the label would be said of the hand.
+    Otherwise the cue is rendered with short forms and the long form waits for the next cue that mentions the character
+    (report.deferred).
+    A descriptor that is missing in the language falls back to the other language, then to "某人" / "someone"
+    (with an outfit and no label, English says "someone in a red dress" with no comma after it).
     English: the token at the start of a sentence is capitalised; descriptors are stored without an article
-    ("woman with long hair"): label form adds "the", the introduction adds "a"/"an".
-    Punctuation is not doubled: a form that ends in a comma swallows a comma that follows the token.
+    ("woman with long hair"): label form adds "the", the introduction adds "a"/"an" by the sound the label begins with
+    ("an honest-looking clerk", "a uniformed officer"), or "the" when the label was already said (a deferred introduction,
+    a first mention the picture did not confirm, a secret kept to its reveal): "Matthew, the woman with long hair, in a red dress,".
+    Stored labels and outfits are tidied as they are said: punctuation at the end goes; a verb a model wrote before an
+    outfit goes ("穿", "穿了", "wearing"); an English article that opens an outfit is written small.
+    An outfit that holds a brace, an id, a mark or a name of the cast is not said: the form is the one without an outfit.
+    Punctuation is not doubled: a form that ends in a comma swallows a comma that follows the token, and in Chinese a
+    list mark ("{P1}、{P2}"): the apposition closes with its own comma, so the outfit is not tied to the next person.
     A rendered text that still holds a brace or a bare id (P3) makes the cue `silent: true` (report.silenced).
     report: { introducedAt: { P3: cueId }, deferred: [cueId], silenced: [cueId] }
 castIntro(cast, policy, { lang, maxChars = 200 }) -> string
     The spoken introduction before the film: main characters whose name is unlocked at time 0 and who have no spoilerLock,
     by screen time, as "主要人物：马修，长发女人；老陈，戴眼镜的男人。" / "Main characters: Matthew, a woman with long hair; …"
     '' when policy.introBeforeFilm is false or nobody qualifies. Never longer than maxChars: whole entries are dropped from the end.
-whoIsOnScreen(visibleIds, cast, policy, t, { lang }) -> string
+whoIsOnScreen(visibleIds, cast, policy, t, { lang, recentIds, allowNamesWithoutTracks = false }) -> string
     The answer to "who is on screen": names for the unlocked, descriptors for the others
     ("画面里：马修；灰大衣男人。" / "On screen: Matthew; the man in the grey coat."); a sentence saying nobody is recognised when the list is empty.
+    visibleIds null (the identity mode cannot tell): the answer says that this mode does not check the picture and gives the
+    people of recentIds (the last description's) by their descriptors, since nothing checked them; by name, where unlocked,
+    only when allowNamesWithoutTracks is true (the option of the same name in verify.js).
 hasResidue(text) -> boolean                        a brace or a bare character id is left in the text
 ```
 
@@ -120,10 +145,15 @@ hasResidue(text) -> boolean                        a brace or a bare character i
 ```
 normalizeTokens(text) -> string                    full-width braces, inner spaces and lower case become {P3}
 violations(cue, cast, { legendIds }) -> [{ type, detail, field }]
-    'unknown-token'   a token whose id is not in the cast or not in this section's legend
+    'unknown-token'   a token whose id is not in the cast or not in this section's legend; a brace of any width that is no token
     'bare-id'         an id or a mark named in the open: P3 without braces, "3 号人物", "红框", "the red box", "person 2"
-    'name-leak'       a cast name or alias of two or more characters written in the text of a visual cue.
-                      Not in a kind 'text' cue, not inside quotation marks, not inside the cue's onScreenText.
+    'name-leak'       a name of two or more characters written in a cue's own words: a character's name or alias, a name its
+                      evidence ever gave it (a clue that did not win, a name a person rejected), or one capitalised word of
+                      such a name of several words ("Mary" of "Aunt Mary"; any word of a Chinese, Japanese or Korean one;
+                      not a title, an article or a particle that stands before the last word: "Aunt", "The", "de").
+                      Not inside quotation marks (a word that begins with an apostrophe, 'em or '90s, opens none), not
+                      inside the cue's onScreenText; in a kind 'text' cue, not a name that the cue's onScreenText carries.
+    'too-long'        a text of more than 2000 characters: it is not read at all (and never repaired)
     Fields checked: brief, standard, detailed.
 verifyCue(cue, { cast, visible, window = { before: 3, after: 1 }, legendIds, allowNamesWithoutTracks = false })
       -> { cue, status, demoted, violations, trackCheck }
@@ -134,17 +164,27 @@ verifyCue(cue, { cast, visible, window = { before: 3, after: 1 }, legendIds, all
     cue.people is rebuilt from the tokens in the text (tracks kept where they were).
     status: 'needs-repair' when there are violations (the caller asks the model once more, then marks the cue 'needs-check'
     and does not speak it), else 'demoted' when someone was demoted, else 'ok'.
-repairGeneric(cue, { cast, visibleIds, lang }) -> { cue, repaired, relapse }
-    A generic person ("一个女人", "一名男子", "a man", "a woman", "someone") in the text while exactly one main character is
-    visible in the cue's window: replaced by that character's token (repaired). With several or none: left alone, relapse true.
+repairGeneric(cue, { cast, visibleIds, peopleCount, lang, legendIds }) -> { cue, repaired, relapse }
+    A generic person ("一个女人", "一名男子", "a man", "a woman", "someone") in the text while a main character is the only
+    person with a track in the cue's window (peopleCount === 1, a face nobody has placed counted, and visibleIds holds that
+    character alone): replaced by that character's token (repaired). Otherwise left alone, relapse true: nobody, several
+    people or an unknown number in the window; and also when the token could name somebody else: the cue already holds a
+    token (of that character or of anyone), a pronoun stands before the phrase, the phrase is a possessive or the person
+    is shown in a picture or a broadcast, or the generic person carries its own description ("a woman in a red dress":
+    the name gate would say the cast's label and outfit beside it).
 verifyScript(script, options) -> { script, report: { checked, demoted, needsRepair, relapses } }
+    options.identity gives visibleBetween for the check and peopleBetween for the repair; a provider that cannot count
+    the people gets no repair.
 ```
 
 ### filmscript.js — the script of a film
 
 ```
 createFilmScript({ filmId, lang, duration }) -> FilmScript
-validateFilmScript(raw) -> FilmScript              throws Error('bad-film-script')
+validateFilmScript(raw) -> FilmScript              throws Error('bad-film-script'). The timing is made consistent: a slot
+                                                   ends with the film at the latest and has no more room than its length; a
+                                                   cue takes the times of its slot; a cue whose slot the script does not have
+                                                   keeps its start and loses the slot (no measured room)
 normalizeSection(raw, { slots, window, legendIds, lang, nextNumber }) -> { cues, sceneStarts, appearances, problems }
     raw is the model's JSON: { cues: [{ slot, start?, kind, priority, people?, brief, standard, detailed, onScreenText?, confidence? }],
     sceneStarts: [seconds], appearances: [{ char, outfit, from }] }.
@@ -152,10 +192,12 @@ normalizeSection(raw, { slots, window, legendIds, lang, nextNumber }) -> { cues,
     dropped with a problem), gets start = slot.start, end = slot.end, a fresh id ('q_' + six digits from nextNumber), status 'ai', by 'ai'.
     Tokens are normalised; people is derived from the tokens; at most one cue per slot (the more important wins);
     texts are trimmed and cut at the engine's hard limits; times outside the window are dropped.
-    appearances keep only ids in legendIds and non-empty outfits.
+    appearances keep only ids in legendIds and outfits that are non-empty and hold no brace or character id.
 mergeSection(script, section) -> FilmScript        cues sorted by start; a cue for a slot that already has one replaces it only when the existing one is by 'ai'
 remapTokens(script, remap) -> FilmScript           after a merge of characters: {P7} becomes {P3} in every text and in people
-editCue(script, id, patch) -> FilmScript           a person's edit: text fields, kind, priority, status; by becomes 'human'
+editCue(script, id, patch) -> FilmScript           a person's edit: text fields, kind, priority, status; by becomes 'human'.
+                                                   A 'needs-check' cue stays so until all three versions are rewritten or
+                                                   the patch gives a status
 toPlayerScript(renderedCues, { videoId, lang, duration }) -> object
     The extension's version-2 script shape, so the existing Playback can play it: { version: SCRIPT_VERSION, videoId, lang, duration,
     cues: [{ id, start, gap: room, gapMeasured: true, kind: 'visual'|'text', priority, brief, standard, detailed }], characters: [],
@@ -171,7 +213,8 @@ unionIntervals(a, b, join = 0) -> [{ start, end }]
 speechFromLines(lines, { join = 0.3 }?) -> [{ start, end }]      subtitle lines to speech intervals (shared/dialogue.js speechIntervals)
 budgetFor(room, lang, { rate = DEFAULT_RATE, speed = 1 }?) -> { units, brief, standard, detailed }
     How much can be said in `room` seconds: characters for Chinese, Japanese, Korean; words otherwise. The inverse of
-    estimateSeconds. detailed is the full count, standard two thirds, brief one third (whole numbers, never below 0).
+    estimateSeconds. detailed is the full count, standard two thirds, brief one third (whole numbers, never below 0 and
+    never above Number.MAX_SAFE_INTEGER, whatever the room, rate or speed). "zh_CN" counts as Chinese, like "zh-CN".
 buildSlots(speech, duration, { minGap = 1, lead = 0.1, tail = 0.3, lang, rate, speed, src = 'subs' }?) -> Slot[]
     The pauses between speech intervals, from 0 to duration: a slot starts `lead` after speech ends and ends `tail` before it
     resumes; slots with less than minGap of room are left out. ids 'g_0001'… in time order.
@@ -199,8 +242,11 @@ groundTruthIdentity(labels, { hold = 1 }?) -> IdentityProvider
 faceClusterIdentity(tracks, characterOfCluster) -> IdentityProvider
     tracks: [{ id, cluster, samples: [{ t, box, conf }] }]; characterOfCluster: { [clusterId]: characterId }.
     A track is visible from its first to its last sample.
-promptBankIdentity() -> IdentityProvider           no faces: visibleAt() is [], visibleBetween() is null
-Every provider: mode, visibleAt(t) -> Visible[], visibleBetween(t0, t1) -> string[] | null, screenSeconds() -> { [characterId]: seconds }
+promptBankIdentity() -> IdentityProvider           no faces: visibleAt() is [], visibleBetween() and peopleBetween() are null
+Every provider: mode, visibleAt(t) -> Visible[], visibleBetween(t0, t1) -> string[] | null,
+    peopleBetween(t0, t1) -> number | null, screenSeconds() -> { [characterId]: seconds }
+    peopleBetween counts the people seen during a span: each character once, and also the faces nobody has placed
+    (a track whose cluster no character owns, a hand label without a character id), which the other answers leave out.
 ```
 
 ### marks.js — numbered boxes and the legend

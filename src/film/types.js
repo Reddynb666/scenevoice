@@ -12,8 +12,10 @@ export const TOKEN_SOURCE = '\\{P(\\d+)\\}';
 export const tokenPattern = () => new RegExp(TOKEN_SOURCE, 'g');
 /** 'P3' → '{P3}'. */
 export const tokenFor = (id) => `{${id}}`;
-/** Whether a string is a character id: 'P1', 'P27'. */
-export const isCharacterId = (value) => typeof value === 'string' && /^P[1-9]\d*$/.test(value);
+/** The highest character number: six digits, the most a token is read with ({P999999}). */
+export const MAX_CHARACTER_NUMBER = 999999;
+/** Whether a string is a character id: 'P1', 'P27'. Six digits at most, so its number is always exact. */
+export const isCharacterId = (value) => typeof value === 'string' && /^P[1-9]\d{0,5}$/.test(value);
 /** The character ids a text refers to, each once, in order of first mention. */
 export function tokensIn(text) {
   const seen = [];
@@ -56,8 +58,11 @@ export const DEFAULT_POLICY = Object.freeze({
 /** The speaking rate estimateSeconds (shared/script.js) assumes at rate 1. */
 export const DEFAULT_RATE = Object.freeze({ cjkPerSec: 4.5, wordsPerSec: 2.8, lead: 0.25 });
 
-/** Whether a language is written without spaces between words (budgets count characters). */
-export const isCjk = (lang) => /^(zh|ja|ko|yue|cmn)\b/i.test(String(lang || ''));
+/**
+ * Whether a language is written without spaces between words (budgets count
+ * characters). "zh_CN", the spelling of the locale files, counts as well as "zh-CN".
+ */
+export const isCjk = (lang) => /^(zh|ja|ko|yue|cmn)(?![a-z])/i.test(String(lang || ''));
 
 /**
  * @typedef {object} Evidence
@@ -166,6 +171,8 @@ export const isCjk = (lang) => /^(zh|ja|ko|yue|cmn)\b/i.test(String(lang || ''))
  * @property {'ground-truth'|'face-cluster'|'prompt-bank'} mode
  * @property {(t: number) => Visible[]} visibleAt
  * @property {(t0: number, t1: number) => string[]|null} visibleBetween  null = this mode cannot tell
+ * @property {(t0: number, t1: number) => number|null} peopleBetween  how many people are seen between two
+ *   times, those nobody has placed yet included; null = this mode cannot tell
  *
  * @typedef {object} KillTestReport
  * @property {string} id                     'K1'
