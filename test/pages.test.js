@@ -938,8 +938,15 @@ describe('first use: getting a key', () => {
   });
 
   it('stays where it is once a key is saved', async () => {
-    await openPage('options', { local: { local: { apiKey: 'k' } } });
-    expect(document.activeElement.id).not.toBe('apiKey');
+    // With a key saved the page lists the key's models: answer here, so the test
+    // neither waits on the network nor sends the key anywhere.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid' } }) })));
+    try {
+      await openPage('options', { local: { local: { apiKey: 'k' } } });
+      expect(document.activeElement.id).not.toBe('apiKey');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('the guide reads the part asked for first, with numbered steps for each key', async () => {
