@@ -64,6 +64,8 @@ To try a build in Chrome: load `dist/` from this folder as the unpacked extensio
 
 ## Open items
 
+- **Priority (owner, 2026-11-15): the extension first.** Store listing and testing with real screen-reader users come before the film app. The film app (`docs/plan-film-2026-11.zh-CN.md`) continues only through its kill tests (M0) and one audible sample (M1); do not start its M2 or later without the owner saying so.
+
 - Nobody has tested with a real screen reader (NVDA / JAWS / VoiceOver) yet; `CONTRIBUTING.md` has the checklist. Recruiting blind testers is next on the roadmap.
 - Qwen path needs a run with a real DashScope key (blueprint E1).
 - Not yet on the Chrome Web Store / Edge Add-ons. The release pipeline (`docs/release.md`) is ready but needs the store accounts and secrets.
