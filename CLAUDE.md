@@ -58,7 +58,7 @@ To try a build in Chrome: load `dist/` from this folder as the unpacked extensio
 
 - `src/film` stays pure: relative imports into `src/film` and the pure part of `src/shared` only; no `chrome`, `document`, `window`, `navigator`, `node:`, Electron or packages; no translation lookups (the extension build scans all of `src/`); no clocks, no randomness. `test/film-purity.test.js` enforces it.
 - The extension's promises do not move: root `package.json` has no dependencies, nothing of `src/film`, `desktop/` or `tools/` is bundled into the extension or the web player, `SCRIPT_VERSION` stays 2. `test/extension-promises.test.js` enforces it. The desktop app has its own package, strings (`desktop/locales`, not `scripts/locales`), privacy text and `desktop-v*` tags.
-- The model never writes a name: it writes a token, and the name gate fills it. A name never comes from a face, and no model is ever asked who a person is. Face data stays on the computer, per film, outside the project folder, and is never exported.
+- The model never writes a name: it writes a token, and the name gate fills it. A face match (clusters, or reference photos of the leads) may propose a name; it is spoken only after a person confirms it or the film's own dialogue agrees. No cloud model is ever asked who a person is. Cast lists are text from licensed sources (Wikidata, pasted by the user, the end credits); reference photos are freely licensed or the user's own. Face data stays on the computer, per film, outside the project folder, and is never exported.
 - By default only a name a person has confirmed is spoken. A wrong name is worse than a label: when unsure, the label.
 - Numbers marked 待测 in the plan are hypotheses until a kill test reports them (`docs/film/killtests/`).
 
