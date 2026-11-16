@@ -10,7 +10,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice: Mô tả âm thanh bằng AI',
-  ext_description: 'Mô tả âm thanh bằng AI cho video YouTube và Bilibili, dành cho người mù và khiếm thị. Hoạt động cùng trình đọc màn hình của bạn.',
+  ext_description: 'Mô tả âm thanh bằng AI cho YouTube và Bilibili, dành cho người mù và khiếm thị. Nghe qua trình đọc màn hình hoặc giọng đọc tích hợp.',
   cmd_toggle: 'Tạo mô tả, hoặc bật và tắt mô tả',
   cmd_describe_now: 'Mô tả những gì đang có trên màn hình',
   cmd_repeat: 'Nhắc lại mô tả vừa rồi',
@@ -179,6 +179,7 @@ export default {
   late_prefix: 'Lúc nãy: ',
   status_fallback_cloud: 'Chưa có khóa riêng của bạn, nên SceneVoice Cloud sẽ mô tả trang này.',
   provider_name_cloud: 'SceneVoice Cloud',
+  status_voice_failed: 'Giọng đọc tích hợp không đọc đúng được các mô tả này trên máy tính này: không có giọng cho ngôn ngữ của chúng, hoặc tính năng giọng nói không hoạt động. Hãy thêm một giọng trong cài đặt giọng nói của hệ thống, hoặc chọn “Trình đọc màn hình của tôi” trong cửa sổ bật lên của SceneVoice.',
   // ----- errors -----
   error_no_key: 'SceneVoice cần khóa API Gemini. Trang cài đặt đang mở để bạn thêm khóa.',
   error_bad_key: 'Khóa API Gemini không được chấp nhận. Hãy kiểm tra lại trên trang cài đặt SceneVoice.',
@@ -252,6 +253,7 @@ export default {
   error_cloud_bad_json: 'SceneVoice Cloud trả về nội dung mà SceneVoice không đọc được. Thử lại.',
   error_cloud_rate_limited: 'Gửi quá nhiều yêu cầu đến SceneVoice Cloud trong thời gian ngắn. Chờ một phút rồi thử lại; các mô tả đã tạo đều được lưu.',
   error_cloud_quota_daily: 'Mô hình đằng sau SceneVoice Cloud đã hết hạn mức hôm nay. Thử lại vào ngày mai, hoặc dùng khóa riêng của bạn trong cài đặt.',
+  error_cloud_closed: 'SceneVoice Cloud chưa mở. Hãy thêm khóa của riêng bạn trên trang cài đặt.',
   // ----- popup -----
   popup_setup_title: 'Thiết lập SceneVoice',
   popup_setup_body: 'Thêm khóa API Gemini miễn phí của bạn để bắt đầu tạo mô tả.',
@@ -291,6 +293,7 @@ export default {
   popup_language_note: 'Giao diện: $1 · Mô tả: $2',
   popup_setup_body_welcome: 'SceneVoice có thể mô tả video miễn phí mà không cần thiết lập gì. Trang chào mừng hướng dẫn trong ba bước.',
   popup_setup_welcome: 'Thiết lập SceneVoice',
+  popup_setup_body_own: 'SceneVoice cần một khóa API của riêng bạn để mô tả video (Gemini hoặc Qwen; khóa Gemini miễn phí). Trang chào mừng hướng dẫn trong ba bước, có phần mẫu để nghe trước.',
   // ----- shared settings -----
   set_enabled: 'Mô tả trong khi tôi xem',
   set_enabled_hint: 'Tự động đọc mô tả trong lúc phát.',
@@ -471,9 +474,9 @@ export default {
   opt_keys_change_for: 'Đổi phím cho: $1',
   opt_keys_clear: 'Xóa',
   opt_keys_clear_for: 'Xóa phím cho: $1',
-  opt_keys_chrome: 'Do Chrome đặt',
-  opt_keys_chrome_note: 'Bốn phím đầu do Chrome quản lý. Để đổi, hãy mở trang phím tắt của Chrome (chrome://extensions/shortcuts); các phím còn lại đổi tại đây.',
-  opt_keys_chrome_open: 'Mở trang phím tắt của Chrome',
+  opt_keys_browser: 'Do trình duyệt đặt',
+  opt_keys_browser_note: 'Bốn phím đầu do trình duyệt quản lý. Để đổi, hãy mở trang phím tắt của trình duyệt bằng nút bên dưới; các phím còn lại đổi tại đây.',
+  opt_keys_browser_open: 'Mở trang phím tắt của trình duyệt',
   opt_keys_restore: 'Khôi phục phím mặc định',
   opt_keys_capture: 'Nhấn tổ hợp phím mới, hoặc Escape để giữ phím cũ.',
   opt_keys_need_modifier: 'Giữ Alt (Option trên Mac), Ctrl hoặc Command cùng một chữ cái, chữ số, phím mũi tên hoặc phím chức năng. Escape giữ phím cũ.',
@@ -491,8 +494,9 @@ export default {
   opt_cache_confirm: 'Xóa tất cả mô tả đã lưu? Các video sẽ cần được mô tả lại.',
   privacy_1:
     'Khi dùng khóa của riêng bạn, SceneVoice không có máy chủ và không có tài khoản, và không gì được gửi tới nhà phát triển. Nó không bao giờ thu thập dữ liệu phân tích. SceneVoice Cloud, nếu bạn bật, là một máy chuyển tiếp tùy chọn do dự án vận hành; mục tiếp theo nói nó nhận được gì.',
+  privacy_1_own: 'SceneVoice hoạt động bằng khóa của riêng bạn: không có máy chủ và không có tài khoản, và không gì được gửi tới nhà phát triển. Nó không bao giờ thu thập dữ liệu phân tích.',
   privacy_6:
-    'SceneVoice Cloud tắt cho đến khi bạn nhấn “Bắt đầu miễn phí”. Khi bật, các yêu cầu được gửi tới api.scenevoice.app kèm một mã thiết bị ẩn danh thay cho khóa, và máy chuyển tiếp chuyển chúng tới Gemini. Với mỗi mã, nó chỉ giữ số giây video đã được mô tả hôm nay, gói đang dùng và khóa bản quyền nếu có, cùng với văn bản hoàn chỉnh của các mô tả một video khi bật chia sẻ. Nó không bao giờ giữ hình ảnh, câu hỏi của bạn, câu trả lời hay địa chỉ IP của bạn, và không ghi lại các yêu cầu. “Ngừng dùng Cloud” sẽ xóa mã này.',
+    'SceneVoice Cloud tắt cho đến khi bạn nhấn “Bắt đầu miễn phí”. Khi bật, các yêu cầu được gửi tới máy chuyển tiếp của SceneVoice Cloud kèm một mã thiết bị ẩn danh thay cho khóa, và máy chuyển tiếp chuyển chúng tới Gemini. Với mỗi mã, nó chỉ giữ số giây video đã được mô tả hôm nay, gói đang dùng và khóa bản quyền nếu có, cùng với văn bản hoàn chỉnh của các mô tả một video khi bật chia sẻ. Nó không bao giờ giữ hình ảnh, câu hỏi của bạn, câu trả lời hay địa chỉ IP của bạn, và không ghi lại các yêu cầu. “Ngừng dùng Cloud” sẽ xóa mã này.',
   privacy_2:
     'Để tạo mô tả hoặc trả lời câu hỏi, địa chỉ, tiêu đề, kênh và phần giới thiệu của video YouTube, câu hỏi của bạn và các mô tả gần đây được gửi tới API Gemini cùng khóa của bạn. Để mô tả lại một khoảnh khắc, mô tả bạn đánh dấu là sai cũng được gửi đi. Điều khoản của Google cho API Gemini được áp dụng.',
   privacy_5:
@@ -500,9 +504,10 @@ export default {
   privacy_3: 'Mô tả được lưu trên máy tính này để mỗi video chỉ phải mô tả một lần.',
   privacy_4:
     'Các mô tả bạn đánh dấu là sai chỉ được ghi lại trên máy tính này, để giữ các bản đã sửa. Chúng không bao giờ được gửi tới nhà phát triển và bị loại bỏ trước khi các mô tả của một video được chia sẻ. Bản ghi này bị xóa cùng với các mô tả đã lưu.',
+  privacy_4_own: 'Các mô tả bạn đánh dấu là sai chỉ được ghi lại trên máy tính này, để giữ các bản đã sửa. Chúng không bao giờ được gửi tới nhà phát triển. Bản ghi này bị xóa cùng với các mô tả đã lưu.',
   opt_reset_title: '6. Khôi phục mặc định',
   opt_reset_intro:
-    'Đưa mọi cài đặt về mô tả, giọng đọc và âm thanh trở lại như khi bạn mới cài SceneVoice. Khóa API, mô hình và các mô tả đã lưu vẫn giữ nguyên. Các phím tắt đặt tại đây trở về mặc định; bốn phím do Chrome quản lý không đổi.',
+    'Đưa mọi cài đặt về mô tả, giọng đọc và âm thanh trở lại như khi bạn mới cài SceneVoice. Khóa API, mô hình và các mô tả đã lưu vẫn giữ nguyên. Các phím tắt đặt tại đây trở về mặc định; bốn phím do trình duyệt quản lý không đổi.',
   opt_reset_button: 'Khôi phục cài đặt mặc định',
   opt_reset_confirm: 'Khôi phục tất cả cài đặt SceneVoice về mặc định? Khóa API và mô tả đã lưu vẫn giữ nguyên.',
   opt_reset_done: 'Đã khôi phục cài đặt mặc định.',
@@ -518,6 +523,8 @@ export default {
   opt_cloud_use_own: 'Bạn có thể dùng khóa riêng thay thế: Gemini hoặc Qwen, bên dưới.',
   opt_cloud_stop: 'Ngừng dùng Cloud',
   opt_cloud_stopped: 'Máy này không còn dùng SceneVoice Cloud; mã thiết bị đã được xóa.',
+  opt_cloud_closed: 'SceneVoice Cloud chưa mở trong phiên bản này, và không có gì được gửi tới đó.',
+  opt_cloud_closed_token: 'SceneVoice Cloud chưa mở trong phiên bản này, nên không được dùng và không có gì được gửi tới đó. Một mã thiết bị Cloud do phiên bản trước lưu vẫn còn trên máy này; “Ngừng dùng Cloud” sẽ xóa mã đó.',
   set_share_descriptions: 'Chia sẻ mô tả đã hoàn thành với người dùng SceneVoice khác',
   set_share_descriptions_hint: 'Khi mô tả của một video đã hoàn chỉnh, phần văn bản được gửi lên bộ nhớ đệm của SceneVoice, để người nghe tiếp theo nhận được ngay và video chỉ phải mô tả một lần. Không bao giờ gửi hình ảnh, câu hỏi hay danh tính của bạn. Chỉ áp dụng với SceneVoice Cloud.',
   opt_license_label: 'Mã giấy phép',
@@ -534,13 +541,18 @@ export default {
   plan_org: 'Tổ chức',
   welcome_title: 'Chào mừng bạn đến với SceneVoice',
   welcome_intro: 'SceneVoice nói cho bạn biết những gì đang hiện trên màn hình trong video YouTube và Bilibili, vào những khoảng lặng giữa lời thoại, qua trình đọc màn hình của bạn hoặc giọng nói tích hợp. Ba bước, khoảng hai phút.',
+  welcome_intro_own: 'SceneVoice nói cho bạn biết những gì đang hiện trên màn hình trong video YouTube và Bilibili, vào những khoảng lặng giữa lời thoại, qua trình đọc màn hình của bạn hoặc giọng nói tích hợp. Ba bước: nghe thử mẫu, thêm khóa của riêng bạn, thử với một video.',
   welcome_step1_title: '1. Nghe thử SceneVoice làm gì',
   welcome_step1_body: 'Ba mô tả mẫu, đúng như khi chúng vang lên trong video. Không gửi gì đi và không cần khóa.',
   welcome_output_legend: 'Nghe qua',
   welcome_sample_button: 'Nghe thử mẫu',
+  welcome_sample_silent: 'Nếu bạn không nghe thấy gì sau khi nhấn “Nghe thử mẫu”, có thể trình đọc màn hình của bạn không đọc các thông báo tự động trong trình duyệt này: hãy chọn “Giọng đọc tích hợp” ở trên rồi nhấn nút lần nữa.',
   welcome_sample_between: 'Video vẫn tiếp tục; mô tả vừa khít vào các khoảng lặng.',
   welcome_sample_done: 'Đó là phần mẫu. Tiếp theo: chọn cách tạo mô tả.',
+  welcome_sample_done_own: 'Đó là phần mẫu. Tiếp theo: bước 2, thêm khóa của riêng bạn.',
   welcome_step2_title: '2. Chọn cách tạo mô tả',
+  welcome_step2_title_own: '2. Thêm khóa của riêng bạn',
+  welcome_own_only: 'Mô tả do một mô hình AI viết, và mô hình cần một khóa API của riêng bạn: khóa Gemini từ Google AI Studio, miễn phí, cho YouTube; hoặc khóa Qwen từ Alibaba Cloud Model Studio, cho Bilibili và ở những nơi không truy cập được Google. Bạn chỉ cần dán khóa một lần. Khóa chỉ được lưu trên máy tính này và chỉ gửi tới dịch vụ đó; không có gì đi qua SceneVoice.',
   welcome_source_legend: 'Mô tả được tạo bởi',
   welcome_source_cloud: 'SceneVoice Cloud: có hạn mức miễn phí, không cần thiết lập',
   welcome_source_cloud_hint: 'Mỗi ngày 60 phút video được mô tả mới; video mà người dùng SceneVoice khác đã mô tả không bị tính. Yêu cầu đi qua máy trung chuyển của SceneVoice với mã thiết bị ẩn danh, không cần tài khoản.',
@@ -581,7 +593,7 @@ export default {
   web_source_own: 'Khóa Gemini của tôi',
   web_source_own_hint: 'Miễn phí từ Google AI Studio, không cần thẻ. Khóa chỉ gửi đến Google, trong tiêu đề yêu cầu, và không bao giờ đến SceneVoice.',
   web_source_cloud: 'SceneVoice Cloud',
-  web_source_cloud_hint: 'Khóa riêng của dự án qua máy chủ trung chuyển SceneVoice, với mã thiết bị ẩn danh và hạn mức miễn phí mỗi ngày. Chưa mở: hãy dùng khóa của bạn cho đến lúc đó.',
+  web_source_cloud_hint: 'Khóa riêng của dự án qua máy chủ trung chuyển SceneVoice, với mã thiết bị ẩn danh và hạn mức miễn phí mỗi ngày.',
   web_key_label: 'Khóa API Gemini',
   web_key_note: 'Khóa chỉ được gửi đến API Gemini của Google, trong tiêu đề yêu cầu, không bao giờ nằm trong địa chỉ web, và không bao giờ gửi đến SceneVoice.',
   web_remember: 'Ghi nhớ khóa trên thiết bị này',
@@ -607,7 +619,7 @@ export default {
   web_settings_heading: '4. Cách mô tả',
   web_privacy_heading: 'Quyền riêng tư',
   web_privacy_leaves:
-    'Những gì rời khỏi trình duyệt này: với khóa của bạn, liên kết video, đoạn cần mô tả và khóa của bạn được gửi đến API Gemini của Google (generativelanguage.googleapis.com), khóa nằm trong tiêu đề yêu cầu, không bao giờ trong địa chỉ web. Với SceneVoice Cloud, liên kết và đoạn cần mô tả được gửi đến máy chủ trung chuyển SceneVoice (api.scenevoice.app) với mã thiết bị ẩn danh trong cùng tiêu đề.',
+    'Những gì rời khỏi trình duyệt này: với khóa của bạn, liên kết video, đoạn cần mô tả và khóa của bạn được gửi đến API Gemini của Google (generativelanguage.googleapis.com), khóa nằm trong tiêu đề yêu cầu, không bao giờ trong địa chỉ web. Với SceneVoice Cloud, liên kết và đoạn cần mô tả được gửi đến máy chủ trung chuyển của SceneVoice Cloud với mã thiết bị ẩn danh trong cùng tiêu đề.',
   web_privacy_youtube:
     'Video phát trong trình phát nhúng của YouTube từ youtube-nocookie.com. YouTube vẫn đặt cookie của riêng họ và biết video đã được xem, như trên bất kỳ trang nào nhúng video. Tập lệnh trình phát từ youtube.com là tập lệnh duy nhất trang này tải từ nơi khác ngoài SceneVoice, và chỉ được tải khi bạn nhấn Phát.',
   web_privacy_local:

@@ -8,8 +8,11 @@
 // jsdom has no layout, so axe's colour-contrast rule is replaced by the token check.
 // The web player (play/index.html) is one page for both languages, localized by
 // its script: it is checked as served (English text) and its data-i18n keys must
-// exist in English and Chinese. Exits 1 on any finding. site/site.test.js runs the
-// same functions under vitest.
+// exist in English and Chinese. It also follows the SceneVoice Cloud switch
+// (CLOUD_OPEN in src/shared/constants.js): its Content-Security-Policy lets the
+// page reach the relay exactly when Cloud is open, and while Cloud is closed the
+// page as served shows no Cloud choice and says nothing about it.
+// Exits 1 on any finding. site/site.test.js runs the same functions under vitest.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -17,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { TABLES } from '../scripts/locales.mjs';
+import { CLOUD_API_BASE, CLOUD_OPEN } from '../src/shared/constants.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -71,8 +75,18 @@ function accessibleName(el) {
   return (el.getAttribute('aria-label') || byId || el.textContent.trim() || imgAlt || el.getAttribute('title') || '').trim();
 }
 
-/** Things to check by hand that axe does not: names, targets, metadata, no third parties. */
-export function pageIssues(dom, rel) {
+/** The origins a Content-Security-Policy lets the page connect to (its connect-src list). */
+export function connectSources(doc) {
+  const csp = doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content') || '';
+  const list = /(?:^|;)\s*connect-src\s+([^;]*)/.exec(csp);
+  return list ? list[1].trim().split(/\s+/) : [];
+}
+
+/**
+ * Things to check by hand that axe does not: names, targets, metadata, no third parties.
+ * `cloudOpen` is the SceneVoice Cloud switch (CLOUD_OPEN unless a test says otherwise).
+ */
+export function pageIssues(dom, rel, { cloudOpen = CLOUD_OPEN } = {}) {
   const { document: doc } = dom.window;
   const issues = [];
   const dir = dirname(join(here, rel));
@@ -174,6 +188,20 @@ export function pageIssues(dom, rel) {
     const key = doc.getElementById('key');
     if (!key || key.type !== 'password' || key.closest('form')) push('the key field must be a password field outside every form');
     if (!doc.querySelector('noscript')?.textContent.trim()) push('no <noscript> note');
+    // SceneVoice Cloud. The policy is plain HTML, so the switch cannot change it:
+    // the two must be made to agree by hand, and this is where a mismatch shows.
+    const relay = new URL(CLOUD_API_BASE).origin;
+    const connect = connectSources(doc);
+    if (!connect.length) push('no connect-src in the Content-Security-Policy');
+    else if (cloudOpen && !connect.includes(relay)) push(`SceneVoice Cloud is open but connect-src does not list the relay: add ${relay} to the Content-Security-Policy`);
+    else if (!cloudOpen && connect.includes(relay)) push(`SceneVoice Cloud is closed but connect-src lists the relay: remove ${relay} from the Content-Security-Policy`);
+    if (!cloudOpen) {
+      // As served, before the script takes the choice out: nothing about Cloud is shown.
+      const shown = doc.body.cloneNode(true);
+      for (const el of shown.querySelectorAll('[hidden], script, noscript')) el.remove();
+      if (shown.querySelector('#source-cloud')) push('SceneVoice Cloud is closed but its choice is shown as served: ship it hidden');
+      if (/SceneVoice Cloud|device token/.test(shown.textContent) || shown.textContent.includes(new URL(CLOUD_API_BASE).hostname)) push('SceneVoice Cloud is closed but the page as served still speaks of it');
+    }
     return issues;
   }
 

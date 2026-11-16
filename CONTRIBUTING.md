@@ -2,6 +2,12 @@
 
 Thank you for helping. SceneVoice exists for blind and low-vision viewers, so the bar for every change is: does it still work well with a screen reader, with no mouse, and with no sight of the screen?
 
+## 测试者请看这里 (testers in mainland China)
+
+如果你是来帮忙测试的读屏用户，不用读这份英文文档。请看中文的[测试指南](./docs/tester-guide.zh-CN.md)：全程键盘操作，一步一句，大约 20 到 30 分钟，在哔哩哔哩上用争渡读屏、保益读屏或 NVDA 就能完成。
+
+Testers in mainland China: the guide above is the one to follow. It is in Chinese, written to be read with a screen reader, and needs only Bilibili, a Qwen key supplied by the project, and 争渡读屏, 保益读屏 or NVDA on Windows. The long checklist below is the maintainers' list before a release; much of it needs YouTube and a Gemini key, which cannot be reached from mainland China.
+
 ## Ground rules
 
 - Blind and low-vision users are the experts. If you are sighted, test with a screen reader and the monitor off before you open a pull request, and ask for a review from someone who uses one daily.
@@ -14,7 +20,8 @@ Thank you for helping. SceneVoice exists for blind and low-vision viewers, so th
 3. Run `npm run build`: it prints how much of the language is translated, and fails on a key English does not have or a placeholder that differs.
 4. Languages first translated by a machine (or an AI) are marked so in a comment at the top of their file until a native speaker who uses a screen reader has read them through. Please say in the pull request which it is.
 - No new permissions without a written justification in `PRIVACY.md`.
-- No analytics, no remote code, no network requests other than the Gemini API, Alibaba Cloud Model Studio and, only after the user presses *Start free*, the SceneVoice Cloud relay.
+- No analytics, no remote code, no network requests other than the Gemini API and Alibaba Cloud Model Studio. The SceneVoice Cloud relay is the one planned addition, only after the user presses *Start free*; it is switched off (`CLOUD_OPEN` in `src/shared/constants.js`) until the relay is deployed, and while it is off nothing may offer it or contact it.
+- Never write a domain the project does not hold into the code, a manifest, a content-security policy, the relay's configuration (`server/wrangler.toml`), or a document that presents it as the project's. Until the relay has an address on a domain the owner holds, `CLOUD_API_BASE` stays a placeholder on `.invalid`; `test/no-foreign-domain.test.js` checks this, and `SECURITY.md` says why.
 
 ## Development
 
@@ -29,15 +36,22 @@ Load `dist/` as an unpacked extension. After changing the content script, reload
 
 ## Before a release: screen reader checklist
 
-Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOver (macOS), on a real YouTube video with dialogue.
+Run through this with at least one of NVDA (Windows), JAWS (Windows), VoiceOver (macOS), or 争渡读屏 or 保益读屏 (Windows, with Chrome or Edge), on a real video with dialogue. Nobody has completed this list with a screen reader yet; write down which screen reader and which items you did.
 
-**Setup**
-- [ ] The welcome page opens after install with focus on its heading; *Hear a sample* reads the three sample descriptions one after another without cutting each other off; *Start free* either works or says plainly that it did not and points to the own-key path; *I have my own key* lands on the settings page with focus in the key field (the Qwen key field in a Chinese browser), and the screen reader reads the sentence saying what to paste, where to get it and what is free.
+Each part says what it needs:
+
+- **YouTube and Gemini**: needs a YouTube video and a Gemini key, so it cannot be done from mainland China.
+- **Any site**: works on YouTube with Gemini and on Bilibili with Qwen alike; do it on whichever you can reach.
+- **Bilibili and Qwen**: the last part.
+
+**Setup** (any site)
+- [ ] The welcome page opens after install with focus on its heading; *Hear a sample* reads the three sample descriptions one after another without cutting each other off. If nothing at all is heard with *My screen reader*, write down the screen reader and its version, choose *Built-in voice*, try again, and report it: this is the first thing we need to know about any screen reader.
+- [ ] There is no *Start free*, no allowance and no licence field anywhere (SceneVoice Cloud is closed). *Add my key in settings* lands on the settings page with focus in the key field (the Qwen key field in a Chinese browser), and the screen reader reads the sentence saying what to paste, where to get it and what is free.
 - [ ] *Step-by-step guide, written for screen readers* opens the key guide at the right part; following it, a key can be created without sighted help (try both Gemini and Qwen).
 - [ ] Every control on the settings page is reachable with Tab and has a spoken name and state.
 - [ ] Saving a wrong key gives a spoken error; saving a right key says which model is in use. Where Gemini is not available, the error says so and suggests Qwen.
 
-**Generation**
+**Generation** (YouTube and Gemini)
 - [ ] The first video played without descriptions says once how to create them; the next video does not repeat it.
 - [ ] `Alt+Shift+D` on a fresh video announces "AI-generated audio description follows", that descriptions are being created, then "You can start watching: … the first 5 minutes", the percentage at 50% and 75% (at least 20 seconds apart), then the total count. Turning off *Announce generation progress* leaves out the percentages only.
 - [ ] The progress box is visible above the player's controls, in normal view, fullscreen and on Shorts (at the top there), and stays while the controls hide; the popup shows the same section, percentage and time left.
@@ -46,7 +60,7 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 - [ ] Pressing the shortcut again during generation reports progress instead of starting over; pressing it twice in a row stops, says what is saved, and turns descriptions off (the network panel shows no more requests).
 - [ ] Closing the tab mid-way and reopening the video continues where it stopped.
 
-**Playback**
+**Playback** (any site; the item about ads is YouTube only)
 - [ ] Descriptions are heard in pauses, not on top of dialogue (Keep playing mode).
 - [ ] In Pause mode the video stops, the full description is read, and playback resumes by itself.
 - [ ] Seeking forward or back does not produce a flood of old descriptions.
@@ -58,37 +72,39 @@ Run through this with at least one of NVDA (Windows), JAWS (Windows) or VoiceOve
 - [ ] Ads are not described.
 - [ ] Nothing is spoken twice (live region and built-in voice must not both be active).
 
-**Describe now, repeat, ask**
+**Describe now, repeat, ask** (any site)
 - [ ] `Alt+Shift+S` speaks at once, even if the screen reader was mid-sentence.
 - [ ] `Alt+Shift+L` repeats the last description.
 - [ ] A follow-up question ("and what is she holding?") is understood from the question before it.
-- [ ] `Alt+Shift+Q` opens the dialog with focus in the text field; typing letters does not trigger YouTube shortcuts; Enter sends; the answer is read, starting with the moment it is about; Escape returns focus to where it was and playback resumes.
+- [ ] `Alt+Shift+Q` opens the dialog with focus in the text field; typing letters does not trigger the site's own shortcuts; Enter sends; the answer is read, starting with the moment it is about; Escape returns focus to where it was and playback resumes (with NVDA the first Escape may only leave focus mode).
+- [ ] With a Chinese, Japanese or Korean input method, choosing a candidate, or pressing Enter to commit the letters typed so far, does not send the question; only Enter on the finished sentence does.
 - [ ] After an answer, one Tab from the question field reaches *Go to …*; pressing it closes the dialog, says "Jumped to …" and plays from that moment.
 
-**Description is wrong**
+**Description is wrong** (any site)
 - [ ] Right after a description, *Last description is wrong* in the popup (or its shortcut, once set) says at once which description was marked, then reads the new one; the rest of the video is not described again.
 - [ ] *Repeat* then repeats the corrected description, and playing past that moment again speaks the new one.
 - [ ] With no description heard yet, and none near the current moment, it says there is nothing to mark. After an answer to a question, it says answers are not saved.
 - [ ] Pressing it again while a correction is being made says it is still working. With no network, it says the description could not be made again.
 - [ ] A description said to be uncertain ("Not certain." / "不太确定。") sounds natural with your screen reader in both languages.
 
-**Shorts and fullscreen**
+**Shorts and fullscreen** (YouTube and Gemini)
 - [ ] Shorts are described, and a looping Short describes again from the start.
 - [ ] In fullscreen, the ask dialog is reachable and visible.
 
-**Popup**
+**Popup** (any site)
 - [ ] Every control is reachable with Tab; status is announced when it changes.
 - [ ] *All keyboard shortcuts* lists every shortcut with its key or "not set"; *Change shortcuts* opens the *Keyboard shortcuts* section of the settings page.
 
-**Keyboard shortcuts handled on the page**
-- [ ] On a video, `Alt+Shift+H` reads every command with its key in a few short sentences, after any description being read, even with *Announce status* off; on a Mac the keys are said as "Option+Shift+…". `Alt+Shift+W`, `E`, `M`, `N`, `Up`, `Down` and `X` each do what the list says and announce the new value; none of them fires while typing in the ask dialog, a comment box or the search box, and none reaches the player (YouTube's own shortcuts stay quiet). On the settings page, *Change* on a row says to press the new keys, then says what was saved, refuses a key another SceneVoice command or one of Chrome's four already uses, and Escape keeps the old key; *Clear* and *Restore default keys* are announced; focus returns to the button each time.
+**Keyboard shortcuts handled on the page** (any site)
+- [ ] On Windows with more than one input language installed, pressing the `Alt+Shift` keys does not switch the input language by accident (left Alt+Shift is Windows' own key for that); write down what the screen reader said if it does.
+- [ ] On a video, `Alt+Shift+H` reads every command with its key in a few short sentences, after any description being read, even with *Announce status* off; on a Mac the keys are said as "Option+Shift+…". `Alt+Shift+W`, `E`, `M`, `N`, `Up`, `Down` and `X` each do what the list says and announce the new value; none of them fires while typing in the ask dialog, a comment box or the search box, and none reaches the player (YouTube's own shortcuts stay quiet). On the settings page, *Change* on a row says to press the new keys, then says what was saved, refuses a key another SceneVoice command or one of the browser's four already uses, and Escape keeps the old key; *Clear* and *Restore default keys* are announced; focus returns to the button each time.
 
-**Web player (site/play, in a browser with no extension installed)**
-- [ ] The page opens with its heading and a named *SceneVoice player* region; pasting a YouTube link and a key, then *Play*, says that descriptions are being created, then *You can start watching*, and descriptions are heard in the pauses through the screen reader (or the browser's voice, when chosen) without the two ever speaking at once. In the region, Space, D, R, A, S, the arrows, M and ? each announce what they did and never type into a field; `Alt+Shift+D`, `S`, `L` and `Q` work from anywhere on the page. A Bilibili link, an empty link and a missing key are each refused in one plain sentence; the key never appears in the address bar; with *Remember the key on this device* off, reloading the tab forgets it. Check in English and in Chinese (`?lang=zh-CN`), on a phone too.
+**Web player (site/play, in a browser with no extension installed)** (YouTube and Gemini)
+- [ ] The page opens with its heading and a named *SceneVoice player* region; there is no SceneVoice Cloud choice on the page (Cloud is closed); pasting a YouTube link and a key, then *Play*, says that descriptions are being created, then *You can start watching*, and descriptions are heard in the pauses through the screen reader (or the browser's voice, when chosen) without the two ever speaking at once. In the region, Space, D, R, A, S, the arrows, M and ? each announce what they did and never type into a field; `Alt+Shift+D`, `S`, `L` and `Q` work from anywhere on the page. A Bilibili link, an empty link and a missing key are each refused in one plain sentence; the key never appears in the address bar; with *Remember the key on this device* off, reloading the tab forgets it. Check in English and in Chinese (`?lang=zh-CN`), on a phone too.
 
-**China site: Bilibili with Qwen (experimental)**
+**China site: Bilibili with Qwen (experimental)** (Bilibili and Qwen)
 
-On a real Bilibili video (`www.bilibili.com/video/…`), from mainland China if possible, with a Qwen key from Alibaba Cloud Model Studio:
+On a real Bilibili video (`www.bilibili.com/video/…`), from mainland China if possible, with a Qwen key from Alibaba Cloud Model Studio. This is the maintainers' list; some items need sight or the developer tools. The list for testers is the Chinese [tester guide](./docs/tester-guide.zh-CN.md).
 - [ ] *Save and test* in the Qwen section says which model is in use; a wrong key gives a spoken error in Chinese and English.
 - [ ] The popup on a Bilibili video names the video; without a Qwen key it asks for one (not for a Gemini key).
 - [ ] `Alt+Shift+D` says SceneVoice is describing as you watch; within about 20 seconds of playback the first description is heard, in a pause, a few seconds late. It is in Chinese with the description language set to follow the browser.
@@ -100,10 +116,10 @@ On a real Bilibili video (`www.bilibili.com/video/…`), from mainland China if 
 - [ ] Watching the same stretch again says the saved descriptions on time, without new requests.
 - [ ] A part (分P) switch, and a jump to a related video, start over for the new video.
 - [ ] Find a video whose picture cannot be taken (if any: a `<bwp-video>` player, or a cross-origin stream): SceneVoice says so clearly and sends nothing.
-- [ ] A paid or members-only (DRM) video on Bilibili, Tencent Video or iQiyi: within about 12 seconds SceneVoice says the video is protected and stops sending pictures.
+- [ ] A paid or members-only (DRM) video on Bilibili: within about 12 seconds SceneVoice says the video is protected and stops sending pictures.
 - [ ] People keep one label through a video ("the man with glasses"), not "a man" each time.
 - [ ] Not logged in: subtitles may be missing; descriptions still work with the model's own timing.
 
 ## Reporting bugs
 
-Please include: browser and version, screen reader and version, the video (or a similar public one), what you pressed, what you heard, and what you expected to hear.
+Please include: browser and version, screen reader and version, the video (or a similar public one), what you pressed, what you heard, and what you expected to hear. The issue form asks for exactly these and can be filled in in Chinese; testers following the Chinese guide can send the reply form at its end instead.

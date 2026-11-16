@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MSG, SCRIPT_VERSION } from '../src/shared/constants.js';
+import { CLOUD_API_BASE, MSG, SCRIPT_VERSION } from '../src/shared/constants.js';
 import { authorizeBackgroundMessage, authorizeContentMessage, authorizeOffscreenMessage, classifySender } from '../src/shared/sender.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -207,13 +207,16 @@ describe('listeners are wired to the checks', () => {
   it('keeps the SceneVoice Cloud device token out of content scripts, like the keys', () => {
     for (const file of readdirSync(join(root, 'src/content'))) {
       const text = source(join('src/content', file));
-      expect(text, file).not.toMatch(/cloudToken|CLOUD_API_BASE|scenevoice\.app/);
+      expect(text, file).not.toMatch(/cloudToken|CLOUD_API_BASE/);
+      expect(text, file).not.toContain(new URL(CLOUD_API_BASE).hostname);
       expect(text, file).not.toMatch(/from ['"][^'"]*cloud\.js['"]/);
     }
-    // Only whether a token exists reaches a page, next to the keys; the token itself stays in the service worker.
-    expect(source('src/background/index.js')).toMatch(/cloud: Boolean\(local\.cloudToken\)/);
+    // Only whether a token exists reaches a page, next to the keys, and only while Cloud is open; the token itself stays in the service worker.
+    expect(source('src/background/index.js')).toMatch(/cloud: CLOUD_OPEN && Boolean\(local\.cloudToken\)/);
+    // The manifest in the repository asks for the two model hosts only: the relay's host is added by the build, and only
+    // while SceneVoice Cloud is open (scripts/manifest.mjs; test/cloud-closed.test.js checks both states).
     const manifest = JSON.parse(source('static/manifest.json'));
-    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*', 'https://api.scenevoice.app/*']);
+    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*']);
     // The relay is reached from the offscreen worker and the extension pages, never from a video page.
     expect(source('src/offscreen/offscreen.js')).toContain("'cloud-get', 'cloud-put'");
   });

@@ -3,7 +3,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice 声景：AI 口述影像',
-  ext_description: '为 YouTube 和哔哩哔哩视频生成 AI 口述影像，专为盲人和低视力观众设计，配合读屏软件使用。',
+  ext_description: '为 YouTube 和哔哩哔哩视频生成 AI 口述影像，专为盲人和低视力观众设计，由你自己的读屏软件或内置语音朗读。',
   cmd_toggle: '生成口述，或开启/关闭口述',
   cmd_describe_now: '描述当前画面',
   cmd_repeat: '重复上一条描述',
@@ -166,6 +166,8 @@ export default {
   // No key of the listener's own, but a SceneVoice Cloud token: the relay describes instead.
   status_fallback_cloud: '没有填写自己的密钥，这个网站将由 SceneVoice 云端描述。',
   provider_name_cloud: ' SceneVoice 云端',
+  // The built-in voice failed, or has no voice for the description language: said once on the video page, through the live region and as text on the video.
+  status_voice_failed: '内置语音在这台电脑上读不好这些口述：没有这种语言的语音，或者语音功能出了问题。请在系统的语音设置里添加语音，或者在 SceneVoice 弹出面板里改选“我的读屏软件”。',
   // ----- errors -----
   error_no_key: 'SceneVoice 需要 Gemini API 密钥，正在打开设置页面，请添加密钥。',
   error_bad_key: 'Gemini API 密钥无效，请在 SceneVoice 设置页检查。',
@@ -245,6 +247,8 @@ export default {
   error_cloud_rate_limited: '短时间内向 SceneVoice 云端发的请求太多了。请等一分钟再试，已生成的口述都已保存。',
   error_cloud_device_limit: '今天这个网络里开始使用 SceneVoice 云端的电脑太多了。请在 $1 之后再试。',
   error_cloud_quota_daily: 'SceneVoice 云端背后的模型今天的额度已经用完。请明天再试，或在设置里改用自己的密钥。',
+  // SceneVoice Cloud is closed in this build (CLOUD_OPEN): the answer to anything that still asks for it.
+  error_cloud_closed: 'SceneVoice 云端还没有开放。请在设置页添加你自己的密钥。',
   // ----- popup -----
   popup_setup_title: '设置 SceneVoice',
   popup_setup_body: '添加免费的 Gemini API 密钥后即可开始生成口述。',
@@ -289,6 +293,8 @@ export default {
   // No key and no Cloud token at all: the welcome page, not the settings page, is the place to start.
   popup_setup_body_welcome: 'SceneVoice 可以免费描述视频，不需要任何设置。欢迎页分三步带你开始。',
   popup_setup_welcome: '开始设置',
+  // The same banner while SceneVoice Cloud is closed: no free allowance is promised.
+  popup_setup_body_own: 'SceneVoice 需要你自己的 API 密钥（通义千问或 Gemini）才能描述视频。欢迎页分三步带你开始，还可以先听一段示例。',
   // ----- shared settings -----
   set_enabled: '观看时自动口述',
   set_enabled_hint: '播放时自动朗读口述。',
@@ -322,7 +328,7 @@ export default {
   output_screenreader: '我的读屏软件',
   output_screenreader_hint: '使用你自己的语音、语速和盲文显示器。',
   output_tts: '内置语音',
-  output_tts_hint: '适合不使用读屏软件的用户。',
+  output_tts_hint: '不用读屏软件时使用；读屏软件没有读出口述时，也可以选它。',
   set_language: '口述语言',
   lang_auto: '与浏览器语言相同（B 站视频用中文）',
   set_auto_generate: '自动生成口述',
@@ -472,10 +478,10 @@ export default {
   opt_keys_change_for: '修改快捷键：$1',
   opt_keys_clear: '清除',
   opt_keys_clear_for: '清除快捷键：$1',
-  // The four keys Chrome keeps (static/manifest.json): shown, not changed here.
-  opt_keys_chrome: '由 Chrome 设定',
-  opt_keys_chrome_note: '前四个快捷键由 Chrome 管理，要改请打开 Chrome 的快捷键页面（chrome://extensions/shortcuts）；其余快捷键在这里修改。',
-  opt_keys_chrome_open: '打开 Chrome 的快捷键页面',
+  // The four keys the browser itself keeps (static/manifest.json): shown, not changed here.
+  opt_keys_browser: '由浏览器设定',
+  opt_keys_browser_note: '前四个快捷键由浏览器管理，要改请用下面的按钮打开浏览器的快捷键页面；其余快捷键在这里修改。',
+  opt_keys_browser_open: '打开浏览器的快捷键页面',
   opt_keys_restore: '恢复默认快捷键',
   // Said in the status region while a new key is being recorded, and after.
   opt_keys_capture: '请按下新的组合键；按 Escape 保留原来的。',
@@ -493,13 +499,16 @@ export default {
   opt_cache_info: '这台电脑上保存了 $1 个视频的口述（$2 KB）。',
   opt_cache_confirm: '确定删除所有已保存的口述吗？之后视频需要重新生成。',
   privacy_1: '只用自己的密钥时，SceneVoice 没有服务器，也不需要账号，什么都不会发给开发者，也不收集任何统计数据。SceneVoice 云端是项目自己运营的可选中转，只在你开启后才使用；下一条说明它会收到什么。',
-  privacy_6: 'SceneVoice 云端在你按下“免费开始”之前是关闭的。开启后，请求发往 api.scenevoice.app，用匿名的设备凭证代替密钥，由中转转发给 Gemini。中转按凭证只保存今天描述了多少秒视频、所在方案和已激活的许可证密钥，以及开启分享时某个视频生成完毕的口述文字；不保存画面、你的问题、回答或 IP 地址，也不记录请求。按“停用云端”即删除凭证。',
+  // privacy_1 and privacy_4 while SceneVoice Cloud is closed: nothing about the relay or sharing.
+  privacy_1_own: 'SceneVoice 用的是你自己的密钥：没有服务器，也不需要账号，什么都不会发给开发者，也不收集任何统计数据。',
+  privacy_6: 'SceneVoice 云端在你按下“免费开始”之前是关闭的。开启后，请求发往 SceneVoice 云端的中转服务器，用匿名的设备凭证代替密钥，由中转转发给 Gemini。中转按凭证只保存今天描述了多少秒视频、所在方案和已激活的许可证密钥，以及开启分享时某个视频生成完毕的口述文字；不保存画面、你的问题、回答或 IP 地址，也不记录请求。按“停用云端”即删除凭证。',
   privacy_2: '生成口述或回答提问时，视频地址、标题、频道名、简介、你的问题以及最近的口述会连同你的密钥发送给 Gemini API；重新生成某一段时，还会发送你标记有误的那条描述。这些都受谷歌 Gemini API 条款约束。',
   privacy_5: '使用通义千问、以及在 B 站上时，模型无法通过地址打开视频：改为每隔几秒发送一张缩小的播放画面，连同标题、UP 主和简介。通义千问适用阿里云百炼的条款。画面只在内存里保留一两分钟，不会保存。',
   privacy_3: '口述保存在这台电脑上，同一个视频只需生成一次。',
   privacy_4: '你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。它们不会发给开发者，分享口述前也会先去掉；删除已保存的口述时，这些记录会一并删除。',
+  privacy_4_own: '你标记有误的描述只记录在这台电脑上，用来保留更正后的版本。它们不会发给开发者；删除已保存的口述时，这些记录会一并删除。',
   opt_reset_title: '6. 恢复默认设置',
-  opt_reset_intro: '把口述、语音和声音方面的设置全部恢复到刚安装时的样子。API 密钥、模型和已保存的口述都会保留。在这里设置的快捷键会恢复默认；由 Chrome 管理的四个不变。',
+  opt_reset_intro: '把口述、语音和声音方面的设置全部恢复到刚安装时的样子。API 密钥、模型和已保存的口述都会保留。在这里设置的快捷键会恢复默认；由浏览器管理的四个不变。',
   opt_reset_button: '恢复默认设置',
   opt_reset_confirm: '确定把 SceneVoice 的设置全部恢复为默认吗？API 密钥和已保存的口述会保留。',
   opt_reset_done: '已恢复默认设置。',
@@ -526,6 +535,9 @@ export default {
   cloud_register_busy: 'SceneVoice 云端现在很忙，请过一分钟再按“免费开始”。',
   opt_cloud_stop: '停用云端',
   opt_cloud_stopped: '这台电脑不再使用 SceneVoice 云端，设备凭证已删除。',
+  // Cloud is closed in this build, but a device token from a version that offered it is still saved: the block shows only this and Stop using Cloud.
+  opt_cloud_closed: 'SceneVoice 云端在这个版本里没有开放，不会向它发送任何内容。',
+  opt_cloud_closed_token: 'SceneVoice 云端在这个版本里没有开放，所以不会使用，也不会向它发送任何内容。这台电脑上还留着早先版本保存的云端设备凭证，按“停用云端”可以把它删除。',
   set_share_descriptions: '把生成完成的口述分享给其他 SceneVoice 用户',
   set_share_descriptions_hint: '一个视频的口述全部生成后，把文字发送到 SceneVoice 缓存，下一位听同一个视频的人就能直接使用，同一个视频只需生成一次。只发送文字，不发送画面、问题或任何关于你的信息。仅在使用 SceneVoice 云端时有效。',
   opt_license_label: '许可证密钥',
@@ -543,15 +555,22 @@ export default {
   // ----- welcome page (first run) -----
   welcome_title: '欢迎使用 SceneVoice',
   welcome_intro: 'SceneVoice 会在 YouTube 和 B 站视频的对白空隙里，通过你的读屏软件或内置语音，说出画面上正在发生什么。三步，大约两分钟。',
+  // The welcome page while SceneVoice Cloud is closed (the *_own strings): one path, a key of one's own.
+  welcome_intro_own: 'SceneVoice 会在 YouTube 和 B 站视频的对白空隙里，通过你的读屏软件或内置语音，说出画面上正在发生什么。一共三步：听一段示例，添加自己的密钥，找个视频试一试。',
   welcome_step1_title: '1. 先听听看',
   welcome_step1_body: '三条示例口述，就像看视频时听到的那样。不会发送任何内容，也不需要密钥。',
   welcome_output_legend: '用什么来听',
   welcome_sample_button: '听一段示例',
   welcome_sample_stop: '停止示例',
   welcome_sample_voice_failed: '这台电脑上的内置语音无法朗读。请在上面选择“我的读屏软件”，再按一次“听一段示例”。',
+  // Under the sample button: some screen readers may not read live regions in this browser.
+  welcome_sample_silent: '如果按下“听一段示例”后什么也没听到，可能是你的读屏软件在这个浏览器里不会朗读自动播报：请在上面改选“内置语音”，再按一次。',
   welcome_sample_between: '视频继续播放，口述只在对白空隙里说。',
   welcome_sample_done: '示例结束。下一步：选择口述由谁生成。',
+  welcome_sample_done_own: '示例结束。下一步：第 2 步，添加自己的密钥。',
   welcome_step2_title: '2. 选择口述由谁生成',
+  welcome_step2_title_own: '2. 添加自己的密钥',
+  welcome_own_only: '口述由 AI 模型生成，模型需要你自己的 API 密钥：在 B 站，或者访问不了 Google 的地方，用阿里云百炼的通义千问密钥；在 YouTube 用 Google AI Studio 的 Gemini 密钥（免费）。密钥只需粘贴一次，只保存在这台电脑上，只发给对应的模型服务，任何内容都不经过 SceneVoice。',
   welcome_source_legend: '口述由谁生成',
   welcome_source_cloud: 'SceneVoice 云端：有免费额度，不用任何设置',
   welcome_source_cloud_hint: '每天可以新生成 60 分钟视频的口述；其他 SceneVoice 用户已经描述过的视频不计入。请求经过 SceneVoice 中转服务器，使用匿名设备凭证，不需要账号。',
@@ -568,7 +587,7 @@ export default {
   welcome_shortcut_set: '生成口述、以及开关口述的快捷键是 $1。',
   welcome_shortcut_unset: '还没有为生成口述设置快捷键。也可以用播放器里的 SceneVoice 按钮或工具栏弹出面板。',
   welcome_try_body: 'SceneVoice 在 YouTube 和 B 站的视频页上工作。打开一个视频并播放：第一次时，SceneVoice 会说一遍怎样开始口述。',
-  welcome_try_youtube: '打开一个短的 YouTube 视频试试（在新标签页打开）',
+  welcome_try_youtube: '打开一个短的 YouTube 视频试试（需要能访问 YouTube 的网络；在新标签页打开）',
   welcome_try_bilibili: '打开一个短的 B 站视频试试（在新标签页打开）',
   welcome_skip: '跳过，打开全部设置',
   // Web player (site/play)
@@ -591,7 +610,7 @@ export default {
   web_source_own: '我的 Gemini 密钥',
   web_source_own_hint: '到 Google AI Studio 免费申请，不需要银行卡。密钥只发给 Google，放在请求头里，不经过 SceneVoice。',
   web_source_cloud: 'SceneVoice 云端',
-  web_source_cloud_hint: '用项目自己的密钥，经 SceneVoice 中转服务器，凭匿名设备凭证和每天的免费额度。尚未开放：开放前请先用自己的密钥。',
+  web_source_cloud_hint: '用项目自己的密钥，经 SceneVoice 中转服务器，凭匿名设备凭证和每天的免费额度。',
   web_key_label: 'Gemini API 密钥',
   web_key_note: '密钥只发给 Google 的 Gemini API，放在请求头里，不会出现在网址中，也不会发给 SceneVoice。',
   web_remember: '在这台设备上记住密钥',
@@ -599,6 +618,7 @@ export default {
   web_key_guide: '怎样免费申请 Gemini 密钥：说明文档里的指南',
   web_key_guide_url: 'https://github.com/reddynb666/scenevoice/blob/main/README.zh-CN.md#获取-gemini-api-密钥',
   web_key_missing: '请先粘贴你的 Gemini API 密钥，或选择 SceneVoice 云端。',
+  web_key_missing_own: '请先粘贴你的 Gemini API 密钥。',
   web_key_forgotten: '这台设备上不再记住密钥；关闭这个标签页之前仍然可用。',
   web_cloud_unreachable: '连不上 SceneVoice 云端，所以没有生成口述。请在上面选择“我的 Gemini 密钥”，再按一次“播放”。',
   web_watch_heading: '3. 边看边听',
@@ -615,9 +635,11 @@ export default {
   web_describe_again_hint: '忘掉这台设备上为这个视频保存的口述，重新请模型描述。',
   web_settings_heading: '4. 怎样描述',
   web_privacy_heading: '隐私',
-  web_privacy_leaves: '离开这个浏览器的内容：用自己的密钥时，视频链接、要描述的片段和你的密钥会发给 Google 的 Gemini API（generativelanguage.googleapis.com），密钥放在请求头里，绝不放在网址中。用 SceneVoice 云端时，视频链接和要描述的片段发给 SceneVoice 中转服务器（api.scenevoice.app），同一个请求头里带匿名设备凭证。',
+  web_privacy_leaves: '离开这个浏览器的内容：用自己的密钥时，视频链接、要描述的片段和你的密钥会发给 Google 的 Gemini API（generativelanguage.googleapis.com），密钥放在请求头里，绝不放在网址中。用 SceneVoice 云端时，视频链接和要描述的片段发给 SceneVoice 云端的中转服务器，同一个请求头里带匿名设备凭证。',
+  web_privacy_leaves_own: '离开这个浏览器的内容：视频链接、要描述的片段和你的密钥会发给 Google 的 Gemini API（generativelanguage.googleapis.com），密钥放在请求头里，绝不放在网址中。任何内容都不会发给 SceneVoice。',
   web_privacy_youtube: '视频在 YouTube 的嵌入式播放器里播放，来自 youtube-nocookie.com。和任何嵌入视频的网站一样，YouTube 仍会设置它自己的 Cookie，并知道这个视频被看过。来自 youtube.com 的播放器脚本是这个页面唯一一个不来自 SceneVoice 的脚本，而且只在你按“播放”之后才加载。',
   web_privacy_local: '没有统计分析，没有账号，也没有自己的 Cookie。你的密钥（如果选择记住）、设备凭证、你的选择和生成完的口述都留在这个浏览器的存储里，清除网站数据时一起清除。口述和回答由 AI 生成，可能出错。',
+  web_privacy_local_own: '没有统计分析，没有账号，也没有自己的 Cookie。你的密钥（如果选择记住）、你的选择和生成完的口述都留在这个浏览器的存储里，清除网站数据时一起清除。口述和回答由 AI 生成，可能出错。',
   web_privacy_policy: '完整隐私政策',
   web_privacy_url: 'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md',
   web_extension_note: '要看哔哩哔哩、要按真实字幕掐时间、要在 youtube.com 上直接用快捷键，请安装扩展：',

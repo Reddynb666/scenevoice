@@ -4,9 +4,18 @@ APIs served over TLS on loopback under their real hostnames. Checks what a
 screen reader would hear. The English run covers everything; a short second run
 with only the Chinese strings checks the Chinese interface.
 
+SceneVoice Cloud is closed in the build that ships (CLOUD_OPEN in
+src/shared/constants.js): the two runs above check that nothing offers it and
+that the relay is never asked (a mock relay stands at its address and counts).
+A third, short run builds the extension with the switch forced on
+(SCENEVOICE_CLOUD_OPEN=1, into test/e2e/output/dist-cloud-open) and checks the
+open state against that mock relay: the welcome page's two paths, Start free,
+the settings block and Stop using Cloud.
+
 Run:  npm run build && python3 test/e2e/e2e.py
 """
 import json
+import os
 import re
 import shutil
 import ssl
@@ -35,8 +44,19 @@ GEMINI_HOST = "generativelanguage.googleapis.com"
 GEMINI = f"https://{GEMINI_HOST}"
 DASHSCOPE_HOST = "dashscope.aliyuncs.com"
 QWEN_KEY = "qwen-test-key"
+# The SceneVoice Cloud relay's address, read from the source (CLOUD_API_BASE): a placeholder on .invalid while Cloud is
+# closed, which resolves nowhere, so the browser is told to send it to the mock. The mock remembers every request to it.
+RELAY_HOST = re.search(r"^export const CLOUD_API_BASE = 'https://([^'/]+)';$", (ROOT / "src" / "shared" / "constants.js").read_text(encoding="utf8"), re.M).group(1)
+# The domain version 1.1.0 named for the relay, which was never the project's (SECURITY.md). In two parts, so that a
+# search of the repository for the name does not stop here. Nothing that is built may contain it.
+FOREIGN_DOMAIN = ".".join(["scenevoice", "app"])
+RELAY_TOKEN = "svd_0123456789abcdef0123456789abcdef"
+# The build with SceneVoice Cloud forced on, made by this script for the open-state run (git-ignored).
+DIST_CLOUD_OPEN = ROOT / "test" / "e2e" / "output" / "dist-cloud-open"
 
 REQUESTS = []
+# Every request that reached the relay's hostname, whatever sent it.
+RELAY_REQUESTS = []
 # Every address a page in the browser asked for (not the extension's own requests, which the mock logs).
 PAGE_REQUESTS = []
 FAILURES = []
@@ -60,12 +80,12 @@ def has_key(text, letter):
     return any(k in (text or "") for k in (f"Alt+Shift+{letter}", f"Option+Shift+{letter}", f"⌥⇧{letter}"))
 
 
-def locale_only_copy(tmp, locale):
+def locale_only_copy(tmp, locale, dist=DIST, name=None):
     """The built extension with only one interface language, as default_locale. Chrome
     picks the interface language from the machine (macOS ignores --lang), so the
     checks force a language by leaving it the only one."""
-    ext = Path(tmp) / f"ext-{locale}"
-    shutil.copytree(DIST, ext)
+    ext = Path(tmp) / (name or f"ext-{locale}")
+    shutil.copytree(dist, ext)
     for loc in (ext / "_locales").iterdir():
         if loc.name != locale:
             shutil.rmtree(loc)
@@ -133,7 +153,7 @@ def qwen_script_for(window):
 
 MODELS = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro", "text-embedding-004"]
 DELAY = {"seconds": 1.0}
-CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "content-type, x-goog-api-key, authorization", "access-control-allow-methods": "GET, POST, OPTIONS"}
+CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "content-type, x-goog-api-key, authorization", "access-control-allow-methods": "GET, POST, PUT, OPTIONS"}
 QWEN_PATH = "/compatible-mode/v1/chat/completions"
 
 
@@ -158,7 +178,36 @@ class Gemini(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def is_relay(self):
+        return self.headers.get("host", "").split(":")[0] == RELAY_HOST
+
+    def relay(self, method):
+        """The SceneVoice Cloud relay's own routes (server/README.md, protocol v1), as far as the pages use them:
+        a device token, the plan and allowance, and an empty shared cache. Every request is remembered."""
+        raw = self.rfile.read(int(self.headers.get("content-length", 0) or 0))
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            body = {}
+        RELAY_REQUESTS.append({"method": method, "path": self.path, "body": body, "key": self.headers.get("x-goog-api-key"), "origin": self.headers.get("origin", "")})
+        allowance = {"secondsPerDay": 3600, "usedToday": 0, "resetsAt": "2026-11-17T00:00:00Z"}
+        path = self.path.split("?")[0]
+        if method == "POST" and path == "/v1/devices":
+            return self.reply(201, {"token": RELAY_TOKEN, "plan": "free", "allowance": allowance})
+        if self.headers.get("x-goog-api-key") != RELAY_TOKEN:
+            return self.reply(401, {"error": {"code": 401, "message": "Unknown device token", "status": "UNAUTHENTICATED"}})
+        if method == "GET" and path == "/v1/me":
+            return self.reply(200, {"plan": "free", "allowance": allowance, "cacheHits": 0})
+        return self.reply(404, {"error": {"code": 404, "message": "not found"}})
+
+    def do_PUT(self):
+        if self.is_relay():
+            return self.relay("PUT")
+        self.reply(404, {})
+
     def do_OPTIONS(self):
+        if self.is_relay():
+            RELAY_REQUESTS.append({"method": "OPTIONS", "path": self.path, "body": {}, "key": None, "origin": self.headers.get("origin", "")})
         self.send_response(204)
         for k, v in CORS.items():
             self.send_header(k, v)
@@ -172,6 +221,8 @@ class Gemini(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
+        if self.is_relay():
+            return self.relay("GET")
         if not self.authorized():
             return
         if self.path.startswith("/v1beta/models"):
@@ -180,6 +231,8 @@ class Gemini(BaseHTTPRequestHandler):
             self.reply(404, {})
 
     def do_POST(self):
+        if self.is_relay():
+            return self.relay("POST")
         body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
         if self.path.startswith(QWEN_PATH):
             return self.qwen(body)
@@ -258,7 +311,7 @@ def start_gemini(tmp):
     """Start the mock on a free port with a certificate for both API hostnames."""
     cert, key = Path(tmp) / "cert.pem", Path(tmp) / "key.pem"
     subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-days", "2",
-                    "-subj", f"/CN={GEMINI_HOST}", "-addext", f"subjectAltName=DNS:{GEMINI_HOST},DNS:{DASHSCOPE_HOST}"], check=True, capture_output=True)
+                    "-subj", f"/CN={GEMINI_HOST}", "-addext", f"subjectAltName=DNS:{GEMINI_HOST},DNS:{DASHSCOPE_HOST},DNS:{RELAY_HOST}"], check=True, capture_output=True)
     class Quiet(ThreadingHTTPServer):
         def handle_error(self, request, client_address):
             pass  # a tab closed the connection mid-request (stop, navigation): expected
@@ -368,8 +421,8 @@ def video(page, js):
 
 def launch(p, tmp, ext, port, profile):
     """Headless Chromium with the extension from `ext` installed fresh (a new profile:
-    the install event fires), both model hostnames pointed at the mock, and axe on
-    every page. Returns (context, service worker, extension id)."""
+    the install event fires), both model hostnames and the relay's pointed at the
+    mock, and axe on every page. Returns (context, service worker, extension id)."""
     ctx = p.chromium.launch_persistent_context(
         str(Path(tmp) / profile),
         headless=True,
@@ -378,7 +431,7 @@ def launch(p, tmp, ext, port, profile):
         args=[
             f"--disable-extensions-except={ext}",
             f"--load-extension={ext}",
-            f"--host-resolver-rules=MAP {GEMINI_HOST} 127.0.0.1:{port}, MAP {DASHSCOPE_HOST} 127.0.0.1:{port}",
+            f"--host-resolver-rules=MAP {GEMINI_HOST} 127.0.0.1:{port}, MAP {DASHSCOPE_HOST} 127.0.0.1:{port}, MAP {RELAY_HOST} 127.0.0.1:{port}",
             "--ignore-certificate-errors",
             # The mock lives on loopback; Chrome 142+ otherwise asks the page for local-network permission.
             "--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests",
@@ -415,6 +468,15 @@ def chinese_run(p, tmp, port):
     check(wel.evaluate("document.documentElement.lang") == "zh-CN", "zh: the page declares its language as zh-CN")
     check(wait_until(wel, "() => document.activeElement && document.activeElement.id === 'title'", 5), "zh: focus starts on the heading")
     check(wel.inner_text("#sample") == "听一段示例", "zh: the sample button is named in Chinese")
+    check(wel.inner_text("#step2") == "2. 添加自己的密钥" and wel.locator("input[name=source]").count() == 0 and wel.locator("#startFree").count() == 0,
+          "zh: step 2 is a key of one's own, with no Cloud choice and no Start free")
+    check(not re.search(r"云端|免费开始|免费额度", wel.inner_text("body")), "zh: the welcome page says nothing about Cloud or a free allowance")
+    check("改选“内置语音”" in wel.inner_text("#sampleSilent"), "zh: the page says what to do when nothing is heard after the sample button")
+    # The Bilibili sample is offered in a Chinese browser, and comes first in the Chinese interface; YouTube says what it needs.
+    if wel.evaluate("chrome.i18n.getUILanguage()").startswith("zh"):
+        check(wel.is_visible("#tryBilibili"), "zh: the Bilibili sample is offered in a Chinese browser")
+    check(wel.evaluate("[...document.getElementById('tryList').children].map((li) => li.id)") == ["tryBilibiliItem", "tryYoutubeItem"], "zh: the Bilibili sample comes before the YouTube one")
+    check("需要能访问 YouTube 的网络" in wel.evaluate("document.getElementById('tryYoutube').textContent"), "zh: the YouTube sample says it needs a network that can reach YouTube")
     axe(wel, "zh welcome page")
     tab_reachable(wel, "zh welcome page")
     wel.click("#sample")
@@ -429,6 +491,8 @@ def chinese_run(p, tmp, port):
     opt.wait_for_load_state()
     check(opt.inner_text("#h-key") == "1. 连接 AI 模型", "zh: options page is in Chinese")
     check(opt.inner_text("#h-desc") == "2. 口述内容", "zh: section headings are translated")
+    check(opt.locator("#cloudBlock").count() == 0 and not re.search(r"云端|免费开始", opt.inner_text("body")), "zh: the settings page has no Cloud block and no word of it")
+    check(opt.inner_text("#editShortcuts") == "打开浏览器的快捷键页面" and not re.search(r"Chrome|Edge", opt.inner_text("body")), "zh: the settings page names no browser")
     axe(opt, "zh options page")
     tab_reachable(opt, "zh options page")
     opt.close()
@@ -442,6 +506,7 @@ def chinese_run(p, tmp, port):
     check(pop.inner_text("#videoHeading") == "当前视频", "zh: popup is in Chinese")
     check("B 站" in pop.inner_text("#videoStatus"), f"zh: popup explains what to do away from a video ({pop.inner_text('#videoStatus')[:40]})")
     check(pop.is_visible("#keyBanner") and pop.inner_text("#setupKey") == "开始设置", "zh: popup shows the setup banner on a fresh install, pointing at the welcome page")
+    check("需要你自己的 API 密钥" in pop.inner_text("#setupBody") and "免费描述" not in pop.inner_text("#setupBody"), "zh: the banner asks for a key of one's own and promises nothing free of setup")
     axe(pop, "zh popup")
     tab_reachable(pop, "zh popup")
     pop.screenshot(path=str(OUT / "popup-zh.png"), full_page=True)
@@ -451,6 +516,102 @@ def chinese_run(p, tmp, port):
     for c in noisy:
         print("      ", c)
     check(not noisy, "zh: no console errors from the extension")
+    ctx.close()
+
+
+def build_cloud_open():
+    """The extension with the Cloud switch forced on (scripts/build.mjs, SCENEVOICE_CLOUD_OPEN=1), for the
+    open-state checks only: it lands in test/e2e/output/dist-cloud-open, never in dist/, and cannot be packaged."""
+    res = subprocess.run(["node", "scripts/build.mjs"], cwd=ROOT, env={**os.environ, "SCENEVOICE_CLOUD_OPEN": "1"}, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(res.stdout, res.stderr)
+    return res
+
+
+def cloud_open_run(p, tmp, port):
+    """SceneVoice Cloud as it will be once open, against the mock relay: the welcome page's two paths, Start free,
+    the settings block with the plan, and Stop using Cloud. Short: everything else is the same code as the main run."""
+    print("\n[SceneVoice Cloud open (test build)]")
+    console_errors = []
+    res = build_cloud_open()
+    check(res.returncode == 0 and "forced OPEN" in res.stdout, "a build with the Cloud switch forced on is made into test/e2e/output/dist-cloud-open")
+    if res.returncode != 0:
+        return
+    zipped = subprocess.run(["node", "scripts/build.mjs", "--zip"], cwd=ROOT, env={**os.environ, "SCENEVOICE_CLOUD_OPEN": "1"}, capture_output=True, text=True)
+    check(zipped.returncode != 0 and "cannot be packaged" in zipped.stderr, "such a build cannot be packaged")
+    built = json.loads((DIST_CLOUD_OPEN / "manifest.json").read_text())
+    check(built["host_permissions"] == [f"https://{GEMINI_HOST}/*", f"https://{DASHSCOPE_HOST}/*", f"https://{RELAY_HOST}/*"], f"with the switch on, the manifest asks for the relay's host too ({built['host_permissions']})")
+    closed = json.loads((DIST / "manifest.json").read_text())
+    check({**built, "host_permissions": closed["host_permissions"]} == closed, "and differs from the manifest that ships in nothing else")
+
+    ext = locale_only_copy(tmp, "en", DIST_CLOUD_OPEN, "ext-cloud-open")
+    ctx, sw, ext_id = launch(p, tmp, ext, port, "profile-cloud-open")
+    relay_before = len(RELAY_REQUESTS)
+    wel = find_page(ctx, sw, "welcome.html", 15)
+    check(wel is not None, "open: welcome page opens on install")
+    if wel is None:
+        wel = ctx.new_page()
+        wel.goto(f"chrome-extension://{ext_id}/welcome.html")
+    wel.on("console", lambda m: m.type == "error" and console_errors.append(f"welcome: {m.text}"))
+    wel.wait_for_load_state()
+    check(wait_until(wel, "() => document.activeElement && document.activeElement.id === 'title'", 5), "open: focus starts on the welcome heading")
+    check(wel.inner_text("#step2") == "2. Choose how descriptions are made", "open: step 2 is a choice")
+    check(wel.is_checked("input[name=source][value=own]") and wel.is_visible("#ownKey") and wel.is_hidden("#startFree"), "open: a key of one's own is preselected, with the settings link shown and Start free hidden")
+    axe(wel, "welcome page (Cloud open)")
+    tab_reachable(wel, "welcome page (Cloud open)")
+    check(len(RELAY_REQUESTS) == relay_before, "open: nothing is sent to the relay before Start free is pressed")
+    wel.check("input[name=source][value=cloud]")
+    check(wel.is_visible("#startFree") and wel.is_hidden("#ownKey"), "open: choosing SceneVoice Cloud shows Start free and hides the settings link")
+    check(wel.get_attribute("#startFree", "aria-describedby") == "shareNote" and wel.is_visible("#shareNote"), "open: Start free is described by the note about sharing")
+    axe(wel, "welcome page (Cloud open, Cloud chosen)")
+    wel.check("input[name=source][value=own]")
+    check(wel.is_visible("#ownKey") and wel.is_hidden("#startFree"), "open: choosing a key of one's own shows the settings link and hides Start free")
+    wel.check("input[name=source][value=cloud]")
+    wel.click("#startFree")
+    check(wait_until(wel, "() => /SceneVoice Cloud is ready\\. You have 60 minutes/.test(document.getElementById('cloudStatus').textContent)", 10), f"open: Start free says Cloud is ready and the allowance ({wel.inner_text('#cloudStatus')[:60]})")
+    registered = [r for r in RELAY_REQUESTS[relay_before:] if r["method"] == "POST" and r["path"] == "/v1/devices"]
+    check(len(registered) == 1 and registered[0]["body"].get("client") == "extension" and registered[0]["key"] is None, "open: one device was registered, as the extension, with no key in the request")
+    stored = sw.evaluate("async () => ({ local: (await chrome.storage.local.get('local')).local || {}, settings: (await chrome.storage.sync.get('settings')).settings || {} })")
+    check(stored["local"].get("cloudToken") == RELAY_TOKEN and stored["settings"].get("youtubeProvider") == "cloud" and stored["settings"].get("shareDescriptions") is True,
+          "open: the token is kept with the keys, Cloud describes the sites and sharing is on")
+    check(RELAY_TOKEN not in json.dumps(stored["settings"]), "open: the token is not in the synced settings")
+    check(wait_until(wel, "() => document.activeElement && document.activeElement.id === 'step3'", 3) and wel.is_hidden("#startFree"), "open: Start free is gone and focus moves to step 3")
+    wel.close()
+
+    opt = ctx.new_page()
+    opt.on("console", lambda m: m.type == "error" and console_errors.append(f"options: {m.text}"))
+    opt.goto(f"chrome-extension://{ext_id}/options.html#cloud")
+    opt.wait_for_load_state()
+    check(wait_until(opt, "() => /^Plan: Free\\. Used today: 0 of 60 minutes/.test(document.getElementById('cloudInfo').textContent)", 10), f"open: the settings page shows the plan and today's use from the relay ({opt.inner_text('#cloudInfo')[:50]})")
+    check(wait_until(opt, "() => document.activeElement && document.activeElement.id === 'cloudStop'", 5), "open: sent to the Cloud block, focus is on Stop using Cloud")
+    check(opt.eval_on_selector_all("#youtubeProvider option", "os => os.map(o => o.value)") == ["cloud", "gemini", "qwen"] and opt.eval_on_selector("#youtubeProvider", "s => s.value") == "cloud", "open: the model lists offer Cloud, and YouTube is set to it")
+    check(opt.is_checked("#shareDescriptions") and opt.is_visible("#licenseKey"), "open: the sharing switch is on and the licence field is there")
+    me = [r for r in RELAY_REQUESTS if r["method"] == "GET" and r["path"] == "/v1/me"]
+    check(len(me) >= 1 and all(r["key"] == RELAY_TOKEN for r in me) and all(RELAY_TOKEN not in r["path"] for r in RELAY_REQUESTS), "open: the token travels in the request header, never in an address")
+    axe(opt, "options page (Cloud open)")
+    tab_reachable(opt, "options page (Cloud open)")
+    opt.click("#cloudStop")
+    check(wait_until(opt, "() => /device token was removed/.test(document.getElementById('cloudStatus').textContent)", 5), "open: Stop using Cloud says the token was removed")
+    stored = sw.evaluate("async () => ({ local: (await chrome.storage.local.get('local')).local || {}, settings: (await chrome.storage.sync.get('settings')).settings || {} })")
+    check(stored["local"].get("cloudToken") == "" and stored["settings"].get("youtubeProvider") == "gemini" and stored["settings"].get("shareDescriptions") is False,
+          "open: the token is gone, YouTube is Gemini's again and sharing is off")
+    check(wait_until(opt, "() => document.activeElement && document.activeElement.id === 'cloudStart'", 3), "open: focus moves to Start free")
+    opt.close()
+
+    pop = ctx.new_page()
+    pop.on("console", lambda m: m.type == "error" and console_errors.append(f"popup: {m.text}"))
+    pop.set_viewport_size({"width": 380, "height": 900})
+    pop.goto(f"chrome-extension://{ext_id}/popup.html")
+    pop.wait_for_load_state()
+    time.sleep(0.6)
+    check(pop.is_visible("#keyBanner") and "for free, with nothing to set up" in pop.inner_text("#setupBody"), "open: with nothing set up, the popup's banner offers the free way")
+    axe(pop, "popup (Cloud open)")
+    pop.close()
+
+    noisy = [c for c in console_errors if "favicon" not in c and "Failed to load resource" not in c]
+    for c in noisy:
+        print("      ", c)
+    check(not noisy, "open: no console errors from the extension")
     ctx.close()
 
 
@@ -549,8 +710,16 @@ def main():
         check(wait_until(wel, "() => /How to repot a plant|怎样给植物换盆|幫植物換盆/.test(document.getElementById('sampleOut').textContent) || (!chrome.i18n.getUILanguage().match(/^(en|zh)/) && document.getElementById('sampleOut').textContent.length > 10)", 3), f"the sample button fills the live region with the first sample description ({wel.inner_text('#sampleOut')[:40]})")
         check(wel.get_attribute("#sampleOut", "aria-live") == "polite", "the sample is read politely, through the screen reader")
         check(len(REQUESTS) == before, "the sample asks no model anything")
-        wel.check("input[name=source][value=own]")
-        check(wel.is_visible("#ownKey") and wel.is_hidden("#startFree"), "choosing a key of one's own shows the settings link and hides Start free")
+        # SceneVoice Cloud is closed in what ships: one path after the sample, a key of one's own, and nothing of Cloud left on the page.
+        check(wel.inner_text("#step2") == "2. Add a key of your own", f"step 2 is the one path: a key of one's own ({wel.inner_text('#step2')})")
+        check(wel.locator("input[name=source]").count() == 0 and wel.locator("#startFree").count() == 0 and wel.locator("#cloudBox").count() == 0,
+              "there is no choice of SceneVoice Cloud and no Start free, not even hidden or disabled")
+        check(not re.search(r"SceneVoice Cloud|allowance|Start free", wel.inner_text("body")), "the welcome page says nothing about Cloud or a free allowance")
+        check(wel.is_visible("#ownOnly") and "API key of your own" in wel.inner_text("#ownOnly") and wel.is_visible("#ownKey"), "it says plainly that a key of one's own is needed, with the link to add it")
+        check(wel.get_attribute("#sample", "aria-describedby") == "sampleSilent" and "choose “Built-in voice” above" in wel.inner_text("#sampleSilent"),
+              "the sample button says what to do when nothing is heard: choose the built-in voice")
+        check(wel.evaluate("[...document.querySelectorAll('[aria-describedby], [aria-labelledby]')].flatMap((el) => ((el.getAttribute('aria-describedby') || '') + ' ' + (el.getAttribute('aria-labelledby') || '')).trim().split(/\\s+/)).filter((id) => !document.getElementById(id))") == [],
+              "no aria-describedby or aria-labelledby on the welcome page points at something that is not there")
         # A Chinese browser is sent to the Qwen key (Gemini needs Google); any other to the Gemini key.
         zh_ui = wel.evaluate("chrome.i18n.getUILanguage()").startswith("zh")
         want_hash, want = ("#qwen", "qwenApiKey") if zh_ui else ("#gemini", "apiKey")
@@ -577,6 +746,13 @@ def main():
         check(opt.eval_on_selector("#model", "s => s.value") == "gemini-3.5-flash", "model list shows the recommended model selected")
         check(opt.locator("#model option").count() == 4, "model list hides models that cannot describe video")
         check(opt.locator("#shortcuts tr").count() >= 8, "shortcut table lists all commands")
+        check(opt.locator("#cloudBlock").count() == 0 and opt.locator("#cloudStart").count() == 0 and opt.locator("#licenseKey").count() == 0,
+              "the settings page has no SceneVoice Cloud block: no Start free, no licence field")
+        check(opt.eval_on_selector_all("#youtubeProvider option", "os => os.map(o => o.value)") == ["gemini", "qwen"], "the model lists offer Gemini and Qwen, not Cloud")
+        check(not re.search(r"SceneVoice Cloud|Start free|scenevoice\.app", opt.inner_text("body")), "the settings page says nothing about Cloud")
+        check(opt.inner_text("#shortcuts tr:first-child td:last-child") == "Set by the browser" and opt.inner_text("#editShortcuts") == "Open the browser’s shortcuts page",
+              "the browser's own shortcuts are said to be set by the browser")
+        check(not re.search(r"Chrome|\bEdge\b", opt.inner_text("body")), "the settings page names no browser")
         check(opt.locator("input[name=density]").count() == 3 and opt.is_checked("input[name=density][value=standard]"), "options page offers the how-much setting with Standard selected")
         check(opt.is_checked("input[data-setting=announceProgress]"), "options page has 'Announce generation progress', on by default")
         # Every command has a default key now: four set by Chrome, eight handled on the page.
@@ -1108,19 +1284,35 @@ def main():
         axe(pop, "popup after the job")
         tab_reachable(pop, "popup after the job")
         DELAY["seconds"] = 1.0
-        # No key and no Cloud token at all: the banner sends the listener to the welcome page.
-        local({"apiKey": "", "qwenApiKey": "", "cloudToken": ""})
+        # No key at all: the banner sends the listener to the welcome page. A Cloud device token left by a
+        # version that offered Cloud counts for nothing while Cloud is closed: the banner still shows.
+        local({"apiKey": "", "qwenApiKey": "", "cloudToken": RELAY_TOKEN})
         pop.reload()
         pop.wait_for_load_state()
         time.sleep(0.6)
         check(pop.is_visible("#keyBanner"), "popup shows the setup banner without any key")
         check("welcome page" in pop.inner_text("#setupBody") and pop.inner_text("#setupKey") == "Set up SceneVoice", "the banner points at the welcome page")
+        check("API key of your own" in pop.inner_text("#setupBody") and "nothing to set up" not in pop.inner_text("#setupBody"), "the banner asks for a key of one's own and promises nothing free of setup")
+        # With that leftover token, the settings page shows only the way out, and asks the relay nothing.
+        left = ctx.new_page()
+        left.goto(f"chrome-extension://{ext_id}/options.html")
+        left.wait_for_load_state()
+        check(wait_until(left, "() => document.getElementById('cloudBlock') && !document.getElementById('cloudBlock').hidden && !document.getElementById('cloudStop').hidden", 5), "with a leftover Cloud token the settings page shows Stop using Cloud")
+        check("not open in this version" in left.inner_text("#cloudInfo") and left.locator("#cloudStart").count() == 0 and left.locator("#licenseKey").count() == 0,
+              "it says Cloud is not open, and offers neither Start free nor the licence field")
+        axe(left, "options page with a leftover Cloud token")
+        tab_reachable(left, "options page with a leftover Cloud token")
+        left.click("#cloudStop")
+        check(wait_until(left, "() => /device token was removed/.test(document.getElementById('cloudStatus').textContent)", 5), "Stop using Cloud says the token was removed")
+        check(sw.evaluate("async () => ((await chrome.storage.local.get('local')).local || {}).cloudToken") == "", "the token is gone from storage")
+        check(wait_until(left, "() => document.activeElement && document.activeElement.id === 'h-cloud'", 3) and left.is_hidden("#cloudStop"), "the button goes and focus moves to the block's heading")
+        left.close()
         axe(pop, "popup with the setup banner")
         tab_reachable(pop, "popup with the setup banner")
         pop.emulate_media(color_scheme="dark"); settle()
         axe(pop, "popup with the setup banner (dark)")
         pop.close()
-        local({"apiKey": "test-key"})
+        local({"apiKey": "test-key", "cloudToken": ""})
 
         # ---------------- Bilibili with Qwen: described from frames as it plays
         print("\n[bilibili + qwen]")
@@ -1229,9 +1421,21 @@ def main():
         for c in noisy:
             print("      ", c)
         check(not noisy, "no console errors from the extension")
+
+        print("\n[SceneVoice Cloud is closed]")
+        built = json.loads((DIST / "manifest.json").read_text())
+        check(built["host_permissions"] == [f"https://{GEMINI_HOST}/*", f"https://{DASHSCOPE_HOST}/*"], f"the built manifest asks for the two model hosts and nothing else ({built['host_permissions']})")
+        check(sw.evaluate("chrome.runtime.getManifest().host_permissions") == [f"https://{GEMINI_HOST}/*", f"https://{DASHSCOPE_HOST}/*"], "the installed extension holds no permission for the relay")
+        check(RELAY_HOST not in json.dumps(built), "nothing in the manifest names the relay")
+        check(RELAY_HOST.endswith(".invalid"), f"the relay's address in the source is a placeholder that cannot resolve ({RELAY_HOST})")
+        carrying = sorted(str(f.relative_to(DIST)) for f in DIST.rglob("*") if f.is_file() and f.suffix in (".js", ".html", ".json", ".css") and FOREIGN_DOMAIN in f.read_text(encoding="utf8", errors="ignore"))
+        check(not carrying, f"no file of the build names the domain that was never the project's ({carrying[:5]})")
         ctx.close()
 
         chinese_run(p, tmp, port)
+        check(RELAY_REQUESTS == [], f"through both runs of the build that ships, nothing was sent to the relay ({RELAY_REQUESTS[:3]})")
+
+        cloud_open_run(p, tmp, port)
 
     print()
     if FAILURES:

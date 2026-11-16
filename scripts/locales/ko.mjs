@@ -9,7 +9,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice: 동영상 AI 화면 해설',
-  ext_description: 'YouTube와 Bilibili 영상에 AI 화면 해설을 더합니다. 시각장애인과 저시력 시청자를 위해 만들었으며, 스크린 리더와 함께 쓸 수 있습니다.',
+  ext_description: 'YouTube와 Bilibili 영상에 AI 화면 해설을 더합니다. 시각장애인과 저시력 시청자를 위해, 사용 중인 스크린 리더나 내장 음성이 읽어 줍니다.',
   cmd_toggle: '해설 만들기, 또는 해설 켜고 끄기',
   cmd_describe_now: '지금 화면 설명하기',
   cmd_repeat: '마지막 해설 다시 듣기',
@@ -178,6 +178,7 @@ export default {
   late_prefix: '조금 전: ',
   status_fallback_cloud: '직접 설정한 키가 없어서 이 사이트는 SceneVoice Cloud가 설명합니다.',
   provider_name_cloud: 'SceneVoice Cloud',
+  status_voice_failed: '이 컴퓨터에서는 내장 음성이 이 해설을 제대로 읽지 못합니다. 해당 언어의 음성이 없거나 음성 기능이 작동하지 않습니다. 시스템의 음성 설정에서 음성을 추가하거나, SceneVoice 팝업에서 “내 스크린 리더”를 고르세요.',
   // ----- errors -----
   error_no_key: 'SceneVoice에 Gemini API 키가 필요합니다. 키를 추가할 수 있도록 설정 페이지를 엽니다.',
   error_bad_key: 'Gemini API 키가 받아들여지지 않았습니다. SceneVoice 설정 페이지에서 확인해 주세요.',
@@ -251,6 +252,7 @@ export default {
   error_cloud_bad_json: 'SceneVoice Cloud가 보낸 답을 SceneVoice가 읽을 수 없었습니다. 다시 시도하세요.',
   error_cloud_rate_limited: '짧은 시간에 SceneVoice Cloud에 요청을 너무 많이 보냈습니다. 1분 기다렸다가 다시 시도하세요. 지금까지 만든 음성 해설은 저장되어 있습니다.',
   error_cloud_quota_daily: 'SceneVoice Cloud 뒤의 모델이 오늘 사용량을 다 썼습니다. 내일 다시 시도하거나, 설정에서 직접 설정한 키를 사용하세요.',
+  error_cloud_closed: 'SceneVoice Cloud는 아직 열리지 않았습니다. 설정 페이지에서 직접 키를 추가하세요.',
   // ----- popup -----
   popup_setup_title: 'SceneVoice 설정하기',
   popup_setup_body: '무료 Gemini API 키를 추가하면 해설을 만들기 시작할 수 있습니다.',
@@ -290,6 +292,7 @@ export default {
   popup_language_note: '인터페이스: $1 · 해설: $2',
   popup_setup_body_welcome: 'SceneVoice는 아무 설정 없이 무료로 동영상을 설명할 수 있습니다. 환영 페이지가 세 단계로 안내합니다.',
   popup_setup_welcome: 'SceneVoice 설정하기',
+  popup_setup_body_own: 'SceneVoice가 동영상을 설명하려면 사용자 본인의 API 키가 필요합니다(Gemini 또는 Qwen, Gemini 키는 무료). 환영 페이지가 세 단계로 안내하며, 먼저 예시를 들어 볼 수 있습니다.',
   // ----- shared settings -----
   set_enabled: '시청하는 동안 해설하기',
   set_enabled_hint: '재생 중에 해설을 자동으로 말합니다.',
@@ -470,9 +473,9 @@ export default {
   opt_keys_change_for: '키 바꾸기: $1',
   opt_keys_clear: '지우기',
   opt_keys_clear_for: '키 지우기: $1',
-  opt_keys_chrome: 'Chrome이 정함',
-  opt_keys_chrome_note: '처음 네 개의 단축키는 Chrome이 관리합니다. 바꾸려면 Chrome의 단축키 페이지(chrome://extensions/shortcuts)를 여세요. 나머지는 여기서 바꿉니다.',
-  opt_keys_chrome_open: 'Chrome 단축키 페이지 열기',
+  opt_keys_browser: '브라우저가 정함',
+  opt_keys_browser_note: '처음 네 개의 단축키는 브라우저가 관리합니다. 바꾸려면 아래 버튼으로 브라우저의 단축키 페이지를 여세요. 나머지는 여기서 바꿉니다.',
+  opt_keys_browser_open: '브라우저 단축키 페이지 열기',
   opt_keys_restore: '기본 단축키 복원',
   opt_keys_capture: '새 키 조합을 누르세요. 그대로 두려면 Escape를 누르세요.',
   opt_keys_need_modifier: 'Alt(Mac에서는 Option), Ctrl 또는 Command를 누른 채 글자, 숫자, 화살표 또는 기능 키를 누르세요. Escape를 누르면 그대로 둡니다.',
@@ -490,8 +493,9 @@ export default {
   opt_cache_confirm: '저장된 해설을 모두 지울까요? 동영상을 다시 해설해야 합니다.',
   privacy_1:
     '자기 키를 쓰는 한 SceneVoice에는 서버도 계정도 없고, 개발자에게는 아무것도 보내지 않습니다. 분석 데이터도 전혀 수집하지 않습니다. SceneVoice Cloud는 켰을 때만 쓰이는, 프로젝트가 운영하는 선택 사항인 중계 서버입니다. 무엇을 받는지는 다음 항목에 있습니다.',
+  privacy_1_own: 'SceneVoice는 사용자 본인의 키로 동작합니다. 서버도 계정도 없고, 개발자에게는 아무것도 보내지 않습니다. 분석 데이터도 전혀 수집하지 않습니다.',
   privacy_6:
-    'SceneVoice Cloud는 “무료로 시작”을 누르기 전까지 꺼져 있습니다. 켜면 요청은 키 대신 익명의 기기 토큰과 함께 api.scenevoice.app로 보내지고, 중계 서버가 이를 Gemini에 전달합니다. 중계 서버는 토큰마다 오늘 해설한 동영상의 초 수, 요금제, 있다면 라이선스 키만 보관하고, 공유가 켜져 있으면 완성된 동영상 해설의 텍스트도 보관합니다. 이미지, 여러분의 질문, 그 답변, IP 주소는 보관하지 않으며 요청 기록도 남기지 않습니다. “Cloud 사용 중지”를 누르면 토큰이 삭제됩니다.',
+    'SceneVoice Cloud는 “무료로 시작”을 누르기 전까지 꺼져 있습니다. 켜면 요청은 키 대신 익명의 기기 토큰과 함께 SceneVoice Cloud 중계 서버로 보내지고, 중계 서버가 이를 Gemini에 전달합니다. 중계 서버는 토큰마다 오늘 해설한 동영상의 초 수, 요금제, 있다면 라이선스 키만 보관하고, 공유가 켜져 있으면 완성된 동영상 해설의 텍스트도 보관합니다. 이미지, 여러분의 질문, 그 답변, IP 주소는 보관하지 않으며 요청 기록도 남기지 않습니다. “Cloud 사용 중지”를 누르면 토큰이 삭제됩니다.',
   privacy_2:
     '해설을 만들거나 질문에 답하기 위해, YouTube 동영상의 주소, 제목, 채널, 설명, 여러분의 질문, 최근 해설이 여러분의 키와 함께 Gemini API로 보내집니다. 장면을 다시 설명할 때는 틀렸다고 표시한 해설도 보내집니다. Gemini API에 대한 Google의 약관이 적용됩니다.',
   privacy_5:
@@ -499,9 +503,10 @@ export default {
   privacy_3: '해설은 이 컴퓨터에 저장되므로, 한 동영상은 한 번만 해설합니다.',
   privacy_4:
     '틀렸다고 표시한 해설은 수정된 해설을 간직하기 위해 이 컴퓨터에만 기록됩니다. 개발자에게는 보내지 않으며, 동영상 해설을 공유하기 전에 제거됩니다. 이 기록은 저장된 해설과 함께 지워집니다.',
+  privacy_4_own: '틀렸다고 표시한 해설은 수정된 해설을 간직하기 위해 이 컴퓨터에만 기록됩니다. 개발자에게는 보내지 않습니다. 이 기록은 저장된 해설과 함께 지워집니다.',
   opt_reset_title: '6. 기본값 복원',
   opt_reset_intro:
-    '해설, 음성, 소리 설정을 모두 SceneVoice를 처음 설치했을 때로 되돌립니다. API 키, 모델, 저장된 해설은 그대로 남습니다. 여기서 정한 단축키는 기본값으로 돌아가고, Chrome이 관리하는 네 개는 바뀌지 않습니다.',
+    '해설, 음성, 소리 설정을 모두 SceneVoice를 처음 설치했을 때로 되돌립니다. API 키, 모델, 저장된 해설은 그대로 남습니다. 여기서 정한 단축키는 기본값으로 돌아가고, 브라우저가 관리하는 네 개는 바뀌지 않습니다.',
   opt_reset_button: '기본 설정 복원',
   opt_reset_confirm: 'SceneVoice 설정을 모두 기본값으로 되돌릴까요? API 키와 저장된 해설은 그대로 남습니다.',
   opt_reset_done: '기본 설정을 복원했습니다.',
@@ -517,6 +522,8 @@ export default {
   opt_cloud_use_own: '대신 직접 설정한 키를 쓸 수 있습니다. 아래의 Gemini 또는 Qwen입니다.',
   opt_cloud_stop: 'Cloud 사용 중지',
   opt_cloud_stopped: '이 컴퓨터에서 더 이상 SceneVoice Cloud를 쓰지 않습니다. 기기 토큰을 지웠습니다.',
+  opt_cloud_closed: '이 버전에서는 SceneVoice Cloud가 열려 있지 않으며, 그쪽으로는 아무것도 보내지 않습니다.',
+  opt_cloud_closed_token: '이 버전에서는 SceneVoice Cloud가 열려 있지 않아 쓰이지 않으며, 그쪽으로는 아무것도 보내지 않습니다. 이전 버전이 저장한 Cloud 기기 토큰이 이 컴퓨터에 남아 있습니다. “Cloud 사용 중지”를 누르면 지워집니다.',
   set_share_descriptions: '완성된 음성 해설을 다른 SceneVoice 사용자와 공유',
   set_share_descriptions_hint: '동영상의 음성 해설이 모두 완성되면 그 글이 SceneVoice 캐시로 보내져, 다음에 같은 동영상을 보는 사람이 바로 받고 동영상은 한 번만 설명됩니다. 사진, 질문, 당신이 누구인지는 절대 보내지 않습니다. SceneVoice Cloud를 쓸 때만 해당합니다.',
   opt_license_label: '라이선스 키',
@@ -533,13 +540,18 @@ export default {
   plan_org: '기관',
   welcome_title: 'SceneVoice에 오신 것을 환영합니다',
   welcome_intro: 'SceneVoice는 YouTube와 Bilibili 동영상에서 화면에 보이는 것을 대사 사이의 틈에, 스크린 리더나 내장 음성으로 말해 줍니다. 세 단계, 약 2분입니다.',
+  welcome_intro_own: 'SceneVoice는 YouTube와 Bilibili 동영상에서 화면에 보이는 것을 대사 사이의 틈에, 스크린 리더나 내장 음성으로 말해 줍니다. 세 단계입니다. 예시 듣기, 내 키 추가하기, 동영상에서 써 보기.',
   welcome_step1_title: '1. SceneVoice가 무엇을 하는지 들어 보기',
   welcome_step1_body: '동영상 중에 나오는 그대로의 음성 해설 예시 세 개입니다. 아무것도 보내지 않고 키도 필요 없습니다.',
   welcome_output_legend: '듣는 방법',
   welcome_sample_button: '예시 듣기',
+  welcome_sample_silent: '“예시 듣기”를 눌러도 아무것도 들리지 않으면, 사용 중인 스크린 리더가 이 브라우저에서 자동 알림을 읽지 않는 것일 수 있습니다. 위에서 “내장 음성”을 고르고 버튼을 다시 누르세요.',
   welcome_sample_between: '동영상은 계속 재생됩니다. 음성 해설은 틈에 들어갑니다.',
   welcome_sample_done: '예시는 여기까지입니다. 다음: 음성 해설을 만드는 방법 고르기.',
+  welcome_sample_done_own: '예시는 여기까지입니다. 다음: 2단계, 내 키 추가하기.',
   welcome_step2_title: '2. 음성 해설을 만드는 방법 고르기',
+  welcome_step2_title_own: '2. 내 키 추가하기',
+  welcome_own_only: '음성 해설은 AI 모델이 작성하며, 모델에는 사용자 본인의 API 키가 필요합니다. YouTube에는 Google AI Studio의 Gemini 키(무료)를, Bilibili나 Google에 접속할 수 없는 곳에서는 Alibaba Cloud Model Studio의 Qwen 키를 씁니다. 키는 한 번만 붙여 넣으면 됩니다. 이 컴퓨터에만 저장되고 해당 서비스로만 전송되며, SceneVoice를 거치는 것은 없습니다.',
   welcome_source_legend: '음성 해설을 만드는 곳',
   welcome_source_cloud: 'SceneVoice Cloud: 무료 사용량, 설정 불필요',
   welcome_source_cloud_hint: '하루에 동영상 60분을 새로 설명할 수 있습니다. 다른 SceneVoice 사용자가 이미 설명한 동영상은 세지 않습니다. 요청은 익명 기기 토큰으로 SceneVoice 중계 서버를 거치며, 계정은 없습니다.',
@@ -580,7 +592,7 @@ export default {
   web_source_own: '내 Gemini 키',
   web_source_own_hint: 'Google AI Studio에서 무료, 카드 필요 없음. 키는 요청 헤더에 담겨 Google에만 가고 SceneVoice에는 절대 가지 않습니다.',
   web_source_cloud: 'SceneVoice Cloud',
-  web_source_cloud_hint: '프로젝트 자체 키를 SceneVoice 중계 서버를 통해 쓰며, 익명 기기 토큰과 하루 무료 사용량이 있습니다. 아직 열리지 않았습니다. 그때까지는 자신의 키를 쓰세요.',
+  web_source_cloud_hint: '프로젝트 자체 키를 SceneVoice 중계 서버를 통해 쓰며, 익명 기기 토큰과 하루 무료 사용량이 있습니다.',
   web_key_label: 'Gemini API 키',
   web_key_note: '키는 요청 헤더에 담겨 Google의 Gemini API에만 보내지며, 웹 주소에 들어가지 않고 SceneVoice에도 보내지 않습니다.',
   web_remember: '이 기기에 키 기억하기',
@@ -606,7 +618,7 @@ export default {
   web_settings_heading: '4. 어떻게 해설할지',
   web_privacy_heading: '개인정보',
   web_privacy_leaves:
-    '이 브라우저 밖으로 나가는 것: 자신의 키를 쓰면 동영상 링크, 해설할 부분, 키가 Google의 Gemini API(generativelanguage.googleapis.com)로 갑니다. 키는 요청 헤더에 담기며 웹 주소에는 절대 들어가지 않습니다. SceneVoice Cloud를 쓰면 링크와 해설할 부분이 익명 기기 토큰을 같은 헤더에 담아 SceneVoice 중계 서버(api.scenevoice.app)로 갑니다.',
+    '이 브라우저 밖으로 나가는 것: 자신의 키를 쓰면 동영상 링크, 해설할 부분, 키가 Google의 Gemini API(generativelanguage.googleapis.com)로 갑니다. 키는 요청 헤더에 담기며 웹 주소에는 절대 들어가지 않습니다. SceneVoice Cloud를 쓰면 링크와 해설할 부분이 익명 기기 토큰을 같은 헤더에 담아 SceneVoice Cloud 중계 서버로 갑니다.',
   web_privacy_youtube:
     '동영상은 youtube-nocookie.com의 YouTube 삽입 플레이어에서 재생됩니다. 동영상을 삽입한 모든 사이트에서처럼 YouTube는 여전히 자체 쿠키를 설정하고 그 동영상이 재생된 것을 압니다. youtube.com의 플레이어 스크립트는 이 페이지가 SceneVoice 외의 곳에서 불러오는 유일한 스크립트이며, 재생을 누를 때만 불러옵니다.',
   web_privacy_local:

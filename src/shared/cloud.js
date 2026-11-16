@@ -6,9 +6,36 @@
 // For extension pages, the service worker and the offscreen worker only. The
 // device token is a credential and content scripts never see it (they do not
 // import this file: test/security.test.js checks).
+//
+// Every request to the relay's own routes leaves through cloudRequest(), and
+// cloudRequest() sends nothing while SceneVoice Cloud is closed (CLOUD_OPEN in
+// constants.js): whatever a page still shows or a store still holds, the relay
+// is not asked.
 
-import { CLOUD_API_BASE, SCRIPT_VERSION } from './constants.js';
+import { CLOUD_API_BASE, CLOUD_OPEN, SCRIPT_VERSION } from './constants.js';
 import { ApiError } from './errors.js';
+
+/**
+ * What an update forgets while SceneVoice Cloud is closed: a device token an
+ * earlier version saved, its plan, a site left set to Cloud and the sharing
+ * switch. Read back they are already ignored (settings.js); removed, none of
+ * them comes back to life the day Cloud opens under another address. A token
+ * can only be one a relay issued, and the relay address of version 1.1.0 was
+ * never the project's (SECURITY.md).
+ * The storage functions are passed in; the service worker gives its own.
+ * @returns {Promise<{token: boolean, settings: boolean}>} what was removed
+ */
+export async function forgetClosedCloud({ getLocal, setLocal, storedSettings, setSettings }, { open = CLOUD_OPEN } = {}) {
+  if (open) return { token: false, settings: false };
+  const local = (await getLocal()) || {};
+  const token = Boolean(local.cloudToken || local.cloudPlan);
+  if (token) await setLocal({ cloudToken: '', cloudPlan: '' });
+  const stored = (await storedSettings()) || {};
+  const settings = stored.shareDescriptions === true || Object.entries(stored).some(([key, value]) => /Provider$/.test(key) && value === 'cloud');
+  // Saving nothing writes the settings back as they read while closed: no site on Cloud, sharing off.
+  if (settings) await setSettings({});
+  return { token, settings };
+}
 
 /** A device token as the relay issues them: svd_ and 32 hex digits. Nothing else is saved as one. */
 export const validToken = (token) => typeof token === 'string' && /^svd_[0-9a-f]{32}$/i.test(token);
@@ -35,9 +62,12 @@ const TIMEOUT_MS = 15000;
 /**
  * One request to the relay's own routes. The token goes in the x-goog-api-key
  * header (the relay reads the same header as Gemini), never in the address.
- * Resolves to { status, body }; throws ApiError('network') when nothing came back.
+ * Resolves to { status, body }; throws ApiError('network') when nothing came back,
+ * and ApiError('cloud-closed'), without calling fetch, while Cloud is closed
+ * (`open` is the switch; tests pass it, everything else leaves it alone).
  */
-export async function cloudRequest(fetchImpl, path, { method = 'GET', body, token = '' } = {}) {
+export async function cloudRequest(fetchImpl, path, { method = 'GET', body, token = '', open = CLOUD_OPEN } = {}) {
+  if (!open) throw new ApiError('cloud-closed', 'SceneVoice Cloud is not open in this version');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const headers = { 'content-type': 'application/json' };
@@ -67,8 +97,8 @@ const detailOf = (status, body) => String(body?.error?.message || `HTTP ${status
  * allowance. No account: the relay only counts a token's seconds per day.
  * Resolves to { token, plan, allowance }.
  */
-export async function registerDevice(fetchImpl, { version = '', locale = '' } = {}) {
-  const { status, body } = await cloudRequest(fetchImpl, '/v1/devices', { method: 'POST', body: { client: 'extension', version, locale } });
+export async function registerDevice(fetchImpl, { version = '', locale = '', open = CLOUD_OPEN } = {}) {
+  const { status, body } = await cloudRequest(fetchImpl, '/v1/devices', { method: 'POST', body: { client: 'extension', version, locale }, open });
   if (status === 429) {
     // The relay's own 429 here: this network has set up as many new devices as
     // it may today. Not a rate limit a minute's wait would clear, so it is its
@@ -87,8 +117,8 @@ export async function registerDevice(fetchImpl, { version = '', locale = '' } = 
 }
 
 /** The plan and allowance of a token: { plan, allowance, cacheHits }. A token the relay no longer knows is 'bad-key'. */
-export async function fetchMe(fetchImpl, token) {
-  const { status, body } = await cloudRequest(fetchImpl, '/v1/me', { token });
+export async function fetchMe(fetchImpl, token, { open = CLOUD_OPEN } = {}) {
+  const { status, body } = await cloudRequest(fetchImpl, '/v1/me', { token, open });
   if (status === 401) throw new ApiError('bad-key', detailOf(status, body), status);
   if (status < 200 || status >= 300) throw new ApiError('request-failed', detailOf(status, body), status);
   return { plan: cleanPlan(body?.plan), allowance: cleanAllowance(body?.allowance), cacheHits: Number(body?.cacheHits) || 0 };
@@ -98,8 +128,8 @@ export async function fetchMe(fetchImpl, token) {
 export const validLicenseKey = (key) => typeof key === 'string' && /^svl-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/.test(key.trim());
 
 /** Attach a Plus or organisation licence to this token: { plan, allowance }. An unknown key is 'not-found'. */
-export async function activateLicense(fetchImpl, token, licenseKey) {
-  const { status, body } = await cloudRequest(fetchImpl, '/v1/licenses/activate', { method: 'POST', token, body: { licenseKey: String(licenseKey || '').trim() } });
+export async function activateLicense(fetchImpl, token, licenseKey, { open = CLOUD_OPEN } = {}) {
+  const { status, body } = await cloudRequest(fetchImpl, '/v1/licenses/activate', { method: 'POST', token, body: { licenseKey: String(licenseKey || '').trim() }, open });
   if (status === 404) throw new ApiError('not-found', detailOf(status, body), status);
   if (status === 401) throw new ApiError('bad-key', detailOf(status, body), status);
   if (status === 409) throw new ApiError('license-full', detailOf(status, body), status);

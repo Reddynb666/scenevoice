@@ -91,3 +91,18 @@ export async function bindSettings(root, onChange, onError) {
     if (area === 'sync' && changes.settings) apply(await getSettings());
   });
 }
+
+/**
+ * Make a page follow the SceneVoice Cloud switch (CLOUD_OPEN in constants.js).
+ * In the HTML, what belongs to Cloud is marked data-cloud="open" and hidden,
+ * and what is said instead while Cloud is closed is marked data-cloud="closed".
+ * The side that does not apply is taken out of the document, not disabled or
+ * hidden: a screen reader finds no dead control and no words about something
+ * that is not there. Call it before the page is localized or bound to settings.
+ */
+export function applyCloudSwitch(root, open) {
+  for (const el of root.querySelectorAll('[data-cloud]')) {
+    if ((el.dataset.cloud === 'open') === Boolean(open)) el.hidden = false;
+    else el.remove();
+  }
+}

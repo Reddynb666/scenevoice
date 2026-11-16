@@ -265,8 +265,10 @@ describe('the manifest asks for as little as it can', () => {
     expect(bili).toEqual([{ matches: ['https://www.bilibili.com/video/*'], js: ['content.js'], run_at: 'document_idle', all_frames: false }]);
   });
 
-  it('reaches only the two model APIs and the SceneVoice Cloud relay; Bilibili’s own APIs are called from the Bilibili page', () => {
-    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*', 'https://api.scenevoice.app/*']);
+  it('reaches only the two model APIs (the SceneVoice Cloud relay is not asked for while Cloud is closed); Bilibili’s own APIs are called from the Bilibili page', () => {
+    expect(manifest.host_permissions).toEqual(['https://generativelanguage.googleapis.com/*', 'https://dashscope.aliyuncs.com/*']);
+    // No other host is named anywhere in it: every https address is one of the two, a site it runs on, or the optional pattern.
+    expect([...new Set(JSON.stringify(manifest).match(/https:\/\/[^/"]+/g))].sort()).toEqual(['https://*', 'https://dashscope.aliyuncs.com', 'https://generativelanguage.googleapis.com', 'https://m.youtube.com', 'https://www.bilibili.com', 'https://www.youtube-nocookie.com', 'https://www.youtube.com']);
     expect(manifest.permissions).toEqual(['storage', 'unlimitedStorage', 'tts', 'activeTab', 'offscreen']);
   });
 });

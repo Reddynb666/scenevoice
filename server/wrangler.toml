@@ -11,9 +11,14 @@ compatibility_date = "2026-10-01"
 [observability]
 enabled = true
 
-# Custom domain. The extension's CLOUD_API_BASE must point at the same host.
-# Uncomment after the zone is on Cloudflare; wrangler creates the DNS record.
-# routes = [{ pattern = "api.scenevoice.app", custom_domain = true }]
+# Custom domain. The relay runs only under a domain its operator holds: an
+# address on anyone else's domain lets that party answer as the relay, and the
+# clients would send it video links, titles, questions and pictures.
+# FILL IN: the host below is a placeholder on the reserved .invalid top-level
+# domain, which never resolves. Replace it with a host on your own domain, set
+# the extension's CLOUD_API_BASE (src/shared/constants.js) to the same address,
+# then uncomment. With the zone on Cloudflare, wrangler creates the DNS record.
+# routes = [{ pattern = "relay.your-domain.invalid", custom_domain = true }]
 
 # Plain settings (not secret). Secrets are set with `wrangler secret put`:
 #   GEMINI_API_KEY         required: the server's Gemini key
@@ -37,8 +42,13 @@ FREE_MODELS = "^gemini-\\d(\\.\\d)?-flash(-lite)?(-preview(-\\d{2}-\\d{2,4})?|-\
 # The same for DashScope (the model is read from the request body on the free plan).
 QWEN_FREE_MODELS = "^qwen\\d(\\.\\d)?-vl-(plus|flash)$"
 # Web origins allowed besides the extension (which sends chrome-extension://
-# or no Origin at all and needs no entry here). Comma separated.
-ALLOWED_ORIGINS = "https://scenevoice.app,https://www.scenevoice.app"
+# or no Origin at all and needs no entry here). Comma separated. A page on a
+# listed origin can use the relay from a visitor's browser, so list only sites
+# you control: the web player's origin (https://reddynb666.github.io while it
+# is on GitHub Pages) and the project's site once it has a domain of its own.
+# FILL IN: the value below is a placeholder on .invalid and admits no site at
+# all; as it stands every web page is refused (server/test/devices.test.js).
+ALLOWED_ORIGINS = "https://your-site.invalid"
 # New device tokens one network address may create per day.
 DEVICES_PER_IP_PER_DAY = "20"
 # Seconds charged for a successful upstream answer without a token count.

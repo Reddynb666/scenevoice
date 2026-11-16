@@ -6,6 +6,7 @@ This applies only when SceneVoice's model source is set to **SceneVoice Cloud**.
 
 ## English
 
+- **Not running yet, and no address yet.** SceneVoice Cloud is not open: no relay is deployed, and the extension and the web player neither offer it nor send it anything. When it opens, its address will be on a domain the project holds and will be published in `PRIVACY.md`; until then no address anywhere is the SceneVoice Cloud relay.
 - **No account.** When you choose SceneVoice Cloud, the extension asks the relay for an anonymous device token. The relay stores the token, the plan (free, Plus, organisation) and the date it was made, nothing about you, your browser or your computer.
 - **What passes through.** The same request the extension would send with your own key (the video link or small pictures of the playing video, the title, channel and description, the section to describe, the recent descriptions and your question; caption timing is read on your computer only and is never sent) goes to the relay, which forwards it to the model with the operator's key and sends the answer back. The relay does not keep or log request bodies, and does not open them except to read the model name from a free-plan request to Alibaba Cloud (that API names the model inside the request). Pictures and questions are never stored.
 - **What is counted.** Per device and per UTC day: how many seconds of video were described (from the model's token counts), how many model requests were made in the current minute and how many descriptions were shared. These counters expire after two days at most. The relay also keeps, for as long as the token exists, one running number per device: how many times the shared cache answered for it (shown in the extension and by `GET /v1/me` as cache hits). New registrations are counted per network address for one day using a one-way hash of the address; the address itself is not stored.
@@ -17,6 +18,7 @@ This applies only when SceneVoice's model source is set to **SceneVoice Cloud**.
 
 ## 简体中文
 
+- **还没有运行，也还没有地址。** SceneVoice Cloud 尚未开放：中继服务器没有部署，扩展和网页播放器既不提供它，也不向它发送任何内容。开放时，它的地址会在项目自己持有的域名下，并写进 `PRIVACY.md`；在那之前，任何地址都不是 SceneVoice Cloud 的中继服务器。
 - **不需要账号。** 选择 SceneVoice Cloud 时，扩展会向中继服务器申请一个匿名的设备令牌。服务器只保存令牌、所属档位（免费、Plus、机构）和创建日期，不保存关于您、您的浏览器或电脑的任何信息。
 - **经过中继的内容。** 与使用自己密钥时发送的请求完全相同（视频链接或正在播放画面的小图、标题、频道名和简介、要描述的段落、最近的描述和您提出的问题；字幕时间只在您的电脑上读取，从不发送），先到中继服务器，再由服务器用运营者的密钥转发给模型，并把回答原样返回。服务器不保存、不记录请求内容，也不打开请求内容——唯一的例外是免费档位发往阿里云的请求，服务器只读取其中的模型名称（该接口把模型名写在请求体里）。画面和问题从不存储。
 - **统计什么。** 按设备、按 UTC 日期统计已描述的视频秒数（由模型返回的 token 数折算）、当前一分钟内的模型请求次数，以及当天共享的描述份数，这些计数最多两天后自动过期。此外，服务器为每个设备保留一个累计数字，与令牌同寿：共享缓存为它回答了多少次（扩展里和 `GET /v1/me` 显示为缓存命中次数）。新注册按网络地址每天计数，用的是地址的单向哈希值，地址本身不保存。

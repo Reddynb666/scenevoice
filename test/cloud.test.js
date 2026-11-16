@@ -2,10 +2,26 @@
 // the key goes, the relay's address fixed), the relay's own requests, what may
 // go into the shared cache and what may come out of it, the worker's two cache
 // commands, and the words the listener hears.
+//
+// SceneVoice Cloud is closed as shipped (CLOUD_OPEN in constants.js is false):
+// what it does once open is tested here with the switch on. The pure functions
+// take the switch as an argument; the offscreen worker reads the constant, so
+// for it the constant is stood in for by a flag the tests set. What "closed"
+// means everywhere is in test/cloud-closed.test.js.
 
 // @vitest-environment jsdom
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/** The Cloud switch as the modules under test see it. */
+const cloud = vi.hoisted(() => ({ open: false }));
+vi.mock('../src/shared/constants.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  get CLOUD_OPEN() {
+    return cloud.open;
+  },
+}));
+
 import { LOCALES, STRINGS } from '../scripts/locales.mjs';
 import { CLOUD_API_BASE, DEFAULT_LOCAL, DEFAULT_SETTINGS, PROVIDERS, SAMPLE_DESCRIPTIONS, SCRIPT_VERSION } from '../src/shared/constants.js';
 import { activateLicense, adoptCloudScript, cloudScriptOk, fetchMe, registerDevice, shareableScript, validLicenseKey, validToken } from '../src/shared/cloud.js';
@@ -18,6 +34,8 @@ import { COUNTED_PROVIDERS } from '../src/shared/usage.js';
 import { fakeChrome } from './fake-chrome.js';
 
 const TOKEN = `svd_${'0123456789abcdef'.repeat(2)}`;
+/** The switch, on, for the relay's own requests (cloud.js takes it as an option). */
+const OPEN = { open: true };
 
 /** A fetch that answers every request the same way and remembers what it was asked. */
 function fakeFetch(status, body) {
@@ -29,27 +47,27 @@ describe('the cloud provider', () => {
     expect(PROVIDERS).toEqual(['gemini', 'qwen', 'cloud']);
     expect(inputModeFor('cloud', 'youtube')).toBe('video');
     expect(inputModeFor('cloud', 'bilibili')).toBe('frames');
-    expect(providerFor({ youtubeProvider: 'cloud' }, 'youtube')).toBe('cloud');
+    expect(providerFor({ youtubeProvider: 'cloud' }, 'youtube', true)).toBe('cloud');
   });
 
   it('stands in only when the listener has no key of their own, and their own key comes first', () => {
     // Nothing of their own, a token: Cloud, on either site.
-    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: false, cloud: true })).toBe('cloud');
-    expect(effectiveProvider(DEFAULT_SETTINGS, 'bilibili', { gemini: false, qwen: false, cloud: true })).toBe('cloud');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: false, cloud: true }, true)).toBe('cloud');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'bilibili', { gemini: false, qwen: false, cloud: true }, true)).toBe('cloud');
     // The other key of their own beats the token.
-    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: true, cloud: true })).toBe('qwen');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: true, cloud: true }, true)).toBe('qwen');
     // Cloud chosen but no token: a key of their own describes; with nothing at all, Cloud stays chosen (and is asked for).
     const cloud = { ...DEFAULT_SETTINGS, youtubeProvider: 'cloud', bilibiliProvider: 'cloud' };
-    expect(effectiveProvider(cloud, 'youtube', { gemini: true, qwen: false, cloud: false })).toBe('gemini');
-    expect(effectiveProvider(cloud, 'youtube', { gemini: false, qwen: false, cloud: false })).toBe('cloud');
-    expect(effectiveProvider(cloud, 'youtube', { gemini: true, qwen: true, cloud: true })).toBe('cloud');
+    expect(effectiveProvider(cloud, 'youtube', { gemini: true, qwen: false, cloud: false }, true)).toBe('gemini');
+    expect(effectiveProvider(cloud, 'youtube', { gemini: false, qwen: false, cloud: false }, true)).toBe('cloud');
+    expect(effectiveProvider(cloud, 'youtube', { gemini: true, qwen: true, cloud: true }, true)).toBe('cloud');
     // The keys of before, without a cloud entry, still work.
-    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: false })).toBe('gemini');
+    expect(effectiveProvider(DEFAULT_SETTINGS, 'youtube', { gemini: false, qwen: false }, true)).toBe('gemini');
   });
 
   it('keeps the choice and the sharing switch in the synced settings, and the token with the keys', () => {
-    expect(normalizeSettings({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true })).toMatchObject({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true });
-    expect(normalizeSettings({ shareDescriptions: 'yes' }).shareDescriptions).toBe(false);
+    expect(normalizeSettings({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true }, { cloudOpen: true })).toMatchObject({ youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true });
+    expect(normalizeSettings({ shareDescriptions: 'yes' }, { cloudOpen: true }).shareDescriptions).toBe(false);
     expect(DEFAULT_SETTINGS.shareDescriptions).toBe(false);
     expect(Object.keys(DEFAULT_SETTINGS).some((k) => /key|token/i.test(k))).toBe(false);
     expect(DEFAULT_LOCAL).toMatchObject({ cloudToken: '', cloudPlan: '', cloudModel: '' });
@@ -57,33 +75,34 @@ describe('the cloud provider', () => {
   });
 
   it('is a Gemini client pointed at the relay, whatever address the config names', () => {
-    const client = createClient('cloud', { apiKey: TOKEN, apiBase: 'https://evil.example', model: 'gemini-2.5-flash' });
+    const client = createClient('cloud', { apiKey: TOKEN, apiBase: 'https://evil.example', model: 'gemini-2.5-flash' }, undefined, true);
     expect(client).toBeInstanceOf(GeminiClient);
     expect(client.apiBase).toBe(CLOUD_API_BASE);
     expect(client.apiKey).toBe(TOKEN);
     expect(client.model).toBe('gemini-2.5-flash');
-    expect(CLOUD_API_BASE).toBe('https://api.scenevoice.app');
+    // The address itself is checked against the switch in test/no-foreign-domain.test.js.
+    expect(new URL(CLOUD_API_BASE).protocol).toBe('https:');
   });
 });
 
 describe('the relay’s own requests', () => {
   it('registers a device and keeps only a token of the right shape', async () => {
     const fetch = fakeFetch(201, { token: TOKEN, plan: 'free', allowance: { secondsPerDay: 3600, usedToday: 0, resetsAt: '2026-11-05T00:00:00Z' } });
-    const got = await registerDevice(fetch, { version: '1.1.0', locale: 'en' });
+    const got = await registerDevice(fetch, { version: '1.1.0', locale: 'en', open: true });
     expect(got).toEqual({ token: TOKEN, plan: 'free', allowance: { secondsPerDay: 3600, usedToday: 0, resetsAt: '2026-11-05T00:00:00Z' } });
     const [url, init] = fetch.mock.calls[0];
-    expect(url).toBe('https://api.scenevoice.app/v1/devices');
+    expect(url).toBe(`${CLOUD_API_BASE}/v1/devices`);
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({ client: 'extension', version: '1.1.0', locale: 'en' });
     expect(init.headers).not.toHaveProperty('x-goog-api-key');
 
-    await expect(registerDevice(fakeFetch(200, { token: '<script>alert(1)</script>' }))).rejects.toMatchObject({ code: 'request-failed' });
+    await expect(registerDevice(fakeFetch(200, { token: '<script>alert(1)</script>' }), OPEN)).rejects.toMatchObject({ code: 'request-failed' });
     // The relay's daily limit on new devices per network is its own error, with the time it opens again; any other 429 is a rate limit.
     const limited = { error: { code: 429, message: 'Too many new SceneVoice devices from this network today. Try again tomorrow.', status: 'RESOURCE_EXHAUSTED', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT', resetsAt: '2026-11-05T00:00:00Z' }] } };
-    await expect(registerDevice(fakeFetch(429, limited))).rejects.toMatchObject({ code: 'device-limit', resetAt: '2026-11-05T00:00:00Z' });
-    await expect(registerDevice(fakeFetch(429, { error: { message: 'limit', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT', resetsAt: 'soon' }] } }))).rejects.toMatchObject({ code: 'device-limit', resetAt: '' });
-    await expect(registerDevice(fakeFetch(429, { error: { message: 'too many devices' } }))).rejects.toMatchObject({ code: 'rate-limited' });
-    await expect(registerDevice(vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))).rejects.toMatchObject({ code: 'network' });
+    await expect(registerDevice(fakeFetch(429, limited), OPEN)).rejects.toMatchObject({ code: 'device-limit', resetAt: '2026-11-05T00:00:00Z' });
+    await expect(registerDevice(fakeFetch(429, { error: { message: 'limit', details: [{ reason: 'SCENEVOICE_DEVICE_LIMIT', resetsAt: 'soon' }] } }), OPEN)).rejects.toMatchObject({ code: 'device-limit', resetAt: '' });
+    await expect(registerDevice(fakeFetch(429, { error: { message: 'too many devices' } }), OPEN)).rejects.toMatchObject({ code: 'rate-limited' });
+    await expect(registerDevice(vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))), OPEN)).rejects.toMatchObject({ code: 'network' });
     expect(validToken(TOKEN)).toBe(true);
     expect(validToken('svd_short')).toBe(false);
     expect(validToken(`AIza${'x'.repeat(35)}`)).toBe(false);
@@ -91,23 +110,23 @@ describe('the relay’s own requests', () => {
 
   it('sends the token in a header, never in the address', async () => {
     const fetch = fakeFetch(200, { plan: 'plus', allowance: { secondsPerDay: 14400, usedToday: 120 }, cacheHits: 3 });
-    expect(await fetchMe(fetch, TOKEN)).toEqual({ plan: 'plus', allowance: { secondsPerDay: 14400, usedToday: 120, resetsAt: '' }, cacheHits: 3 });
+    expect(await fetchMe(fetch, TOKEN, OPEN)).toEqual({ plan: 'plus', allowance: { secondsPerDay: 14400, usedToday: 120, resetsAt: '' }, cacheHits: 3 });
     const [url, init] = fetch.mock.calls[0];
-    expect(url).toBe('https://api.scenevoice.app/v1/me');
+    expect(url).toBe(`${CLOUD_API_BASE}/v1/me`);
     expect(url).not.toContain(TOKEN);
     expect(init.headers['x-goog-api-key']).toBe(TOKEN);
-    await expect(fetchMe(fakeFetch(401, { error: { message: 'unknown device' } }), TOKEN)).rejects.toMatchObject({ code: 'bad-key' });
+    await expect(fetchMe(fakeFetch(401, { error: { message: 'unknown device' } }), TOKEN, OPEN)).rejects.toMatchObject({ code: 'bad-key' });
   });
 
   it('activates a licence, and tells an unknown key from a full one', async () => {
     const fetch = fakeFetch(200, { plan: 'org', allowance: { secondsPerDay: 36000, usedToday: 0 } });
-    expect(await activateLicense(fetch, TOKEN, ' svl-ABCD-EFGH-IJKL ')).toMatchObject({ plan: 'org' });
+    expect(await activateLicense(fetch, TOKEN, ' svl-ABCD-EFGH-IJKL ', OPEN)).toMatchObject({ plan: 'org' });
     const [url, init] = fetch.mock.calls[0];
-    expect(url).toBe('https://api.scenevoice.app/v1/licenses/activate');
+    expect(url).toBe(`${CLOUD_API_BASE}/v1/licenses/activate`);
     expect(JSON.parse(init.body)).toEqual({ licenseKey: 'svl-ABCD-EFGH-IJKL' });
     expect(init.headers['x-goog-api-key']).toBe(TOKEN);
-    await expect(activateLicense(fakeFetch(404, {}), TOKEN, 'svl-ABCD-EFGH-IJKL')).rejects.toMatchObject({ code: 'not-found' });
-    await expect(activateLicense(fakeFetch(409, {}), TOKEN, 'svl-ABCD-EFGH-IJKL')).rejects.toMatchObject({ code: 'license-full' });
+    await expect(activateLicense(fakeFetch(404, {}), TOKEN, 'svl-ABCD-EFGH-IJKL', OPEN)).rejects.toMatchObject({ code: 'not-found' });
+    await expect(activateLicense(fakeFetch(409, {}), TOKEN, 'svl-ABCD-EFGH-IJKL', OPEN)).rejects.toMatchObject({ code: 'license-full' });
     expect(validLicenseKey('svl-ABCD-EFGH-IJKL')).toBe(true);
     expect(validLicenseKey('svl-ABCD-EFGH')).toBe(false);
   });
@@ -172,11 +191,13 @@ describe('the worker’s cache commands', () => {
   let seq = 0;
 
   beforeAll(async () => {
+    cloud.open = true;
     globalThis.self = { postMessage: (m) => posted.push(m) };
     await import('../src/offscreen/worker.js');
   });
 
   afterAll(() => {
+    cloud.open = false;
     globalThis.fetch = realFetch;
   });
 
@@ -196,7 +217,7 @@ describe('the worker’s cache commands', () => {
     const reply = await send({ cmd: 'cloud-get', config: { apiKey: TOKEN }, params: { videoId: 'abcdefghijk', lang: 'en' } });
     expect(reply).toMatchObject({ script });
     const [url, init] = fetch.mock.calls[0];
-    expect(url).toBe(`https://api.scenevoice.app/v1/scripts/abcdefghijk?lang=en&v=${SCRIPT_VERSION}`);
+    expect(url).toBe(`${CLOUD_API_BASE}/v1/scripts/abcdefghijk?lang=en&v=${SCRIPT_VERSION}`);
     expect(init.method).toBe('GET');
     expect(init.headers['x-goog-api-key']).toBe(TOKEN);
     expect(url).not.toContain(TOKEN);
@@ -207,12 +228,30 @@ describe('the worker’s cache commands', () => {
     expect(await send({ cmd: 'cloud-get', config: { apiKey: TOKEN }, params: { videoId: 'abcdefghijk', lang: 'en' } })).toMatchObject({ error: 'network' });
   });
 
+  it('asks the relay nothing while Cloud is closed: the cache commands, and a job, a question or frames for Cloud, are refused before any request', async () => {
+    cloud.open = false;
+    try {
+      globalThis.fetch = fetch = fakeFetch(200, {});
+      const config = { apiKey: TOKEN, apiBase: CLOUD_API_BASE, model: '' };
+      expect(await send({ cmd: 'cloud-get', config, params: { videoId: 'abcdefghijk', lang: 'en' } })).toMatchObject({ error: 'cloud-closed' });
+      expect(await send({ cmd: 'cloud-put', config, params: { videoId: 'abcdefghijk', lang: 'en', script: {} } })).toMatchObject({ error: 'cloud-closed' });
+      expect(await send({ cmd: 'start', key: 'abcdefghijk:en', provider: 'cloud', config, params: { videoId: 'abcdefghijk', duration: 600, lang: 'en' } })).toMatchObject({ error: 'cloud-closed' });
+      expect(await send({ cmd: 'ask', mode: 'video', provider: 'cloud', config, params: { videoId: 'abcdefghijk', question: 'Who?' } })).toMatchObject({ error: 'cloud-closed' });
+      expect(await send({ cmd: 'frames', provider: 'cloud', config, params: {} })).toMatchObject({ error: 'cloud-closed' });
+      expect(fetch).not.toHaveBeenCalled();
+      // No job was left behind.
+      expect(await send({ cmd: 'status' })).toMatchObject({ jobs: [], inFlight: 0, waiting: 0 });
+    } finally {
+      cloud.open = true;
+    }
+  });
+
   it('puts a finished script, and says when the relay would not take it', async () => {
     const script = { version: SCRIPT_VERSION, videoId: 'bili:BV1GJ411x7h7', lang: 'zh-CN', cues: [], complete: true };
     globalThis.fetch = fetch = fakeFetch(204, null);
     expect(await send({ cmd: 'cloud-put', config: { apiKey: TOKEN }, params: { videoId: 'bili:BV1GJ411x7h7', lang: 'zh-CN', script } })).toMatchObject({ ok: true });
     const [url, init] = fetch.mock.calls[0];
-    expect(url).toBe('https://api.scenevoice.app/v1/scripts/bili%3ABV1GJ411x7h7?lang=zh-CN');
+    expect(url).toBe(`${CLOUD_API_BASE}/v1/scripts/bili%3ABV1GJ411x7h7?lang=zh-CN`);
     expect(init.method).toBe('PUT');
     expect(JSON.parse(init.body)).toEqual(script);
     expect(init.headers['x-goog-api-key']).toBe(TOKEN);

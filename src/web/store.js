@@ -4,7 +4,7 @@
 // videoId + language + script version, so a second visit is instant.
 // Every read and write is wrapped: storage can be off (private window) or full.
 
-import { SCRIPT_VERSION } from '../shared/constants.js';
+import { CLOUD_OPEN, SCRIPT_VERSION } from '../shared/constants.js';
 import { normalizeSettings } from '../shared/settings.js';
 
 export const SETTINGS_KEY = 'scenevoice-play-settings';
@@ -40,8 +40,11 @@ function writeJson(storage, key, value) {
   }, false);
 }
 
-/** The listener's choices, validated like the extension's settings. */
-export function loadSettings(local) {
+/**
+ * The listener's choices, validated like the extension's settings. While
+ * SceneVoice Cloud is closed a saved choice of Cloud reads as the own key.
+ */
+export function loadSettings(local, { cloudOpen = CLOUD_OPEN } = {}) {
   const raw = readJson(local, SETTINGS_KEY) || {};
   const s = normalizeSettings({ ...WEB_DEFAULTS, ...raw });
   return {
@@ -51,7 +54,7 @@ export function loadSettings(local) {
     output: s.output,
     readerSpeed: s.readerSpeed,
     ttsRate: s.ttsRate,
-    source: SOURCES.has(raw.source) ? raw.source : WEB_DEFAULTS.source,
+    source: SOURCES.has(raw.source) && (cloudOpen || raw.source !== 'cloud') ? raw.source : WEB_DEFAULTS.source,
   };
 }
 

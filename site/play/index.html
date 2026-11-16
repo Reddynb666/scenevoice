@@ -8,14 +8,25 @@
   scripts/locales/en.mjs and zh_CN.mjs under "Web player (site/play)".
 
   Content-Security-Policy: the page may run its own script and YouTube's player
-  script, talk to Google's Gemini API and the SceneVoice relay, and frame the
-  YouTube player. Nothing else loads, by policy and not only by promise.
+  script, talk to Google's Gemini API, and frame the YouTube player. Nothing else
+  loads, by policy and not only by promise.
+
+  SceneVoice Cloud is closed (CLOUD_OPEN in src/shared/constants.js is false), so:
+    - connect-src does not list the relay: the page cannot reach it even by mistake.
+      THE DAY CLOUD OPENS, add the relay's origin (CLOUD_API_BASE) to connect-src by
+      hand; this is the one place the switch cannot reach, and site/check.mjs fails
+      until the two agree, in either direction.
+    - the choice between "My Gemini key" and "SceneVoice Cloud" ships hidden. The
+      script takes it out of the document while Cloud is closed and shows it when
+      Cloud is open (src/web/app.js); the key field below it is all a visitor needs.
+    - the two privacy points that would name the relay carry their own-key wording
+      here; the script swaps in the wording with Cloud only when Cloud is open.
 -->
 <html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; connect-src 'self' https://generativelanguage.googleapis.com https://api.scenevoice.app; frame-src https://www.youtube-nocookie.com https://www.youtube.com; img-src 'self' data:; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; connect-src 'self' https://generativelanguage.googleapis.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com; img-src 'self' data:; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <title data-i18n="web_title">SceneVoice web player</title>
 <meta name="description" content="Paste a YouTube link and hear AI audio description through your screen reader or the browser’s voice. Nothing to install." data-i18n-attr="content:web_meta_description">
 <link rel="canonical" href="https://reddynb666.github.io/scenevoice/play/">
@@ -36,10 +47,10 @@
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
+<meta property="og:image:alt" content="SceneVoice: audio description for YouTube and Bilibili videos, in the pauses, through your own screen reader.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://reddynb666.github.io/scenevoice/assets/og.png">
-<meta name="twitter:image:alt" content="SceneVoice: audio description for any YouTube or Bilibili video, in the pauses, through your own screen reader.">
+<meta name="twitter:image:alt" content="SceneVoice: audio description for YouTube and Bilibili videos, in the pauses, through your own screen reader.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0b4a8f">
 </head>
@@ -76,7 +87,7 @@
 
   <section id="source" aria-labelledby="source-heading">
     <h2 id="source-heading" data-i18n="web_source_heading">2. Who writes the descriptions</h2>
-    <fieldset>
+    <fieldset hidden>
       <legend data-i18n="web_source_legend">Descriptions are made by</legend>
       <div class="choice">
         <input type="radio" name="source" id="source-own" value="own" aria-describedby="source-own-hint" checked>
@@ -86,7 +97,7 @@
       <div class="choice">
         <input type="radio" name="source" id="source-cloud" value="cloud" aria-describedby="source-cloud-hint">
         <label for="source-cloud" data-i18n="web_source_cloud">SceneVoice Cloud</label>
-        <p id="source-cloud-hint" class="hint" data-i18n="web_source_cloud_hint">The project’s own key through the SceneVoice relay, with an anonymous device token and a free daily allowance. Not open yet: use your own key until it is.</p>
+        <p id="source-cloud-hint" class="hint" data-i18n="web_source_cloud_hint">The project’s own key through the SceneVoice relay, with an anonymous device token and a free daily allowance.</p>
       </div>
     </fieldset>
     <div id="key-block">
@@ -186,9 +197,9 @@
   <section id="privacy" aria-labelledby="privacy-heading">
     <h2 id="privacy-heading" data-i18n="web_privacy_heading">Privacy</h2>
     <ul>
-      <li data-i18n="web_privacy_leaves">What leaves this browser: with your own key, the video’s link, the part to describe and your key go to Google’s Gemini API (generativelanguage.googleapis.com), the key in a request header, never in a web address. With SceneVoice Cloud, the link and the part to describe go to the SceneVoice relay (api.scenevoice.app) with an anonymous device token in the same header.</li>
+      <li data-i18n="web_privacy_leaves">What leaves this browser: the video’s link, the part to describe and your key go to Google’s Gemini API (generativelanguage.googleapis.com), the key in a request header, never in a web address. Nothing goes to SceneVoice.</li>
       <li data-i18n="web_privacy_youtube">The video plays in YouTube’s embedded player from youtube-nocookie.com. YouTube still sets its own cookies and sees that the video was watched, as on any site that embeds one. The player’s script from youtube.com is the only script this page loads from anyone but SceneVoice, and it is loaded only when you press Play.</li>
-      <li data-i18n="web_privacy_local">No analytics, no account, no cookies of its own. Your key (if remembered), the device token, your choices and the finished descriptions stay in this browser’s storage and go with the browser’s site data when you clear it. Descriptions and answers are written by an AI and can be wrong.</li>
+      <li data-i18n="web_privacy_local">No analytics, no account, no cookies of its own. Your key (if remembered), your choices and the finished descriptions stay in this browser’s storage and go with the browser’s site data when you clear it. Descriptions and answers are written by an AI and can be wrong.</li>
     </ul>
     <p><a id="privacy-link" href="https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md" data-i18n="web_privacy_policy" data-i18n-attr="href:web_privacy_url">Full privacy policy</a></p>
     <p><span data-i18n="web_extension_note">For Bilibili, for timing from the real captions and for the shortcuts on youtube.com itself, install the extension:</span> <a href="../#install" data-i18n="web_extension_link">install SceneVoice</a></p>

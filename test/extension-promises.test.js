@@ -78,4 +78,13 @@ describe('the extension is unchanged by the film product', () => {
     expect(config.test.exclude).toContain('tools/**');
     expect(config.test.exclude).toContain('**/node_modules/**');
   });
+
+  it('does not collect the other worktrees: in the main checkout they live under .claude/worktrees, and .claude/ is excluded', () => {
+    expect(config.test.exclude).toContain('.claude/**');
+    // The defaults are kept, not replaced.
+    expect(config.test.exclude).toContain('**/.git/**');
+    // The pattern is anchored at the root being tested: a suite run from inside a worktree (whose own path
+    // contains .claude/worktrees/) still collects its own tests. This file running at all is the proof.
+    expect(config.test.exclude.filter((p) => p.includes('.claude'))).toEqual(['.claude/**']);
+  });
 });

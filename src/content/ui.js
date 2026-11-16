@@ -81,6 +81,17 @@ function setLang(el, lang) {
   else el.removeAttribute('lang');
 }
 
+/**
+ * Whether a key press in the question field sends the question: Enter, without
+ * Shift, and not while an input method is composing. With a Chinese, Japanese
+ * or Korean input method, Enter picks a candidate or commits the letters typed
+ * so far; that Enter (isComposing, or keyCode 229 where the browser reports it
+ * that way) must not send half a sentence.
+ */
+export function sendsQuestion(e) {
+  return e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229;
+}
+
 export class PageUI {
   constructor({ onToggle, platform = youtubePlatform }) {
     this.onToggle = onToggle;
@@ -175,10 +186,13 @@ export class PageUI {
     clearTimeout(this.hideTimer);
     this.overlay.replaceChildren();
     // Always marked as made by AI (China's labelling rules ask for a visible notice); on-screen text says so too.
-    const k = document.createElement('span');
-    k.className = 'kind';
-    k.textContent = kind === 'text' ? `${t('overlay_ai')} · ${t('overlay_on_screen_text')}` : t('overlay_ai');
-    this.overlay.append(k);
+    // A notice is SceneVoice's own words (the built-in voice cannot speak), not a description: no AI mark.
+    if (kind !== 'notice') {
+      const k = document.createElement('span');
+      k.className = 'kind';
+      k.textContent = kind === 'text' ? `${t('overlay_ai')} · ${t('overlay_on_screen_text')}` : t('overlay_ai');
+      this.overlay.append(k);
+    }
     this.overlay.append(document.createTextNode(text));
     this.overlay.hidden = false;
     this.hideTimer = setTimeout(() => {
@@ -283,7 +297,7 @@ export class PageUI {
     // Keep the player's single-key shortcuts (YouTube's k, j, l, f, m; Bilibili's space, d, f…) from firing while typing.
     for (const type of ['keydown', 'keyup', 'keypress']) {
       dialog.addEventListener(type, (e) => {
-        if (type === 'keydown' && e.key === 'Enter' && !e.shiftKey && e.target === input) {
+        if (type === 'keydown' && e.target === input && sendsQuestion(e)) {
           e.preventDefault();
           dialog.querySelector('form').requestSubmit();
         }
