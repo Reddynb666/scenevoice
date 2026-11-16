@@ -81,10 +81,13 @@ export const LONG_REQUEST_MS = 40000;
 
 /**
  * How long a section may take to begin answering before the model is taken as
- * overloaded: 45 seconds, or more for a long section (0.3 s per second of
- * video). Only a streamed answer can tell "has not begun" from "still writing".
+ * overloaded: two minutes, or more for a very long section (0.3 s per second
+ * of video). Before its first piece the model fetches the video and thinks,
+ * which does not get shorter with the video, and a proxy may hold the stream
+ * back: 45 seconds turned a 70-second video into a timeout on three models in
+ * a row. Only a streamed answer can tell "has not begun" from "still writing".
  */
-export const firstAnswerMs = (chunk) => Math.max(45000, Math.round((chunk.end - chunk.start) * 300));
+export const firstAnswerMs = (chunk) => Math.max(120000, Math.round((chunk.end - chunk.start) * 300));
 
 /**
  * One section's descriptions, with what the request(s) cost: { cues, characters, videoType, usage }.

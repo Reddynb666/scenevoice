@@ -130,9 +130,10 @@ describe('a streamed answer', () => {
     expect(out.usageMetadata).toEqual({ promptTokenCount: 1, candidatesTokenCount: 5 });
   });
 
-  it('the first-answer deadline is 45 seconds, longer for long sections', () => {
-    expect(firstAnswerMs({ start: 0, end: 60 })).toBe(45000);
-    expect(firstAnswerMs({ start: 0, end: 300 })).toBe(90000);
+  it('the first-answer deadline is two minutes however short the video, longer for very long sections', () => {
+    expect(firstAnswerMs({ start: 0, end: 60 })).toBe(120000);
+    expect(firstAnswerMs({ start: 0, end: 300 })).toBe(120000);
+    expect(firstAnswerMs({ start: 0, end: 600 })).toBe(180000);
   });
 });
 
@@ -204,7 +205,7 @@ describe('generation with streamed answers', () => {
       'partial 300: 301,330 (script 4, until 300)',
       'chunk until 570',
     ]);
-    expect(client.calls[0].opts.firstAnswerMs).toBe(90000);
+    expect(client.calls[0].opts.firstAnswerMs).toBe(120000);
   });
 
   it('moves to another model when the first never begins to answer, without splitting the section, and skips it next time', async () => {
