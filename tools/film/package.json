@@ -1,0 +1,22 @@
+{
+  "name": "scenevoice-film-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Command-line measurement scripts for the film kill tests. Nothing here ships.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "fetch": "node fetch-fixture.mjs && node fetch-models.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "check": "node check-faces.mjs fixtures/tears_of_steel_720p.mov",
+    "bench": "node prepass-bench.mjs fixtures/tears_of_steel_720p.mov",
+    "bench:k4": "node prepass-bench.mjs fixtures/tears_of_steel_720p.mov --runs 3 --report-dir ../../docs/film/killtests",
+    "tracks": "node face-tracks.mjs fixtures/tears_of_steel_720p.mov"
+  },
+  "dependencies": {
+    "onnxruntime-node": "1.31.1"
+  }
+}

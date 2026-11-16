@@ -1,0 +1,437 @@
+{
+  "id": "K4",
+  "what": "Local pre-pass timing: probe, decode at the sampling rate, face detection (YuNet) in every sampled frame, an embedding (SFace) for every face of at least 40 px, scene scores for every picture, audio to 16 kHz mono WAV, text subtitles to SRT. Only this part of K4; see notMeasured.",
+  "film": "Tears of Steel (720p)",
+  "source": "open licence: the film's end credits read \"Licensed as Creative Commons Attribution 3.0 / www.tearsofsteel.org\" (read by eye at 703 s); copyright.txt next to the download states Creative Commons Attribution-NoDerivs 3.0 and says: \"This license applies to the Original Soundtrack files of Tears of Steel.\". https://download.blender.org/demo/movies/ToS/tears_of_steel_720p.mov, sha256 efa9062d9cdb7a338e40ad530dfdf234806743f29ae6a1a136b97ece4e588e8f, fetched 2026-11-15T22:28:24.000Z",
+  "machine": {
+    "model": "Apple M3 (Mac15,13)",
+    "os": "macOS 26.3.1 (25D771280a)",
+    "cpuCores": 8,
+    "memoryGb": 8,
+    "arch": "arm64"
+  },
+  "date": "2026-11-16T04:23:29Z",
+  "tools": {
+    "node": "v24.14.0",
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "faceRuntime": "onnxruntime-node 1.31.1",
+    "faceModels": [
+      "yunet: face_detection_yunet_2023mar.onnx (MIT), sha256 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "sface: face_recognition_sface_2021dec.onnx (Apache-2.0), sha256 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+    ],
+    "providersTriedInOrder": [
+      "coreml",
+      "cpu"
+    ]
+  },
+  "settings": {
+    "samplingFps": 2,
+    "frameWidth": 960,
+    "tiles": false,
+    "minFacePixelsForEmbedding": 40,
+    "detectorScoreThreshold": 0.6,
+    "limitSeconds": null
+  },
+  "measured": {
+    "film": {
+      "fileBytes": 372178639,
+      "durationSeconds": 734.167,
+      "secondsProcessed": 734.167,
+      "video": "h264 1280x534 at 24 fps",
+      "audio": "mp3 2 ch"
+    },
+    "runs": 3,
+    "runsAskedFor": 3,
+    "runRule": "the whole measurement was repeated 3 times; \"stages\" and \"totalSeconds\" are those of run 1, the median run by total; every run is listed in allRuns",
+    "interruptedRuns": {
+      "rule": "a run in which this process did not run for more than 2 s at a stretch (the machine slept or stalled) is thrown away and done again, at most 3 extra times; its figures are not used anywhere else in this record",
+      "thrownAway": []
+    },
+    "conditions": {
+      "note": "other programs were not stopped for the measurement. Load average counts busy threads on the whole machine, this run included; otherProcessesCpuPercent is what every other process used at that moment, 100 being one core; swap in use on a machine with little memory means stalls that have nothing to do with the work measured",
+      "keptAwake": "caffeinate -i held off idle sleep for the length of the script; a closed lid still puts the machine to sleep",
+      "beforeTheChosenRun": {
+        "loadAverageOneMinute": 12.11,
+        "otherProcessesCpuPercent": 199,
+        "freeMemoryMb": 162,
+        "swapUsedMb": 7347,
+        "powerSource": "Battery Power",
+        "lowPowerMode": false
+      },
+      "afterTheChosenRun": {
+        "loadAverageOneMinute": 12.02,
+        "otherProcessesCpuPercent": 167,
+        "freeMemoryMb": 98,
+        "swapUsedMb": 7496,
+        "powerSource": "Battery Power",
+        "lowPowerMode": false
+      },
+      "longestStopInTheChosenRunMs": 596
+    },
+    "stages": {
+      "probeSeconds": 0.027,
+      "decodeOnly": {
+        "wallSeconds": 17.257,
+        "framesSampled": 1469,
+        "sampledFramesPerSecond": 85.13,
+        "filmSecondsPerSecond": 42.54,
+        "hwaccel": "videotoolbox",
+        "note": "the same decode runs again inside the faces stage; this line is not added to the total"
+      },
+      "faces": {
+        "runtime": "onnxruntime-node 1.31.1",
+        "models": [
+          "yunet: face_detection_yunet_2023mar.onnx (MIT), sha256 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+          "sface: face_recognition_sface_2021dec.onnx (Apache-2.0), sha256 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+        ],
+        "providers": {
+          "detector": "coreml",
+          "recogniser": "coreml"
+        },
+        "providersTried": {
+          "detector": [
+            {
+              "provider": "coreml",
+              "ok": true,
+              "loadMs": 645
+            }
+          ],
+          "recogniser": [
+            {
+              "provider": "coreml",
+              "ok": true,
+              "loadMs": 615
+            }
+          ]
+        },
+        "modelLoadSeconds": 1.299,
+        "wallSeconds": 29.753,
+        "sampledFramesPerSecond": 49.37,
+        "waitingForFramesSeconds": 6.092,
+        "detectSecondsTotal": 5.612,
+        "embedSecondsTotal": 18.032,
+        "detectMsPerFrame": {
+          "n": 1469,
+          "mean": 3.82,
+          "min": 2.8,
+          "p10": 3,
+          "median": 3.33,
+          "p90": 4.69,
+          "p95": 5.87,
+          "max": 53.87
+        },
+        "embedMsPerFace": {
+          "n": 810,
+          "mean": 22.26,
+          "min": 14.81,
+          "p10": 16.17,
+          "median": 18.44,
+          "p90": 29.5,
+          "p95": 36.92,
+          "max": 519.83
+        },
+        "wallSecondsToReachFilmMinute10": 25.219,
+        "framesSampled": 1469,
+        "framesWithFaces": 738,
+        "facesFound": 1003,
+        "facesEmbedded": 810,
+        "smallestFacePixels": 14.3,
+        "frameSize": "960x400"
+      },
+      "scenes": {
+        "wallSeconds": 16.513,
+        "picturesScored": 17620,
+        "picturesPerSecond": 1067.02,
+        "cutsAtThreshold": 135,
+        "threshold": 0.3
+      },
+      "audio": {
+        "wallSeconds": 0.941,
+        "wavBytes": 23491056,
+        "wavSeconds": 734.09,
+        "coversWholeFile": true
+      },
+      "subtitles": {
+        "wallSeconds": 0,
+        "textTracks": 0
+      }
+    },
+    "totalSeconds": 48.53,
+    "totalIs": "probe + model loading + decode-and-faces + scene scores + audio + subtitles (the decode-only line is not in it)",
+    "totalAsShareOfSecondsProcessed": 0.0661,
+    "allRuns": [
+      {
+        "run": 1,
+        "attempt": 1,
+        "totalSeconds": 48.53,
+        "decodeOnlySeconds": 17.257,
+        "modelLoadSeconds": 1.299,
+        "facesStageSeconds": 29.753,
+        "detectMsPerFrameMean": 3.82,
+        "embedMsPerFaceMean": 22.26,
+        "scenesStageSeconds": 16.513,
+        "audioStageSeconds": 0.941,
+        "otherProviders": [
+          {
+            "asked": "cpu",
+            "modelLoadSeconds": 0.162,
+            "facesStageSeconds": 41.871,
+            "detectMsPerFrameMean": 12.15,
+            "embedMsPerFaceMean": 16.45
+          },
+          {
+            "asked": "detector=coreml,recogniser=cpu",
+            "modelLoadSeconds": 0.874,
+            "facesStageSeconds": 22.423,
+            "detectMsPerFrameMean": 3.69,
+            "embedMsPerFaceMean": 10.9
+          }
+        ],
+        "before": {
+          "loadAverageOneMinute": 12.11,
+          "otherProcessesCpuPercent": 199,
+          "freeMemoryMb": 162,
+          "swapUsedMb": 7347,
+          "powerSource": "Battery Power",
+          "lowPowerMode": false
+        },
+        "longestStopMs": 596
+      },
+      {
+        "run": 2,
+        "attempt": 2,
+        "totalSeconds": 62.43,
+        "decodeOnlySeconds": 17.968,
+        "modelLoadSeconds": 1.442,
+        "facesStageSeconds": 43.493,
+        "detectMsPerFrameMean": 4.68,
+        "embedMsPerFaceMean": 35.51,
+        "scenesStageSeconds": 16.61,
+        "audioStageSeconds": 0.851,
+        "otherProviders": [
+          {
+            "asked": "cpu",
+            "modelLoadSeconds": 0.2,
+            "facesStageSeconds": 37.832,
+            "detectMsPerFrameMean": 11.17,
+            "embedMsPerFaceMean": 16.01
+          },
+          {
+            "asked": "detector=coreml,recogniser=cpu",
+            "modelLoadSeconds": 0.51,
+            "facesStageSeconds": 22.671,
+            "detectMsPerFrameMean": 3.74,
+            "embedMsPerFaceMean": 10.8
+          }
+        ],
+        "before": {
+          "loadAverageOneMinute": 12.02,
+          "otherProcessesCpuPercent": 177,
+          "freeMemoryMb": 109,
+          "swapUsedMb": 7496,
+          "powerSource": "Battery Power",
+          "lowPowerMode": false
+        },
+        "longestStopMs": 590
+      },
+      {
+        "run": 3,
+        "attempt": 3,
+        "totalSeconds": 45.58,
+        "decodeOnlySeconds": 16.109,
+        "modelLoadSeconds": 0.857,
+        "facesStageSeconds": 28.42,
+        "detectMsPerFrameMean": 3.65,
+        "embedMsPerFaceMean": 21.61,
+        "scenesStageSeconds": 15.658,
+        "audioStageSeconds": 0.616,
+        "otherProviders": [
+          {
+            "asked": "cpu",
+            "modelLoadSeconds": 0.182,
+            "facesStageSeconds": 29.781,
+            "detectMsPerFrameMean": 8.6,
+            "embedMsPerFaceMean": 10.98
+          },
+          {
+            "asked": "detector=coreml,recogniser=cpu",
+            "modelLoadSeconds": 0.494,
+            "facesStageSeconds": 19.118,
+            "detectMsPerFrameMean": 3.31,
+            "embedMsPerFaceMean": 8.04
+          }
+        ],
+        "before": {
+          "loadAverageOneMinute": 8.75,
+          "otherProcessesCpuPercent": 139,
+          "freeMemoryMb": 115,
+          "swapUsedMb": 7696,
+          "powerSource": "Battery Power",
+          "lowPowerMode": false
+        },
+        "longestStopMs": 377
+      }
+    ],
+    "peakResidentMemoryMb": {
+      "thisProcess": 322,
+      "ffmpegChildren": 82,
+      "how": "the highest over all runs, sampled every 250 ms: this process by process.memoryUsage.rss(), ffmpeg by ps; a short spike between samples can be missed"
+    },
+    "otherProviders": [
+      {
+        "asked": "cpu",
+        "runtime": "onnxruntime-node 1.31.1",
+        "models": [
+          "yunet: face_detection_yunet_2023mar.onnx (MIT), sha256 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+          "sface: face_recognition_sface_2021dec.onnx (Apache-2.0), sha256 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+        ],
+        "providers": {
+          "detector": "cpu",
+          "recogniser": "cpu"
+        },
+        "providersTried": {
+          "detector": [
+            {
+              "provider": "cpu",
+              "ok": true,
+              "loadMs": 60
+            }
+          ],
+          "recogniser": [
+            {
+              "provider": "cpu",
+              "ok": true,
+              "loadMs": 64
+            }
+          ]
+        },
+        "modelLoadSeconds": 0.162,
+        "wallSeconds": 41.871,
+        "sampledFramesPerSecond": 35.08,
+        "waitingForFramesSeconds": 10.673,
+        "detectSecondsTotal": 17.85,
+        "embedSecondsTotal": 13.31,
+        "detectMsPerFrame": {
+          "n": 1469,
+          "mean": 12.15,
+          "min": 5.83,
+          "p10": 6.6,
+          "median": 8.53,
+          "p90": 17.89,
+          "p95": 29.44,
+          "max": 190.39
+        },
+        "embedMsPerFace": {
+          "n": 809,
+          "mean": 16.45,
+          "min": 5.92,
+          "p10": 7.56,
+          "median": 11.69,
+          "p90": 22.27,
+          "p95": 33.18,
+          "max": 578.67
+        },
+        "wallSecondsToReachFilmMinute10": 30.614,
+        "framesSampled": 1469,
+        "framesWithFaces": 738,
+        "facesFound": 1002,
+        "facesEmbedded": 809,
+        "smallestFacePixels": 14.3,
+        "frameSize": "960x400"
+      },
+      {
+        "asked": "detector=coreml,recogniser=cpu",
+        "runtime": "onnxruntime-node 1.31.1",
+        "models": [
+          "yunet: face_detection_yunet_2023mar.onnx (MIT), sha256 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+          "sface: face_recognition_sface_2021dec.onnx (Apache-2.0), sha256 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+        ],
+        "providers": {
+          "detector": "coreml",
+          "recogniser": "cpu"
+        },
+        "providersTried": {
+          "detector": [
+            {
+              "provider": "coreml",
+              "ok": true,
+              "loadMs": 736
+            }
+          ],
+          "recogniser": [
+            {
+              "provider": "cpu",
+              "ok": true,
+              "loadMs": 32
+            }
+          ]
+        },
+        "modelLoadSeconds": 0.874,
+        "wallSeconds": 22.423,
+        "sampledFramesPerSecond": 65.51,
+        "waitingForFramesSeconds": 8.157,
+        "detectSecondsTotal": 5.422,
+        "embedSecondsTotal": 8.827,
+        "detectMsPerFrame": {
+          "n": 1469,
+          "mean": 3.69,
+          "min": 2.78,
+          "p10": 2.87,
+          "median": 3.25,
+          "p90": 4.49,
+          "p95": 5.32,
+          "max": 96.01
+        },
+        "embedMsPerFace": {
+          "n": 810,
+          "mean": 10.9,
+          "min": 5.66,
+          "p10": 6.85,
+          "median": 8.46,
+          "p90": 15.1,
+          "p95": 21.4,
+          "max": 191.1
+        },
+        "wallSecondsToReachFilmMinute10": 19.689,
+        "framesSampled": 1469,
+        "framesWithFaces": 738,
+        "facesFound": 1003,
+        "facesEmbedded": 810,
+        "smallestFacePixels": 14.3,
+        "frameSize": "960x400"
+      }
+    ]
+  },
+  "extrapolated": {
+    "marked": "EXTRAPOLATED, not measured: the measured stage times scaled linearly from the seconds processed to 7200 seconds, model loading and probing counted once.",
+    "assumes": "the same picture size and codec as this file (h264 1280x534), the same share of frames with faces, and no slowdown from heat or memory over two hours",
+    "factor": 9.807,
+    "facesStageSeconds": 291.79,
+    "scenesStageSeconds": 161.94,
+    "audioStageSeconds": 9.23,
+    "prepassSecondsPerTwoHourFilm": 464.29,
+    "prepassMinutesPerTwoHourFilm": 7.74,
+    "prepassMinutesPerTwoHourFilmEveryRun": [
+      7.74,
+      9.99,
+      7.32
+    ]
+  },
+  "threshold": {
+    "prepassMinutesPerTwoHourFilm": 45
+  },
+  "pass": null,
+  "note": "Measured on an Apple-silicon Mac; the plan's pass line is for a 2020+ Intel laptop with integrated graphics, which was not available: this record cannot pass or fail K4.",
+  "remarks": [
+    "This record replaces the one the same script wrote on this machine on 2026-11-15 at 23:15 GMT (three runs, median total 47.84 s, extrapolated 7.63 min per two-hour film, load average 10.95 before the chosen run). Those figures are quoted from that file; they were not measured again.",
+    "A first attempt at this record on 2026-11-16 at 01:31 GMT was lost: the lid was closed 100 seconds into it and the machine slept until 04:11 GMT. The watch for stops was added to the script after that."
+  ],
+  "notMeasured": [
+    "any Windows or Intel machine, and so the pass line itself",
+    "the model calls, speech recognition and speech synthesis that the full preparation of a film also needs: \"ready in 5 minutes for the first 10\" is not answered by this record",
+    "a 1080p or HEVC file, or a file of several gigabytes",
+    "seeking in the player and the timeline of a Matroska file that does not start at zero (the frame reader's own timestamps are unit-tested on a small synthetic file, not measured in a player)",
+    "a second face model (AuraFace): only execution providers for the same two models were compared",
+    "the other face back end the plan names (onnxruntime-web in a renderer worker): only onnxruntime-node was run"
+  ]
+}
