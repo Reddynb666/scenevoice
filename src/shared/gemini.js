@@ -208,6 +208,7 @@ export function scriptInstructions(lang) {
     '',
     'Timing:',
     '- "start" is the moment in seconds from the beginning of the full video when the description should begin. Place it as close as possible to the action, preferably in a pause in speech.',
+    '- Never before the picture: "start" is at or after the moment the thing described is first visible, never earlier. If the nearest pause in speech comes before it, do not use that pause; use the moment itself or the first pause after it. A description heard a second late is fine; one heard before the picture is wrong.',
     '- "gap" is how many seconds of silence, music or sound effects follow "start" before anyone speaks again. Use 0.5 if speech continues immediately. Be honest: the viewer\'s screen reader uses it to decide how much it can say without covering dialogue.',
     '- At the very start of the video (0 to 2 seconds), give an establishing description with priority 1: the setting, who is present, and what kind of video this is.',
     '',
