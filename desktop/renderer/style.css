@@ -1,0 +1,241 @@
+/*
+  Styles of the K3 test shell. Low vision first: follows the system's light or
+  dark scheme and forced colours (Windows high contrast), a 3 px focus ring on
+  whatever has the focus, text that wraps instead of scrolling sideways at 200%
+  zoom, and nothing told by colour alone (every state is also a word).
+*/
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #111111;
+  --muted: #3d3d3d;
+  --line: #595959;
+  --panel: #f2f2f2;
+  --button: #ffffff;
+  --focus: #0b57d0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #f2f2f2;
+    --muted: #d0d0d0;
+    --line: #a6a6a6;
+    --panel: #1e1e1e;
+    --button: #262626;
+    --focus: #8ab4f8;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 112.5%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  line-height: 1.3;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+p {
+  margin: 0.5rem 0;
+}
+
+/* The ring is drawn for every kind of focus, also the heading focused at start. */
+:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+button,
+select,
+input[type="text"] {
+  font: inherit;
+  color: var(--fg);
+  background: var(--button);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.9rem;
+  max-width: 100%;
+}
+
+button {
+  cursor: pointer;
+  text-align: center;
+  white-space: normal;
+}
+
+input[type="text"] {
+  width: min(24rem, 100%);
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.label {
+  font-weight: 700;
+}
+
+.status-line {
+  border-inline-start: 6px solid var(--line);
+  background: var(--panel);
+  padding: 0.5rem 0.75rem;
+  min-height: 2.75rem;
+}
+
+#player {
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 1rem 0;
+}
+
+#player > .label {
+  margin-top: 0;
+}
+
+video {
+  display: block;
+  width: 100%;
+  max-width: 40rem;
+  height: auto;
+  background: #000000;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+#player-hint,
+#credit,
+.time {
+  color: var(--muted);
+}
+
+#current {
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font-size: 1.15rem;
+}
+
+#log {
+  border-top: 2px solid var(--line);
+  padding-top: 0.25rem;
+}
+
+#log .entry {
+  margin: 0.35rem 0;
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+}
+
+#help-list {
+  padding-inline-start: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+dialog {
+  color: var(--fg);
+  background: var(--bg);
+  border: 3px solid var(--fg);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+dialog h2 {
+  margin-top: 0;
+}
+
+/* Present for screen readers, not on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Windows high contrast and other forced colours: system colours, borders kept. */
+@media (forced-colors: active) {
+  :focus {
+    outline-color: Highlight;
+  }
+
+  button,
+  select,
+  input[type="text"],
+  #player,
+  #current,
+  dialog {
+    border-color: CanvasText;
+  }
+
+  .status-line {
+    border: 2px solid CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto;
+  }
+}

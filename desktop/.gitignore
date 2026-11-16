@@ -1,0 +1,12 @@
+# Dependencies, build output and caches of the desktop test shell: never committed.
+node_modules/
+dist/
+out/
+.cache/
+*.log
+.DS_Store
+# The sample clip is cut from Tears of Steel by `npm run make-sample` (see README.md).
+renderer/sample/sample.mp4
+# The application icon is made from ../static/icons by `npm run make-icon` (the dist scripts run it).
+build/icon.ico
+build/icon.icns

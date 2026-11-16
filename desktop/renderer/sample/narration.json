@@ -1,0 +1,69 @@
+{
+  "note": "The fake narration of the test shell: ten descriptions for sample.mp4, 40 seconds cut from 23 s of Tears of Steel, (CC) Blender Foundation | mango.blender.org, CC BY 3.0. Written as rendered text after looking at frames of the clip. The film says both names itself: 'You're a jerk, Thom.' at 0 s and 'Look Celia, ...' at 2 s of the clip, so each first mention comes after the name was heard. The Chinese spellings are those of the film's own Chinese subtitles (Thom is 湯姆 and Celia is 希莉亞 in its traditional Chinese file), in simplified characters. The first mention introduces the character with a look and an outfit, later cues use the name alone, and people the film has not named keep one fixed label. Times are seconds into the clip. The shell speaks the same script over any film a tester opens.",
+  "clip": { "duration": 40, "lead": "celia" },
+  "people": {
+    "celia": {"zh": "希莉亚", "en": "Celia"},
+    "thom": {"zh": "汤姆", "en": "Thom"},
+    "glasses": {"zh": "戴眼镜的卷发男人", "en": "the curly-haired man in glasses"},
+    "workers": {"zh": "两个穿白色工作服的人", "en": "two people in white work coats"},
+    "eyepiece": {"zh": "戴机械目镜的男人", "en": "the man with the mechanical eyepiece"}
+  },
+  "cues": [
+    {
+      "id": "c01", "t": 4.3, "people": ["celia"],
+      "zh": "希莉亚，扎马尾的年轻女人，穿蓝黑夹克，一只手是机械手。",
+      "en": "Celia, a young woman with a ponytail, in a blue and black jacket; one hand is a robot hand."
+    },
+    {
+      "id": "c02", "t": 10.6, "people": ["thom"],
+      "zh": "汤姆，黑发年轻男人，穿深色夹克。",
+      "en": "Thom, a young man with dark hair, in a dark jacket."
+    },
+    {
+      "id": "c03", "t": 14.6, "people": ["celia", "thom"],
+      "zh": "希莉亚向汤姆举起机械手。",
+      "en": "Celia raises the robot hand towards Thom."
+    },
+    {
+      "id": "c04", "t": 17.7, "people": [],
+      "zh": "两人变成橙色和蓝色的全息影像。",
+      "en": "The two turn into orange and blue holograms."
+    },
+    {
+      "id": "c05", "t": 21.4, "people": [],
+      "zh": "字幕：40 年后。",
+      "en": "Caption: 40 years later."
+    },
+    {
+      "id": "c06", "t": 23.6, "people": [],
+      "zh": "全息影像散成两道光。",
+      "en": "The holograms dissolve into two beams of light."
+    },
+    {
+      "id": "c07", "t": 26.6, "people": [],
+      "zh": "一只手拨动旧控制台的开关。",
+      "en": "A hand flips switches on an old control panel."
+    },
+    {
+      "id": "c08", "t": 29.7, "people": ["glasses"],
+      "zh": "戴眼镜的卷发男人盯着面前的全息屏幕。",
+      "en": "The curly-haired man in glasses stares at the holographic screens in front of him."
+    },
+    {
+      "id": "c09", "t": 33.9, "people": [],
+      "zh": "盘子里是一颗插着细针的大脑。",
+      "en": "On a plate, a brain with thin needles in it."
+    },
+    {
+      "id": "c10", "t": 37.3, "people": ["eyepiece"],
+      "zh": "戴机械目镜的男人俯身盯着它。",
+      "en": "The man with the mechanical eyepiece leans over it, staring."
+    }
+  ],
+  "who": [
+    {"from": 2, "to": 17.25, "people": ["celia", "thom"]},
+    {"from": 28.1, "to": 30.7, "people": ["glasses"]},
+    {"from": 30.7, "to": 33.7, "people": ["workers"]},
+    {"from": 36.2, "to": 40.5, "people": ["eyepiece"]}
+  ]
+}

@@ -1,0 +1,105 @@
+<!doctype html>
+<!--
+  The one page of the K3 test shell. Plain HTML, CSS and ES modules, no framework.
+  Every piece of text is filled in by app.js from desktop/locales (data-i18n and
+  data-i18n-label name the keys), and so are the lang and dir of the page.
+  No inline script or style: the Content-Security-Policy forbids them.
+-->
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SceneVoice</title>
+    <link rel="stylesheet" href="./style.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main id="main">
+      <h1 id="title" tabindex="-1" data-i18n="heading"></h1>
+      <p id="intro" data-i18n="intro"></p>
+
+      <div class="row" id="actions">
+        <button type="button" id="btn-sample" data-i18n="btnSample"></button>
+        <button type="button" id="btn-open" data-i18n="btnOpen"></button>
+        <button type="button" id="btn-dialog" data-i18n="btnDialog"></button>
+        <button type="button" id="btn-notify" data-i18n="btnNotify"></button>
+        <button type="button" id="btn-channel" data-i18n="btnUseReader"></button>
+        <button type="button" id="btn-help" data-i18n="btnHelp"></button>
+      </div>
+
+      <p class="field">
+        <label for="rate" data-i18n="rateLabel"></label>
+        <select id="rate"></select>
+      </p>
+
+      <p class="status-line">
+        <span class="label" data-i18n="statusLabel"></span>
+        <span id="status" role="status" aria-live="polite" aria-atomic="true"></span>
+      </p>
+
+      <div id="player" role="application" tabindex="0" data-i18n-label="playerLabel" aria-describedby="player-hint">
+        <p class="label" aria-hidden="true" data-i18n="playerLabel"></p>
+        <video id="film" preload="metadata" playsinline disablepictureinpicture tabindex="-1" data-i18n-label="videoLabel" hidden></video>
+        <p id="no-film" data-i18n="noFilm"></p>
+        <div class="row" id="player-buttons">
+          <button type="button" id="btn-play" data-action="toggle" data-i18n="btnPlay"></button>
+          <button type="button" data-action="back" data-i18n="btnBack"></button>
+          <button type="button" data-action="forward" data-i18n="btnForward"></button>
+          <button type="button" data-action="describe" data-i18n="btnDescribe"></button>
+          <button type="button" data-action="repeat" data-i18n="btnRepeat"></button>
+          <button type="button" data-action="stop" data-i18n="btnStop"></button>
+          <button type="button" data-action="who" data-i18n="btnWho"></button>
+          <button type="button" data-action="wrong" data-i18n="btnWrong"></button>
+        </div>
+        <p id="player-hint" data-i18n="playerHint"></p>
+      </div>
+
+      <!-- The current description as a line that takes the focus: for braille displays and large print. -->
+      <p id="current" tabindex="0">
+        <span class="label" data-i18n="currentLabel"></span>
+        <span id="current-text" data-i18n="currentNone"></span>
+      </p>
+
+      <h2 id="log-title" data-i18n="logHeading"></h2>
+      <!-- A history to read back, never announced by itself: the speech bus decides who speaks. -->
+      <div id="log" role="log" aria-live="off" aria-labelledby="log-title"></div>
+
+      <!-- Descriptions for the user's own screen reader ("reader" channel). Written by the speech bus only. -->
+      <div id="reader-out" class="sr-only" aria-live="off" aria-atomic="true"></div>
+
+      <h2 id="help-title" data-i18n="helpHeading"></h2>
+      <p data-i18n="helpIntro"></p>
+      <ul id="help-list"></ul>
+      <p id="credit" data-i18n="credit"></p>
+      <!-- Installation checks: what the system says when a program asks for the microphone, and the report. -->
+      <p class="row">
+        <button type="button" id="btn-mic" data-i18n="btnMic"></button>
+        <button type="button" id="btn-report" data-i18n="btnReport"></button>
+      </p>
+    </main>
+
+    <dialog id="dlg-test" aria-labelledby="dlg-test-title" aria-describedby="dlg-test-body">
+      <h2 id="dlg-test-title" data-i18n="dlgTitle"></h2>
+      <p id="dlg-test-body" data-i18n="dlgBody"></p>
+      <p class="field">
+        <label for="dlg-test-input" data-i18n="dlgInput"></label>
+        <input id="dlg-test-input" type="text" autocomplete="off" spellcheck="false">
+      </p>
+      <div class="row">
+        <button type="button" data-result="ok" data-i18n="dlgOk"></button>
+        <button type="button" data-result="cancel" data-i18n="dlgCancel"></button>
+      </div>
+    </dialog>
+
+    <dialog id="dlg-wrong" aria-labelledby="dlg-wrong-title" aria-describedby="dlg-wrong-body">
+      <h2 id="dlg-wrong-title" data-i18n="wrongTitle"></h2>
+      <p id="dlg-wrong-body"></p>
+      <div class="column">
+        <button type="button" id="wrong-not" data-result="not"></button>
+        <button type="button" id="wrong-name" data-result="name" data-i18n="wrongName"></button>
+        <button type="button" id="wrong-never" data-result="never" data-i18n="wrongNever"></button>
+        <button type="button" data-result="cancel" data-i18n="wrongCancel"></button>
+      </div>
+    </dialog>
+  </body>
+</html>
