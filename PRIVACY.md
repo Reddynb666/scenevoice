@@ -1,15 +1,17 @@
 # SceneVoice privacy policy
 
-Last updated: 4 November 2026
+Last updated: 16 November 2026
 
-SceneVoice is a browser extension that creates audio description for YouTube videos and, experimentally, Bilibili videos. With your own API key it is designed so that the developer never sees your data; the optional SceneVoice Cloud relay is described below.
+SceneVoice is a browser extension that creates audio description for YouTube videos and, experimentally, Bilibili videos. It works with your own API key and is designed so that the developer never sees your data.
+
+SceneVoice Cloud, an optional relay planned for people without a key, **is not open yet**. This version does not offer it, does not ask permission for its address and sends nothing to it. What it will do is described at the end, under *SceneVoice Cloud (when it opens)*, and nowhere else in this policy.
 
 ## What SceneVoice does not do
 
-- With your own API key, SceneVoice has no server of its own and nothing you do is sent to the developer. The optional SceneVoice Cloud relay, which you turn on yourself with *Start free*, is the one exception; see *SceneVoice Cloud* below.
-- It has no accounts or sign-ins. SceneVoice Cloud uses an anonymous device token; an optional paid Plus or organisation licence key can be attached to it (see *Licences* below).
-- It does not collect analytics, usage statistics or crash reports. The only identifier is the random SceneVoice Cloud device token, which exists only after you press *Start free* and is removed by *Stop using Cloud*.
-- It does not read, record or upload the video or audio stream.
+- It sends nothing you do to the developer. This version works with your own API key only, and no server of SceneVoice's is involved.
+- It has no accounts or sign-ins.
+- It does not collect analytics, usage statistics or crash reports, and it creates no identifier for you or your browser.
+- It never downloads, records or saves the video file or its sound. With Qwen, or on Bilibili, scaled-down still pictures of the video playing in your tab are sent to the model you chose (see *Qwen, and Bilibili* below).
 
 ## What leaves your computer, and where it goes
 
@@ -35,30 +37,18 @@ Qwen cannot open a video by its address, and Gemini cannot open Bilibili's. With
 
 On a Bilibili video page, SceneVoice reads the video's title, uploader, description, section and parts from the page itself (the data the page is delivered with), and calls none of Bilibili's APIs. When you turn on CC subtitles in the player, SceneVoice fetches the same subtitle file the player has just loaded, from Bilibili's file servers (`*.hdslb.com`), to fit descriptions between lines of dialogue. Nothing from either is stored or sent elsewhere.
 
-### SceneVoice Cloud (optional)
-
-SceneVoice Cloud is for people who do not want to make an API key. It is off until you press **Start free** on the welcome page or the settings page, and users with their own key send nothing to SceneVoice.
-
-- **What the relay receives.** The same request Google would receive (see above: the video's address, title, channel and description, the section to describe, your question, the recent descriptions; on Bilibili, the scaled-down pictures), sent to `https://api.scenevoice.app` instead, with an anonymous device token in place of your key. The relay forwards it to the Gemini API with the project's own key and passes the answer back. It does not log the request or the answer.
-- **The device token** is a random string issued when you press *Start free*. It is not tied to an account, an email address or a name, and nothing else identifies you. The relay keeps, per token, how many seconds of video were described today (the free allowance) and which plan the token is on. Remove the token at any time with *Stop using Cloud* on the settings page; a new *Start free* issues a new one.
-- **Finished descriptions, when sharing is on.** With *Share finished descriptions with other SceneVoice users* turned on (it is turned on when you press *Start free*; turn it off on the settings page), the text of a video's descriptions is sent to the relay once they are complete: the video ID, language, length, the descriptions with their timing, the labels used for people, the kind of video and the model, together with the model's token counts for that video, which the relay discards. The relay keeps the text so the next listener of the same video gets it at once. It does not keep who sent it, and SceneVoice strips the descriptions you marked as wrong before sending.
-- **What the relay never keeps:** pictures of the video, your questions, the model's answers to them, your IP address (a salted hash of it is used only to limit how many tokens one network can create in a day), or anything about your browser.
-- **Licences.** If you activate a Plus or organisation licence key, the relay stores which key is attached to your token. Payment, where there is any, is handled by Stripe or the platform you paid on; the relay sees only that a licence key exists.
-
-The relay's own privacy addendum, with the data it stores and for how long, is in the project repository (`server/PRIVACY-ADDENDUM.md`).
-
-No other network requests are made.
+No other network requests are made. One thing is the browser's own and outside SceneVoice: if you use the built-in voice and your browser offers voices that work over the network, the browser may send the text being spoken to that voice's provider. Choosing a voice installed on your computer on the settings page, or having your screen reader read the descriptions, avoids it.
 
 ## What is stored on your computer
 
-- **Your API keys** (Gemini, Qwen), with the model and address for each, and the SceneVoice Cloud device token if you have one (with its plan and model), in the browser's local extension storage (`chrome.storage.local`). They never leave your computer except as described above, and are never placed in a URL. Remove them at any time on the settings page.
+- **Your API keys** (Gemini, Qwen), with the model and address for each, in the browser's local extension storage (`chrome.storage.local`). They never leave your computer except as described above, and are never placed in a URL. Remove them at any time on the settings page.
 - **Descriptions** that have been generated, keyed by video and language, so a video is described only once, with the kind of video Gemini judged it to be (entertainment or tutorial). The settings page shows how many are stored and lets you delete them all. The oldest are removed automatically after 300 videos.
-- **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server), are stripped before a video's descriptions are shared through SceneVoice Cloud, and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
-- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language, the daily limit, whether finished descriptions are shared with other SceneVoice users, the keyboard shortcuts you chose for the commands SceneVoice handles on the page (`pageShortcuts`), and whether SceneVoice has already told you how to create descriptions. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
-- **Usage counts** — the tokens and requests each model reports for the current day, with a rough cost estimate from list prices, and each video's own token count next to its descriptions — are kept on this computer only, so the settings page can show today's usage and the popup what a video cost; they are never sent anywhere, except that a description script shared through SceneVoice Cloud carries its own video's token counts, which the relay discards (see *SceneVoice Cloud* above).
+- **Descriptions you marked as wrong**, with the time you marked them and what replaced them, next to the descriptions of that video, so that the corrected version is kept. They are never sent to the developer (there is no feedback server), and are deleted with the descriptions of that video, including by *Delete all saved descriptions*. At most the last 50 per video are kept.
+- **Settings** such as mode, detail level (and whether you picked them yourself), the mode and detail for each kind of video, the model for each site, language and the built-in voice you chose for each language, the daily limit, the keyboard shortcuts you chose for the commands SceneVoice handles on the page (`pageShortcuts`), and whether SceneVoice has already told you how to create descriptions. These do not include the key. If browser sync is on, settings sync to your other browsers through your browser account.
+- **Usage counts** — the tokens and requests each model reports for the current day, with a rough cost estimate from list prices, and each video's own token count next to its descriptions — are kept on this computer only, so the settings page can show today's usage and the popup what a video cost; they are never sent anywhere.
 - **Videos whose "AI-generated" notice you have heard**, only if you set that notice to once per video: the video IDs (YouTube's or Bilibili's), the last 300, in the same synced settings storage, so the notice is not repeated.
 
-Nothing else is stored on your computer; what the SceneVoice Cloud relay keeps, if you use it, is listed above.
+Nothing else is stored on your computer.
 
 ## Permissions the extension asks for
 
@@ -66,8 +56,7 @@ Nothing else is stored on your computer; what the SceneVoice Cloud relay keeps, 
 - **Read and change data on www.bilibili.com/video/** — the same, on Bilibili video pages only (experimental).
 - **generativelanguage.googleapis.com** — to call the Gemini API.
 - **dashscope.aliyuncs.com** — to call the Qwen API (Alibaba Cloud Model Studio).
-- **api.scenevoice.app** — SceneVoice Cloud, the optional relay above. Contacted only after you press *Start free*.
-- **Storage** — to keep your key, settings and generated descriptions on your computer.
+- **Storage** — to keep your key and generated descriptions on your computer, and your settings in the browser's synced settings storage (see *Settings* above).
 - **Text-to-speech** — for the optional built-in voice.
 - **Active tab** — so the toolbar popup can tell whether the current tab is a video SceneVoice supports.
 - **Offscreen document** — a hidden extension page in which the requests to the Gemini or Qwen API run. They are made from there rather than from the YouTube page, so your API key never enters the YouTube page and the requests are not subject to YouTube's own page policies.
@@ -77,10 +66,38 @@ Nothing else is stored on your computer; what the SceneVoice Cloud relay keeps, 
 
 The web player at `https://reddynb666.github.io/scenevoice/play/` is a page, not an extension: it asks for no permissions and runs only while its tab is open. It describes YouTube videos with the same requests as the extension.
 
-- **What leaves the browser.** With your own key: the video's link, the time span to describe (or the moment you asked about, with your question) and your Gemini API key go to Google's Gemini API (**generativelanguage.googleapis.com**), the key in the `x-goog-api-key` request header, never in a URL. With SceneVoice Cloud: the link and the time span go to the relay (**api.scenevoice.app**) with an anonymous device token in the same header; the token is obtained once with `POST /v1/devices` (client `web`), and the relay keeps what the *SceneVoice Cloud* section above lists. A Content-Security-Policy on the page limits its connections to these two addresses.
-- **Where the key and the token are kept.** The key is kept in the tab's session storage and is gone when the tab closes, unless you tick *Remember the key on this device*; then it is kept in the browser's local storage for the page's origin until you clear it or untick the box. The device token, your choices on the page (mode, detail, how much, output, reading speed, voice rate, language) and finished descriptions (the last 40 videos) are kept in the same local storage and go with the site data when you clear it. Nothing is placed in a URL.
-- **YouTube's embedded player.** The video plays in YouTube's own player, embedded from `www.youtube-nocookie.com`, and the player's script comes from `www.youtube.com`; it is the only third-party script on the page and is loaded only after you press *Play*. As on any site that embeds a YouTube video, YouTube sets its own cookies and can see that the video was played; Google's terms and privacy policy apply to that. The page itself sets no cookies.
-- **No analytics**, no account, no server of SceneVoice's own on the own-key path. Descriptions and answers are written by an AI and can be wrong; the first description of each video is preceded by "AI-generated audio description follows".
+- **What leaves the browser.** The video's link, the time span to describe (or the moment you asked about, with your question) and your Gemini API key go to Google's Gemini API (**generativelanguage.googleapis.com**), the key in the `x-goog-api-key` request header, never in a URL. Nothing goes to SceneVoice. A Content-Security-Policy on the page limits its connections to that one address.
+- **Where the key is kept.** The key is kept in the tab's session storage and is gone when the tab closes, unless you tick *Remember the key on this device*; then it is kept in the browser's local storage for the page's origin until you clear it or untick the box. Your choices on the page (mode, detail, how much, output, reading speed, voice rate, language) and finished descriptions (the last 40 videos) are kept in the same local storage and go with the site data when you clear it. Nothing is placed in a URL.
+- **YouTube's embedded player.** The video plays in YouTube's own player, embedded from `www.youtube-nocookie.com`, and the player's script comes from `www.youtube.com`; it is the only third-party script on the page and is loaded only after you press *Play with descriptions*. As on any site that embeds a YouTube video, YouTube sets its own cookies and can see that the video was played; Google's terms and privacy policy apply to that. The page itself sets no cookies.
+- **No analytics**, no account, and no server of SceneVoice's own. Descriptions and answers are written by an AI and can be wrong; the first description of each video is preceded by "AI-generated audio description follows".
+
+## Chrome Web Store: Limited Use
+
+SceneVoice's use of user data complies with the Chrome Web Store User Data Policy, including its Limited Use requirements. In the terms of that policy:
+
+- The data described above (your API keys, the address, title and description of the video you ask to have described, your questions, and, with Qwen or on Bilibili, pictures of the playing video) is used only to provide audio description, which is the extension's single purpose.
+- It is transferred only to the model service you chose (Google's Gemini API, Alibaba Cloud Model Studio, or the address you typed under *Advanced*), and only to answer the request you made.
+- It is never sold, never used or transferred for advertising, and never used to determine creditworthiness or for lending.
+- No person at SceneVoice can read it: none of it reaches the developer.
+
+## Planned, not in this version
+
+### SceneVoice Cloud (when it opens)
+
+**SceneVoice Cloud is not open.** The relay is not running. This version of the extension has no *Start free* button, asks permission for no relay address and sends nothing to a relay; the web player does not offer it either. Everything in this section describes what SceneVoice Cloud will do once it opens, so that it can be read beforehand. Nothing here applies to this version, and this policy and its date will be updated before it does.
+
+SceneVoice Cloud will be for people who do not want to make an API key. It will be off until you press **Start free** on the welcome page or the settings page, and users with their own key will go on sending nothing to SceneVoice.
+
+- **What the relay will receive.** The same request Google would receive (see above: the video's address, title, channel and description, the section to describe, your question, the recent descriptions; on Bilibili, the scaled-down pictures), sent to the SceneVoice Cloud relay instead, with an anonymous device token in place of your key. The relay forwards it to the Gemini API with the project's own key and passes the answer back. It does not log the request or the answer. The web player will offer the same choice: the device token is obtained once with `POST /v1/devices` (client `web`) and kept in the page's local storage.
+- **The device token** will be a random string issued by the relay when you press *Start free*. It is not tied to an account, an email address or a name, and nothing else identifies you. The relay keeps, per token, how many seconds of video were described today (the free allowance) and which plan the token is on. The extension keeps the token, with its plan and model, next to your API keys in its local storage, and never places it in a URL. *Stop using Cloud* on the settings page removes it at any time; a new *Start free* issues a new one.
+- **Finished descriptions, when sharing is on.** With *Share finished descriptions with other SceneVoice users* turned on (it will be turned on when you press *Start free*, and can be turned off on the settings page, where the choice is kept with your other settings), the text of a video's descriptions is sent to the relay once they are complete: the video ID, language, length, the descriptions with their timing, the labels used for people, the kind of video and the model, together with the model's token counts for that video, which the relay discards. The relay keeps the text so the next listener of the same video gets it at once. It does not keep who sent it, and SceneVoice strips the descriptions you marked as wrong before sending.
+- **What the relay will never keep:** pictures of the video, your questions, the model's answers to them, your IP address (a salted hash of it is used only to limit how many tokens one network can create in a day), or anything about your browser.
+- **Licences.** If you activate a Plus or organisation licence key, the relay stores which key is attached to your token. Payment, where there is any, is handled by Stripe or the platform you paid on; the relay sees only that a licence key exists.
+- **Address and permission.** The relay has no address yet. It will be on a domain the project holds, and this policy will name the address, and the permission the extension will ask for it, before any version uses it. The extension will contact the relay only after you press *Start free*. This version asks for no such access.
+
+Version 1.1.0 offered *Start free* and named an address for the relay that was never the project's (see *The relay address in version 1.1.0* in `SECURITY.md`): if you installed it, update. If a version of SceneVoice that offered *Start free* left a device token on your computer, this version does not use it and sends it nowhere; the settings page shows *Stop using Cloud*, which removes it.
+
+The relay's own privacy addendum, with the data it will store and for how long, is in the project repository (`server/PRIVACY-ADDENDUM.md`).
 
 ## Children
 
@@ -92,4 +109,6 @@ If this policy changes, the new version will be published with the extension and
 
 ## Contact
 
-Questions about privacy can be raised as an issue in the project's GitHub repository.
+Questions about privacy can be raised as an issue in the project's GitHub repository: https://github.com/reddynb666/scenevoice/issues. An issue is public, so leave out anything private.
+
+<!-- FILL IN (owner): when there is a real support e-mail address, add it here and in PRIVACY.zh-CN.md. Never publish a made-up address. -->

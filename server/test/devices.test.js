@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { call, makeEnv, register } from './helpers.js';
 
@@ -103,8 +104,9 @@ describe('plain pages and CORS', () => {
   });
 
   it('accepts requests with no Origin or an extension origin, and the listed site', async () => {
-    const env = makeEnv({ ALLOWED_ORIGINS: 'https://scenevoice.app, https://www.scenevoice.app/' });
-    for (const origin of [undefined, 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', 'moz-extension://1234', 'https://scenevoice.app', 'https://www.scenevoice.app']) {
+    // Names under .test are reserved for tests (RFC 2606): they stand for the operator's own sites.
+    const env = makeEnv({ ALLOWED_ORIGINS: 'https://site.test, https://www.site.test/' });
+    for (const origin of [undefined, 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', 'moz-extension://1234', 'https://site.test', 'https://www.site.test']) {
       const res = await call(env, { path: '/healthz', headers: origin ? { origin } : {} });
       expect(res.status, origin).toBe(200);
       if (origin) expect(res.headers.get('access-control-allow-origin')).toBe(origin);
@@ -114,6 +116,28 @@ describe('plain pages and CORS', () => {
       expect(res.status, origin).toBe(403);
       expect((await res.json()).error.details[0].reason).toBe('SCENEVOICE_ORIGIN');
     }
+  });
+
+  it('as configured in wrangler.toml, admits no web page: the origins and the route are placeholders the operator replaces', async () => {
+    const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+    const configured = toml.match(/^ALLOWED_ORIGINS = "([^"]*)"$/m)[1];
+    // Every host the file names for the relay or its callers is on .invalid, a name that never resolves:
+    // nobody's real domain is written here until the operator writes their own.
+    const origins = configured.split(',').map((s) => s.trim());
+    expect(origins.length).toBeGreaterThan(0);
+    for (const origin of origins) expect(new URL(origin).hostname, origin).toMatch(/\.invalid$/);
+    const route = toml.match(/^#? ?routes = \[\{ pattern = "([^"]+)"/m)[1];
+    expect(route).toMatch(/\.invalid$/);
+    expect(toml).toMatch(/FILL IN/);
+    // With that configuration a page anywhere on the web is refused, whoever runs it; the extension is not.
+    const env = makeEnv({ ALLOWED_ORIGINS: configured });
+    for (const origin of ['https://reddynb666.github.io', 'https://evil.example', 'https://www.evil.example', 'http://localhost:8787', 'null']) {
+      const res = await call(env, { method: 'POST', path: '/v1/devices', headers: { origin, 'content-type': 'application/json' }, body: '{}' });
+      expect(res.status, origin).toBe(403);
+      expect((await res.json()).error.details[0].reason).toBe('SCENEVOICE_ORIGIN');
+    }
+    expect(env.DEVICES.map.size).toBe(0);
+    expect((await call(env, { path: '/healthz', headers: { origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop' } })).status).toBe(200);
   });
 
   it('refuses the opaque origin "null" before it can register a device or count against the network', async () => {

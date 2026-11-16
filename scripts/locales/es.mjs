@@ -10,7 +10,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice: audiodescripción con IA',
-  ext_description: 'Audiodescripción con IA para YouTube y Bilibili, para personas ciegas y con baja visión. Funciona con tu lector de pantalla.',
+  ext_description: 'Audiodescripción con IA en YouTube y Bilibili para personas ciegas y con baja visión, con tu lector de pantalla o una voz integrada.',
   cmd_toggle: 'Crear descripciones, o activarlas y desactivarlas',
   cmd_describe_now: 'Describir lo que hay en pantalla ahora',
   cmd_repeat: 'Repetir la última descripción',
@@ -179,6 +179,7 @@ export default {
   late_prefix: 'Antes: ',
   status_fallback_cloud: 'No hay ninguna clave propia, así que SceneVoice Cloud describe este sitio.',
   provider_name_cloud: 'SceneVoice Cloud',
+  status_voice_failed: 'La voz integrada no puede leer bien estas descripciones en este equipo: no hay ninguna voz para su idioma, o la voz no funciona. Agrega una voz en los ajustes de voz de tu sistema, o elige “Mi lector de pantalla” en el panel emergente de SceneVoice.',
   // ----- errors -----
   error_no_key: 'SceneVoice necesita una clave de API de Gemini. Se está abriendo la página de ajustes para que agregues una.',
   error_bad_key: 'La clave de API de Gemini no fue aceptada. Revísala en la página de ajustes de SceneVoice.',
@@ -252,6 +253,7 @@ export default {
   error_cloud_bad_json: 'SceneVoice Cloud devolvió una respuesta que SceneVoice no pudo leer. Inténtalo de nuevo.',
   error_cloud_rate_limited: 'Demasiadas solicitudes a SceneVoice Cloud en poco tiempo. Espera un minuto e inténtalo de nuevo; las descripciones hechas hasta ahora están guardadas.',
   error_cloud_quota_daily: 'El modelo detrás de SceneVoice Cloud ya no tiene cuota hoy. Inténtalo mañana, o usa una clave propia en los ajustes.',
+  error_cloud_closed: 'SceneVoice Cloud todavía no está abierto. Agrega una clave propia en la página de ajustes.',
   // ----- popup -----
   popup_setup_title: 'Configurar SceneVoice',
   popup_setup_body: 'Agrega tu clave de API gratuita de Gemini para empezar a crear descripciones.',
@@ -291,6 +293,7 @@ export default {
   popup_language_note: 'Interfaz: $1 · Descripciones: $2',
   popup_setup_body_welcome: 'SceneVoice puede describir videos gratis, sin configurar nada. La página de bienvenida muestra cómo, en tres pasos.',
   popup_setup_welcome: 'Configurar SceneVoice',
+  popup_setup_body_own: 'SceneVoice necesita una clave de API tuya para describir videos (Gemini o Qwen; la de Gemini es gratuita). La página de bienvenida muestra cómo, en tres pasos, con un ejemplo para escuchar primero.',
   // ----- shared settings -----
   set_enabled: 'Describir mientras veo',
   set_enabled_hint: 'Decir las descripciones automáticamente durante la reproducción.',
@@ -471,9 +474,9 @@ export default {
   opt_keys_change_for: 'Cambiar la tecla de: $1',
   opt_keys_clear: 'Quitar',
   opt_keys_clear_for: 'Quitar la tecla de: $1',
-  opt_keys_chrome: 'La fija Chrome',
-  opt_keys_chrome_note: 'Chrome gestiona los cuatro primeros atajos. Para cambiarlos, abre la página de atajos de Chrome (chrome://extensions/shortcuts); los demás se cambian aquí.',
-  opt_keys_chrome_open: 'Abrir la página de atajos de Chrome',
+  opt_keys_browser: 'La fija el navegador',
+  opt_keys_browser_note: 'El navegador gestiona los cuatro primeros atajos. Para cambiarlos, abre la página de atajos del navegador con el botón de abajo; los demás se cambian aquí.',
+  opt_keys_browser_open: 'Abrir la página de atajos del navegador',
   opt_keys_restore: 'Restaurar los atajos predeterminados',
   opt_keys_capture: 'Pulsa la nueva combinación de teclas, o Escape para conservar la anterior.',
   opt_keys_need_modifier: 'Mantén pulsada Alt (Opción en Mac), Ctrl o Comando junto con una letra, un dígito, una flecha o una tecla de función. Escape conserva la anterior.',
@@ -491,8 +494,9 @@ export default {
   opt_cache_confirm: '¿Eliminar todas las descripciones guardadas? Los videos tendrán que describirse otra vez.',
   privacy_1:
     'Con tu propia clave, SceneVoice no tiene servidor ni cuenta, y nada se envía al desarrollador. Nunca recopila estadísticas de uso. SceneVoice Cloud, si lo activas, es un relé opcional gestionado por el proyecto; el punto siguiente dice qué recibe.',
+  privacy_1_own: 'SceneVoice funciona con tu propia clave: no tiene servidor ni cuenta, y nada se envía al desarrollador. Nunca recopila estadísticas de uso.',
   privacy_6:
-    'SceneVoice Cloud está desactivado hasta que pulsas «Empezar gratis». Con él activado, las solicitudes van a api.scenevoice.app con un token de dispositivo anónimo en lugar de una clave, y el relé las pasa a Gemini. Por cada token guarda solo cuántos segundos de video se describieron hoy, el plan y la clave de licencia si la hay, además del texto final de las descripciones de un video cuando el uso compartido está activado. Nunca guarda imágenes, tus preguntas, las respuestas ni tu dirección IP, y no registra las solicitudes. «Dejar de usar Cloud» elimina el token.',
+    'SceneVoice Cloud está desactivado hasta que pulsas «Empezar gratis». Con él activado, las solicitudes van al relé de SceneVoice Cloud con un token de dispositivo anónimo en lugar de una clave, y el relé las pasa a Gemini. Por cada token guarda solo cuántos segundos de video se describieron hoy, el plan y la clave de licencia si la hay, además del texto final de las descripciones de un video cuando el uso compartido está activado. Nunca guarda imágenes, tus preguntas, las respuestas ni tu dirección IP, y no registra las solicitudes. «Dejar de usar Cloud» elimina el token.',
   privacy_2:
     'Para crear descripciones o responder a una pregunta, se envían a la API de Gemini, con tu clave, la dirección, el título, el canal y la descripción del video de YouTube, tu pregunta y las descripciones recientes. Para describir un momento otra vez, también se envía la descripción que marcaste como errónea. Se aplican las condiciones de Google para la API de Gemini.',
   privacy_5:
@@ -500,9 +504,10 @@ export default {
   privacy_3: 'Las descripciones se guardan en este equipo para que cada video se describa solo una vez.',
   privacy_4:
     'Las descripciones que marcas como erróneas se registran solo en este equipo, para conservar las versiones corregidas. Nunca se envían al desarrollador y se quitan antes de compartir las descripciones de un video. El registro se elimina junto con las descripciones guardadas.',
+  privacy_4_own: 'Las descripciones que marcas como erróneas se registran solo en este equipo, para conservar las versiones corregidas. Nunca se envían al desarrollador. El registro se elimina junto con las descripciones guardadas.',
   opt_reset_title: '6. Restaurar los valores predeterminados',
   opt_reset_intro:
-    'Vuelve a dejar todos los ajustes de descripciones, voz y sonido como estaban al instalar SceneVoice. Tu clave de API, el modelo y las descripciones guardadas se conservan. Los atajos de teclado configurados aquí vuelven a los predeterminados; los cuatro que gestiona Chrome no cambian.',
+    'Vuelve a dejar todos los ajustes de descripciones, voz y sonido como estaban al instalar SceneVoice. Tu clave de API, el modelo y las descripciones guardadas se conservan. Los atajos de teclado configurados aquí vuelven a los predeterminados; los cuatro que gestiona el navegador no cambian.',
   opt_reset_button: 'Restaurar los ajustes predeterminados',
   opt_reset_confirm: '¿Restaurar todos los ajustes de SceneVoice a sus valores predeterminados? Tu clave de API y las descripciones guardadas se conservan.',
   opt_reset_done: 'Ajustes predeterminados restaurados.',
@@ -518,6 +523,9 @@ export default {
   opt_cloud_use_own: 'Puedes usar una clave propia en su lugar: Gemini o Qwen, más abajo.',
   opt_cloud_stop: 'Dejar de usar Cloud',
   opt_cloud_stopped: 'SceneVoice Cloud ya no se usa en esta computadora; el identificador de dispositivo se eliminó.',
+  opt_cloud_closed: 'SceneVoice Cloud no está abierto en esta versión, y no se le envía nada.',
+  opt_cloud_closed_token:
+    'SceneVoice Cloud no está abierto en esta versión, así que no se usa y no se le envía nada. En esta computadora sigue guardado un identificador de dispositivo de Cloud de una versión anterior; «Dejar de usar Cloud» lo elimina.',
   set_share_descriptions: 'Compartir las descripciones terminadas con otras personas que usan SceneVoice',
   set_share_descriptions_hint: 'Cuando las descripciones de un video están completas, su texto se envía a la caché de SceneVoice, para que la siguiente persona las reciba al instante y el video se describa una sola vez. Nunca imágenes, preguntas ni quién eres. Solo con SceneVoice Cloud.',
   opt_license_label: 'Clave de licencia',
@@ -534,13 +542,18 @@ export default {
   plan_org: 'Organización',
   welcome_title: 'Te damos la bienvenida a SceneVoice',
   welcome_intro: 'SceneVoice dice lo que aparece en pantalla en los videos de YouTube y Bilibili, en las pausas entre diálogos, a través de tu lector de pantalla o de una voz integrada. Tres pasos, unos dos minutos.',
+  welcome_intro_own: 'SceneVoice dice lo que aparece en pantalla en los videos de YouTube y Bilibili, en las pausas entre diálogos, a través de tu lector de pantalla o de una voz integrada. Tres pasos: escuchar un ejemplo, añadir tu propia clave y probar un video.',
   welcome_step1_title: '1. Escucha lo que hace SceneVoice',
   welcome_step1_body: 'Tres descripciones de ejemplo, tal como llegan durante un video. No se envía nada y no hace falta ninguna clave.',
   welcome_output_legend: 'Escucharlas con',
   welcome_sample_button: 'Escuchar un ejemplo',
+  welcome_sample_silent: 'Si no oyes nada después de pulsar “Escuchar un ejemplo”, puede que tu lector de pantalla no lea los avisos automáticos en este navegador: elige “Voz integrada” arriba y pulsa el botón otra vez.',
   welcome_sample_between: 'El video sigue; las descripciones caben en las pausas.',
   welcome_sample_done: 'Ese fue el ejemplo. Siguiente: elegir cómo se crean las descripciones.',
+  welcome_sample_done_own: 'Ese fue el ejemplo. Siguiente: paso 2, añadir tu propia clave.',
   welcome_step2_title: '2. Elige cómo se crean las descripciones',
+  welcome_step2_title_own: '2. Añade tu propia clave',
+  welcome_own_only: 'Las descripciones las escribe un modelo de IA, y el modelo necesita una clave de API tuya: una clave de Gemini de Google AI Studio, gratuita, para YouTube; o una clave de Qwen de Alibaba Cloud Model Studio, para Bilibili y donde no se pueda acceder a Google. La pegas una sola vez. Se guarda solo en este equipo y se envía solo a ese servicio; nada pasa por SceneVoice.',
   welcome_source_legend: 'Las descripciones las crea',
   welcome_source_cloud: 'SceneVoice Cloud: cuota gratuita, nada que configurar',
   welcome_source_cloud_hint: '60 minutos de video nuevo descrito al día; los videos que otras personas de SceneVoice ya describieron no cuentan. Las solicitudes pasan por el relé de SceneVoice con un identificador de dispositivo anónimo, sin cuenta.',
@@ -581,7 +594,7 @@ export default {
   web_source_own: 'Mi clave de Gemini',
   web_source_own_hint: 'Gratis en Google AI Studio, sin tarjeta. La clave va solo a Google, en una cabecera de la petición, y nunca a SceneVoice.',
   web_source_cloud: 'SceneVoice Cloud',
-  web_source_cloud_hint: 'La clave del propio proyecto a través del relé de SceneVoice, con un token de dispositivo anónimo y una cuota diaria gratuita. Todavía no está abierto: usa tu propia clave hasta entonces.',
+  web_source_cloud_hint: 'La clave del propio proyecto a través del relé de SceneVoice, con un token de dispositivo anónimo y una cuota diaria gratuita.',
   web_key_label: 'Clave de API de Gemini',
   web_key_note: 'La clave se envía solo a la API de Gemini de Google, en una cabecera de la petición, nunca en una dirección web y nunca a SceneVoice.',
   web_remember: 'Recordar la clave en este dispositivo',
@@ -607,7 +620,7 @@ export default {
   web_settings_heading: '4. Cómo describir',
   web_privacy_heading: 'Privacidad',
   web_privacy_leaves:
-    'Qué sale de este navegador: con tu propia clave, el enlace del video, la parte a describir y tu clave van a la API de Gemini de Google (generativelanguage.googleapis.com), la clave en una cabecera de la petición, nunca en una dirección web. Con SceneVoice Cloud, el enlace y la parte a describir van al relé de SceneVoice (api.scenevoice.app) con un token de dispositivo anónimo en la misma cabecera.',
+    'Qué sale de este navegador: con tu propia clave, el enlace del video, la parte a describir y tu clave van a la API de Gemini de Google (generativelanguage.googleapis.com), la clave en una cabecera de la petición, nunca en una dirección web. Con SceneVoice Cloud, el enlace y la parte a describir van al relé de SceneVoice Cloud con un token de dispositivo anónimo en la misma cabecera.',
   web_privacy_youtube:
     'El video se reproduce en el reproductor insertado de YouTube desde youtube-nocookie.com. YouTube sigue poniendo sus propias cookies y ve que el video se reprodujo, como en cualquier sitio que inserta uno. El script del reproductor de youtube.com es el único script que esta página carga de alguien que no sea SceneVoice, y se carga solo cuando pulsas Reproducir.',
   web_privacy_local:

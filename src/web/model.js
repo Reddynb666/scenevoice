@@ -5,15 +5,20 @@
 // a URL. Error messages are the extension's, with the page's own words where
 // the extension's point to a settings page that does not exist here.
 
-import { CLOUD_API_BASE, DEFAULT_API_BASE } from '../shared/constants.js';
+import { CLOUD_API_BASE, CLOUD_OPEN, DEFAULT_API_BASE } from '../shared/constants.js';
 import { cleanAllowance, cloudRequest, validToken } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
 import { GeminiClient } from '../shared/gemini.js';
 import { errorMessage, resetTimeText, t } from './i18n.js';
 
-/** A client for the listener's own key, or for the relay with a device token. `model` '' = pick one from the key's list. */
-export function makeClient({ source, key = '', token = '', model = '', fetchImpl }) {
+/**
+ * A client for the listener's own key, or for the relay with a device token.
+ * `model` '' = pick one from the key's list. No client is made for the relay
+ * while SceneVoice Cloud is closed (`cloudOpen`, CLOUD_OPEN unless given).
+ */
+export function makeClient({ source, key = '', token = '', model = '', fetchImpl, cloudOpen = CLOUD_OPEN }) {
   if (source === 'cloud') {
+    if (!cloudOpen) throw new ApiError('cloud-closed');
     if (!token) throw new ApiError('no-key');
     return new GeminiClient({ apiKey: token, apiBase: CLOUD_API_BASE, model, fetchImpl });
   }
@@ -28,8 +33,8 @@ export const providerOf = (source) => (source === 'cloud' ? 'cloud' : 'gemini');
  * Register this browser with the relay and get its device token (shared/cloud.js
  * registerDevice, saying client "web"). Resolves { token, plan, allowance }.
  */
-export async function registerWebDevice(fetchImpl, { version = '', locale = '' } = {}) {
-  const { status, body } = await cloudRequest(fetchImpl, '/v1/devices', { method: 'POST', body: { client: 'web', version, locale } });
+export async function registerWebDevice(fetchImpl, { version = '', locale = '', open = CLOUD_OPEN } = {}) {
+  const { status, body } = await cloudRequest(fetchImpl, '/v1/devices', { method: 'POST', body: { client: 'web', version, locale }, open });
   const detail = String(body?.error?.message || `HTTP ${status}`);
   if (status === 429) {
     const details = Array.isArray(body?.error?.details) ? body.error.details : [];

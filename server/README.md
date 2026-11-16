@@ -4,7 +4,9 @@ A metered proxy in front of Gemini (and DashScope for mainland China) so the Sce
 
 What it is not: there are no user accounts, no passwords and no custody of anyone's key. A device gets an anonymous token; the token has a plan and a daily allowance in seconds of video; finished descriptions go into a shared text cache. The operator's own Gemini key lives in a Worker secret and is only ever put in the request header to Google.
 
-The extension side is the `cloud` provider in `src/shared/` (constant `CLOUD_API_BASE` in `src/shared/constants.js`, currently `https://api.scenevoice.app`, to be changed to the domain the owner registers). Both sides implement protocol v1 below; change it in both places or not at all.
+The extension side is the `cloud` provider in `src/shared/`. It is switched off (`CLOUD_OPEN` in `src/shared/constants.js` is `false`), and its address, `CLOUD_API_BASE` in the same file, is a placeholder on the reserved `.invalid` top-level domain, which never resolves: the project holds no domain yet. Both sides implement protocol v1 below; change it in both places or not at all.
+
+**The relay runs only under a domain its operator holds.** Whoever holds the domain an address is on can answer as the relay, and the clients would send that party video links, titles, questions and pictures, and read out whatever it returned. Never put a domain you do not hold into `wrangler.toml`, into `CLOUD_API_BASE`, or into a document that presents it as the relay's. (Version 1.1.0 of the extension named an address on a domain that was never the project's; see `SECURITY.md`.)
 
 Privacy commitments are in [PRIVACY-ADDENDUM.md](PRIVACY-ADDENDUM.md) (English and Chinese), which the extension's `PRIVACY.md` links to.
 
@@ -117,24 +119,32 @@ npx wrangler secret put ADMIN_TOKEN             # for GET /admin/licenses/…; e
 npx wrangler secret put LICENSE_KEY_SECRET      # optional: licence keys are derived from it; STRIPE_WEBHOOK_SECRET is used when unset
 
 # 3. settings: edit [vars] in wrangler.toml (allowances, ALLOWED_ORIGINS, FREE_MODELS,
-#    QWEN_FREE_MODELS, OUTPUT_TOKEN_WEIGHT, REQUESTS_PER_MINUTE, SCRIPT_PUTS_PER_DAY)
+#    QWEN_FREE_MODELS, OUTPUT_TOKEN_WEIGHT, REQUESTS_PER_MINUTE, SCRIPT_PUTS_PER_DAY).
+#    ALLOWED_ORIGINS ships as a placeholder that admits no site: list only origins you control.
 
 # 4. deploy
 npm run deploy
 ```
 
-Custom domain: put the zone on Cloudflare, uncomment `routes` in `wrangler.toml` with the host you chose, deploy again, and set `CLOUD_API_BASE` in `src/shared/constants.js` to `https://<that host>`. The manifest does not read that constant: also change the host in `host_permissions` of `static/manifest.json` by hand, and the pinned values in `test/cloud.test.js`, `test/security.test.js` and `test/china.test.js` (and the host named in `PRIVACY.md` / `PRIVACY.zh-CN.md`, which `test/docs.test.js` checks against the manifest). The relay serves no HTML, so the apex can stay on the project site.
+Custom domain (a domain you hold, see the top of this file): put the zone on Cloudflare, replace the placeholder host in the `routes` line of `wrangler.toml` with the host you chose and uncomment it, replace the placeholder in `ALLOWED_ORIGINS` with the web player's origin, and deploy again. Then open Cloud in the clients, in one change:
 
-Smoke test:
+1. `CLOUD_API_BASE` in `src/shared/constants.js` becomes `https://<that host>` and `CLOUD_OPEN` becomes `true`. The build adds the host permission to the manifest from that constant (`scripts/manifest.mjs`) and refuses to build while the two do not fit: a placeholder with Cloud open, or a real host with Cloud closed.
+2. The web player's Content-Security-Policy in `site/play/index.html` gains the relay's origin in `connect-src`, by hand (`site/check.mjs` fails until it does).
+3. `PRIVACY.md` and `PRIVACY.zh-CN.md` name the address and the new permission, with a new date; the website, both READMEs and `docs/store-listing.md` stop saying "planned". Tests hold these texts in place: some fail on purpose the moment the switch flips (`site/site.test.js`, `test/no-foreign-domain.test.js`), others when the policy is rewritten (`test/docs.test.js`). Change the texts and their tests in the same commit.
+
+The relay serves no HTML, so the apex of the domain can stay on the project site.
+
+Smoke test, with the relay's address in `RELAY` (the placeholder below resolves nowhere):
 
 ```sh
-curl -s https://api.scenevoice.app/healthz
-TOKEN=$(curl -s -X POST https://api.scenevoice.app/v1/devices -H 'content-type: application/json' -d '{"client":"curl"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
-curl -s https://api.scenevoice.app/v1/me -H "x-goog-api-key: $TOKEN"
-curl -s "https://api.scenevoice.app/v1beta/models?pageSize=50" -H "x-goog-api-key: $TOKEN" | head -c 600
+RELAY=https://relay.your-domain.invalid
+curl -s $RELAY/healthz
+TOKEN=$(curl -s -X POST $RELAY/v1/devices -H 'content-type: application/json' -d '{"client":"curl"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
+curl -s $RELAY/v1/me -H "x-goog-api-key: $TOKEN"
+curl -s "$RELAY/v1beta/models?pageSize=50" -H "x-goog-api-key: $TOKEN" | head -c 600
 ```
 
-Local development: `npm run dev` starts the Worker at `http://localhost:8787` with local KV; put the secrets in `server/.dev.vars` (`GEMINI_API_KEY=…`, git-ignored by `server/.gitignore`) and point the extension's `CLOUD_API_BASE` at it for a test build.
+Local development: `npm run dev` starts the Worker at `http://localhost:8787` with local KV; put the secrets in `server/.dev.vars` (`GEMINI_API_KEY=…`, git-ignored by `server/.gitignore`) and, in a local build you never commit or package, set `CLOUD_OPEN` to `true` and `CLOUD_API_BASE` to that address.
 
 Tests run with the repository's vitest, from the repository root:
 

@@ -2,44 +2,53 @@
 
 [中文说明](./README.zh-CN.md)
 
-SceneVoice is a free, open-source browser extension that adds **audio description** to any YouTube video, for blind and low-vision viewers. It watches the video with Google's Gemini model, writes short descriptions of what is on screen, and speaks them in the pauses between dialogue — through **your own screen reader**, so you keep your voice, your speed and your braille display.
+SceneVoice is a free, open-source browser extension that adds **audio description** to YouTube videos (and, experimentally, Bilibili videos), for blind and low-vision viewers. It watches the video with Google's Gemini model, writes short descriptions of what is on screen, and speaks them in the pauses between dialogue — through **your own screen reader**, so you keep your voice, your speed and your braille display.
 
 It is built for screen reader users first. Every control works from the keyboard; every state is announced; nothing is hidden behind a picture.
 
+**Where it stands (November 2026).** The extension is not in the Chrome Web Store or Edge Add-ons yet; it is installed from a GitHub release, version 1.2.0 or later (not 1.1.0: see [Install](#install)). Every build passes automated accessibility checks, but nobody has yet completed a test of the extension with a screen reader user: that round is starting now (the web player has had its first testers on AppleVis). SceneVoice Cloud, the planned way to use it without a key of your own, is not open, and the extension does not offer it.
+
 ## What it does
 
-- **Describes any YouTube video on demand.** Press `Alt+Shift+D` on a video and SceneVoice creates descriptions in about half a minute per five minutes of video. The first part is ready before the rest is finished (you hear *You can start watching*), progress is shown above the player's controls and said at 25%, 50% and 75% (this can be turned off), and everything is saved on your computer, so a video is described only once.
+- **Describes a public YouTube video on demand.** Press `Alt+Shift+D` on a video and SceneVoice creates descriptions in about half a minute per five minutes of video. Live streams, private or age-restricted videos and DRM-protected (paid or members-only) videos cannot be described; SceneVoice says so. The first part is ready before the rest is finished (you hear *You can start watching*), progress is shown above the player's controls and said at 25%, 50% and 75% (this can be turned off), and everything is saved on your computer, so a video is described only once.
 - **Fits into the pauses.** Every moment is written in three lengths (brief, standard, detailed). SceneVoice picks the longest one that fits the silence and skips a description when even the brief one does not fit, rather than talk over dialogue. When the video has captions (including YouTube's automatic ones), their timing is used to find the real pauses. If you prefer, it can pause the video and read the full description instead, or stay silent until you ask.
 - **Reads on-screen text first, word for word.** Titles, names in lower thirds, slides, chart figures, prices, phone numbers and addresses, code, menus, signs and chat messages are transcribed exactly as written and read before other descriptions, in the original with a translation if needed. Text you already hear (a presenter reading a slide, subtitles that match the captions) is not read again. You can turn this off separately.
 - **Leaves quiet moments quiet.** Nothing is described just to fill a silence. Music, scenery and long takes get a few words only when the picture really changes.
 - **Describe now and ask anything.** `Alt+Shift+S` describes the current moment at once. `Alt+Shift+Q` opens a dialog where you can type a question — "who is speaking?", "what does the sign say?" — and get an answer about that exact moment. Every answer starts with the moment it is about ("At 2:15: …"), and *Go to 2:15* below it takes you there.
 - **Says what it sees, and says when it is not sure.** Descriptions stick to what is visible: no guessed feelings or motives, no praise or judgement, and no names unless they are on screen or spoken. When something is blurred, small or too quick, the description says so ("appears to", "hard to see"), and descriptions Gemini is not sure of are spoken less often.
 - **Tell it when it is wrong.** *Last description is wrong* (in the popup, or a shortcut you set) marks what you just heard. SceneVoice describes only that moment again, replaces the saved description, and tells you each step. The mark stays on your computer.
-- **Your screen reader, or a built-in voice.** By default descriptions go to a live region that NVDA, JAWS and VoiceOver read with your own settings. People without a screen reader can switch to the browser's built-in voices.
+- **Your screen reader, or a built-in voice.** By default descriptions go to a standard ARIA live region, which screen readers such as NVDA, JAWS and VoiceOver are built to read aloud with your own settings. This has not yet been confirmed by a test with screen reader users; if yours stays silent, switch to the built-in voice (the welcome page and the settings page both offer it) and please tell us. People without a screen reader use the built-in voice too.
 - **Your language.** Descriptions can be written in any language your browser is set to; 24 of them (Simplified and Traditional Chinese, English, Spanish, French, German, Portuguese, Japanese, Korean, Russian, Arabic, Hindi, Italian, Dutch, Polish, Turkish, Vietnamese, Thai, Indonesian, Bengali, Urdu, Persian, Ukrainian, Swahili) have their own hedging words and test sentences. The interface is in 14 languages: English and Simplified Chinese are complete and reviewed; Traditional Chinese, Spanish, Portuguese (Brazil), French, German, Japanese, Korean, Russian, Arabic, Hindi, Indonesian and Vietnamese are AI drafts awaiting native screen-reader users' review (see `CONTRIBUTING.md`).
 - **Large-text overlay** for low-vision viewers and for sighted people watching with you.
-- **No account, no tracking.** With your own free Gemini API key SceneVoice has no server and collects nothing; the optional SceneVoice Cloud relay (*Start free*) is described under [Privacy](#privacy).
+- **No account, no tracking.** You use your own API key, and requests go straight from your browser to the model you chose: this version contacts no server of the project's and collects nothing. SceneVoice Cloud, an optional relay, is planned and not available; see [Privacy](#privacy).
 - **China site (experimental): Bilibili with Qwen.** On Bilibili video pages, SceneVoice can describe as you watch with Alibaba Cloud's Qwen. See [below](#china-site--bilibili-experimental).
 
 ## Install
 
-SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116 or newer). Get it from:
+SceneVoice works in Chrome, Edge, Brave and other Chromium browsers (version 116 or newer).
 
-- Chrome Web Store (link when published)
-- Edge Add-ons (link when published)
-- [GitHub Releases](https://github.com/reddynb666/scenevoice/releases): `scenevoice-<version>.zip`, with `SHA256SUMS` to check the download; load it as an unpacked extension (see [Development](#development))
-- Gitee mirror for mainland China (see [docs/distribution-china.md](./docs/distribution-china.md))
+What exists today:
+
+- [GitHub Releases](https://github.com/reddynb666/scenevoice/releases): `scenevoice-<version>.zip`, with `SHA256SUMS` to check the download. Install version 1.2.0 or later; do not install version 1.1.0. On its welcome page, 1.1.0 shows *Start free* (SceneVoice Cloud), which points at an address that was never the project's. The fix is in the version after it, 1.2.0. If the Releases page does not list 1.2.0 yet, use the web player below until it does; [SECURITY.md](./SECURITY.md) has the details. To install a release, unzip it into a folder you will keep and load it as an unpacked extension: open `chrome://extensions` (`edge://extensions` in Edge), turn on **Developer mode**, choose **Load unpacked** and pick the folder. An unpacked extension does not update by itself, and the browser may remind you at start-up that developer mode is on.
+
+What does not exist yet:
+
+- **Chrome Web Store:** not listed yet. (The Chrome Web Store cannot be reached from mainland China.)
+- **Edge Add-ons:** not listed yet. It will be the store for people in mainland China.
+- **A Gitee mirror** for downloads inside mainland China: planned, not created. How it will be set up is in [docs/distribution-china.md](./docs/distribution-china.md).
+
+Testers in mainland China: [docs/tester-guide.zh-CN.md](./docs/tester-guide.zh-CN.md) says what the test is and how to take part (recruitment has not opened yet), and has the install steps by keyboard and a half-hour test, in Chinese, written to be read with a screen reader.
 
 ### Try it without installing
 
-The [web player](https://reddynb666.github.io/scenevoice/play/) (in Chinese: [play/?lang=zh-CN](https://reddynb666.github.io/scenevoice/play/?lang=zh-CN)) takes a YouTube link and reads AI audio description in the browser, through your screen reader or the browser's voice, with your own Gemini key (free from Google AI Studio; SceneVoice Cloud appears on the page but is not open yet). It also works on a phone. The differences from the extension: YouTube only (a Bilibili link is refused with a pointer to the extension), no timing from captions (the pauses are the model's estimates), no adjustments by video type, and the YouTube player is embedded from youtube-nocookie.com and kept out of the Tab order: the page's own buttons and keys drive it. In the player region, Space plays or pauses, D describes now, R repeats, A asks, S stops speaking, Left and Right move 5 seconds, Up and Down change the reading speed, M changes the mode and ? reads the list; `Alt+Shift+D`, `S`, `L` and `Q` work anywhere on the page, the same letters as in the extension.
+The [web player](https://reddynb666.github.io/scenevoice/play/) (in Chinese: [play/?lang=zh-CN](https://reddynb666.github.io/scenevoice/play/?lang=zh-CN)) takes a YouTube link and reads AI audio description in the browser, through your screen reader or the browser's voice, with your own Gemini key (Google AI Studio has a free tier). It also works on a phone. The differences from the extension: YouTube only (a Bilibili link is refused with a pointer to the extension), no timing from captions (the pauses are the model's estimates), no adjustments by video type, and the YouTube player is embedded from youtube-nocookie.com and kept out of the Tab order: the page's own buttons and keys drive it. In the player region, Space plays or pauses, D describes now, R repeats, A asks, S stops speaking, Left and Right move 5 seconds, Up and Down change the reading speed, M changes the mode and ? reads the list; `Alt+Shift+D`, `S`, `L` and `Q` work anywhere on the page, the same letters as in the extension.
 
 ### First run
 
-After installing, the welcome page opens: hear a sample, then choose SceneVoice Cloud (free allowance, no key) or your own key.
+After installing, the welcome page opens: hear a sample, add a key of your own, try a video.
 
-1. **Hear a sample.** Three sample descriptions through your screen reader or the built-in voice. Nothing is sent anywhere.
-2. **Choose how descriptions are made.** *My own key* (the working path today): the settings page opens at the key field (the Qwen key field in a Chinese browser), with a step-by-step guide written for screen reader users. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are. *SceneVoice Cloud* is not open yet: the relay is not deployed, and *Start free* says so and points you back to your own key. Once it is live, *Start free* gives you an anonymous device token with 60 minutes of newly described video a day; videos other SceneVoice users already had described do not count, and finished descriptions are shared back as text (switch it off in settings).
+1. **Hear a sample.** Three sample descriptions through your screen reader or the built-in voice. Nothing is sent anywhere. If you hear nothing, your screen reader may not be reading the announcements: choose *Built-in voice* on the same page and press the button again.
+2. **Add a key of your own.** *Add my key in settings* opens the settings page at the key field (the Qwen key field in a Chinese browser), with a step-by-step guide written for screen reader users. A key that does not work is explained: wrong key, no connection, quota used up, or Gemini not available where you are. *SceneVoice Cloud* is not open yet: the relay is not deployed, so this version has no *Start free* button, no allowance and no licence field, and asks for no permission for the relay. They return when the relay runs.
 3. **Try it.** The page says your shortcut, that `Alt+Shift+H` on a video reads all the keys aloud, and links to a short video. The first time you play a video without descriptions, SceneVoice says once how to start. The popup lists every shortcut under *All keyboard shortcuts*, with a button that opens the settings section where they are changed.
 
 ### Getting a Gemini API key
@@ -52,7 +61,7 @@ The free tier is enough for everyday use. Google's terms for the Gemini API appl
 
 ## Using it
 
-Open any YouTube video.
+Open a YouTube video.
 
 ### Keyboard shortcuts
 
@@ -73,7 +82,7 @@ Open any YouTube video.
 
 On a Mac, `Alt` is the Option key, and SceneVoice says the keys as "Option+Shift+…". `Alt+Shift+H` reads the whole list aloud at any time, with the keys currently set.
 
-Chrome lets an extension suggest only four shortcuts, so SceneVoice handles the other eight itself on the video page. Change them on the settings page under *Keyboard shortcuts*: press *Change*, then the new key combination (or Escape to keep the old one); *Clear* removes a key; *Restore default keys* puts them back. The page says what was saved, refuses a key already used by another SceneVoice command or by one of Chrome's four, and needs Alt, Ctrl or Command with a letter, digit, arrow or function key. The four keys Chrome keeps are still changed at `chrome://extensions/shortcuts`; the settings page has a button that opens it. Do change a key if it clashes with your screen reader. The page keys are ignored while you type in a field, a comment box, a search box or the ask dialog, and a key SceneVoice handles never reaches the player. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
+The browser lets an extension suggest only four shortcuts, so SceneVoice handles the other eight itself on the video page. Change them on the settings page under *Keyboard shortcuts*: press *Change*, then the new key combination (or Escape to keep the old one); *Clear* removes a key; *Restore default keys* puts them back. The page says what was saved, refuses a key already used by another SceneVoice command or by one of the browser's four, and needs Alt, Ctrl or Command with a letter, digit, arrow or function key. The four keys the browser keeps are still changed at `chrome://extensions/shortcuts` (`edge://extensions/shortcuts` in Edge); the settings page has a button that opens it. Do change a key if it clashes with your screen reader. The page keys are ignored while you type in a field, a comment box, a search box or the ask dialog, and a key SceneVoice handles never reaches the player. The SceneVoice button in the player's control bar and the toolbar popup do the same things with the mouse.
 
 The shortcuts that change a setting say the new value, for example "Detail: brief." or "Speaking rate: 1.4 times normal." *Speak faster* and *Speak slower* change the built-in voice's rate; with your screen reader they change the speed SceneVoice plans for (the setting below), not the screen reader itself.
 
@@ -99,7 +108,7 @@ Your marks stay on your computer, next to the saved descriptions, and are delete
 - **Create descriptions automatically** — starts as soon as you open a video. Off by default because it uses your API quota on every video you open.
 - **Built-in voice** — voice, speaking rate and pitch, each set separately, with a *Test voice* button that reads a sentence in the description language. Voices for the description language are listed first, and each description language remembers its own voice. A voice chosen on another computer that this one does not have is replaced by an automatic one.
 - **Quick settings in the popup** — detail, mode, how much to describe, on-screen text and speed (the rate of the built-in voice, or your screen reader speed) are in the toolbar popup as well as on the settings page.
-- **Restore default settings** — at the end of the settings page. It resets every preference but keeps your API key, model and saved descriptions. It also puts the keys SceneVoice handles on the page back to their defaults; the four keys Chrome keeps are not touched.
+- **Restore default settings** — at the end of the settings page. It resets every preference but keeps your API key, model and saved descriptions. It also puts the keys SceneVoice handles on the page back to their defaults; the four keys the browser keeps are not touched.
 
 Settings other than the key are saved in your browser profile (`chrome.storage.sync`) and follow you to your other browsers if sync is on.
 
@@ -125,7 +134,7 @@ YouTube and Gemini are usually not reachable from mainland China. This prototype
 - On Bilibili, *Same as my browser* as the description language means Chinese. With the built-in voice, Chinese voices are listed and used first. Screen reader output works as on YouTube.
 - `Alt+Shift+D` turns descriptions, and the picture taking, off and on. *Stop* in the popup stops the picture taking and keeps what was described.
 
-Distribution for mainland China (Edge Add-ons, a Gitee mirror): see [docs/distribution-china.md](docs/distribution-china.md).
+Distribution for mainland China (Edge Add-ons; a Gitee mirror is planned): see [docs/distribution-china.md](docs/distribution-china.md). The test for screen reader users in mainland China is [docs/tester-guide.zh-CN.md](docs/tester-guide.zh-CN.md).
 
 ### Known limitations
 
@@ -176,7 +185,7 @@ YouTube page ──(video link, title)──▶ Gemini API (your key) ──(tim
 ```
 
 - The video itself is never downloaded or uploaded. Gemini reads public YouTube videos by URL, in sections of five minutes, sampled at one frame every two seconds. A request is given three minutes; if it times out, that section is tried again in two shorter pieces, and you hear *The request to Gemini timed out* only when that still fails. Requests are made from a worker in the extension's own hidden page (an offscreen document), not from the YouTube tab: your key never enters the page, YouTube's page policies cannot block the requests, and the job carries on if you leave the video. Progress is saved after every section, so an interruption costs at most one section. Two tabs showing the same video share one run.
-- With SceneVoice Cloud, the same request goes to the project's relay (`api.scenevoice.app`) with the anonymous device token instead of a key, and the relay calls Gemini with the project's key; everything else is the same.
+- SceneVoice Cloud (planned, switched off in this version): the same request would go to a relay run by the project (not deployed, and without an address until the project holds a domain for it) with an anonymous device token instead of a key, and the relay would call Gemini with the project's key; everything else would be the same.
 - If the chosen model is overloaded or no longer available for your key, the extension retries with increasing pauses and then continues with the next best model.
 - For every moment the model writes three versions of the description, how long the following pause is, whether it is on-screen text or action, and how important it is. On-screen text also comes as an exact transcription, written before the spoken versions so that they quote it rather than paraphrase it; the transcript page shows it when a description translates or shortens it.
 - If the video has captions, the extension reads them (from YouTube, in the page itself; nothing is sent elsewhere). Their timing corrects the pauses the model estimated: a description that starts just before someone stops talking is moved to the end of their sentence. Their words leave out on-screen text that is also spoken within a few seconds.
@@ -187,15 +196,15 @@ Descriptions are generated by a language model and can be wrong. SceneVoice asks
 
 ## Privacy
 
-- With your own key, SceneVoice has no server and no account, and sends no analytics. The optional SceneVoice Cloud relay, below, is the one exception.
+- There is no account and no analytics, and this version contacts no server of the project's: requests go only to the model you chose. SceneVoice Cloud, below, is planned and not available.
 - To create descriptions, the YouTube video's address, title and description are sent to the Gemini API together with your API key. To describe a moment again, the description you marked as wrong is sent too. Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) apply.
 - Your API key is stored only on your computer (`chrome.storage.local`) and is sent only to the Gemini API address shown in settings. It is never placed in a URL.
 - Descriptions are saved on your computer so a video is described only once. You can delete them all from the settings page.
 - The descriptions you mark as wrong are recorded on your computer only, with the saved descriptions, and are deleted with them. There is no feedback server.
 - Settings (not the key) are synced through your browser profile if sync is on.
-- **SceneVoice Cloud** (optional; off until you press *Start free*): requests go to the project's relay at `api.scenevoice.app` with an anonymous device token instead of a key, and the relay calls Gemini with the project's key. Per token it keeps only the seconds of video described today, the plan and any licence key; it never keeps pictures, questions, answers or your IP address, and does not log requests. *Start free* also turns on *Share finished descriptions*: once a video's descriptions are complete, their text (never pictures, questions or your key) is sent to the relay so the next listener of that video gets it at once; switch it off in settings. *Stop using Cloud* removes the token.
+- **SceneVoice Cloud** (planned; not available, and switched off in this version, which neither offers it nor asks for its host): when it opens, and only for people who choose it, requests will go to a relay run by the project, on a domain the project holds (it has no address yet; the privacy policy will name it first), with an anonymous device token instead of a key, and the relay will call Gemini with the project's key. Per token it is designed to keep only the seconds of video described that day, the plan and any licence key; never pictures, questions, answers or your IP address, and no request log. Choosing it will also turn on *Share finished descriptions*: once a video's descriptions are complete, their text (never pictures, questions or your key) goes to the relay so the next listener of that video gets it at once; it can be switched off. The privacy policy has the full description.
 - A usage counter (today's requests, tokens and a rough cost per model, and each video's token count) and the daily limit you set are kept on this computer only and never sent anywhere.
-- The web player sends the same things to the Gemini API (or, with Cloud, to the relay), keeps the key in the tab's session storage unless you tick *Remember the key on this device*, has no analytics, and embeds YouTube's player from youtube-nocookie.com, which still sets YouTube's own cookies. The *Web player* section of the policy has the details.
+- The web player sends the same things to the Gemini API, keeps the key in the tab's session storage unless you tick *Remember the key on this device*, has no analytics, and embeds YouTube's player from youtube-nocookie.com, which still sets YouTube's own cookies. The *Web player* section of the policy has the details.
 
 Full policy: [PRIVACY.md](./PRIVACY.md) (中文版：[PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)).
 
@@ -227,23 +236,23 @@ Layout:
 - `src/background/` — service worker: text-to-speech, keyboard commands, status for the popup, cache housekeeping, and the hub that starts generation jobs, saves each finished section and tells the tabs. It makes no Gemini calls itself: Chrome stops a service worker whose fetch takes more than 30 seconds, and video requests often do.
 - `src/offscreen/` — the offscreen document and its web worker, where the model requests actually run — Gemini, Qwen, or SceneVoice Cloud's relay, including its shared-cache reads and writes (`worker.js` keeps the job list; `offscreen.js` bridges it to the service worker).
 - `src/shared/` — logic shared by all parts: Gemini client and prompts, the generation loop (`generation.js`: sections, resume, model fallback), script parsing, cache, settings. Which model a site uses (Gemini, Qwen or SceneVoice Cloud) and whether it opens the video link or is sent frames is in `providers.js`; `qwen.js` is the Qwen client, `cloud.js` the relay's own routes (device token, allowance, licence, and which parts of a script may be shared), `usage.js` the daily counter, prices and daily limit, `language.js` which codes may be description languages, `scheduler.js` what may interrupt what, `frames.js` the prompts built from frames, `describe.js` runs them with either model, `coverage.js` tracks which parts of a video are described, and `shortcuts.js` is the keyboard layer (Chrome's syntax and the Mac symbols, matching a key event by its physical key, which key wins when Chrome and the page both have one, conflicts, the `pageShortcuts` setting).
-- `src/popup/`, `src/options/`, `src/transcript/`, `src/guide/`, `src/welcome/` — toolbar popup, settings page, the transcript page, the API-key guide, and the welcome page opened on first run (hear a sample, then *Start free* or a key of your own).
+- `src/popup/`, `src/options/`, `src/transcript/`, `src/guide/`, `src/welcome/` — toolbar popup, settings page, the transcript page, the API-key guide, and the welcome page opened on first run (hear a sample, add a key of your own, try a video; the SceneVoice Cloud choice is in the page and taken out while `CLOUD_OPEN` in `src/shared/constants.js` is false).
 - `src/web/` — the web player (`site/play/`), built by `npm run build:web` into `site/play/player.js` without any `chrome.*` API: `app.js` the page, `link.js` YouTube link parsing, `youtube.js` the embedded player, `playback.js` the cue scheduler, `output.js` and `speech.js` live region or Web Speech output, `keys.js` the single-key layer, `model.js` Gemini or the relay, `store.js` what the browser remembers, `i18n.js` the strings (English and Simplified Chinese, from `scripts/locales/`).
 - `scripts/locales/` — every user-facing string, one file per interface language (`en.mjs` is the reference); the build generates `_locales/`.
-- `test/` — unit tests (`test/web-player.test.js` covers the web player, `test/shortcuts.test.js` the keyboard layer), and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (127 checks, including axe accessibility scans).
-- `server/` — the SceneVoice Cloud reference relay, a Cloudflare Worker with its own README (the protocol) and tests under `server/test/`; not deployed.
+- `test/` — unit tests (`test/web-player.test.js` covers the web player, `test/shortcuts.test.js` the keyboard layer), and `test/e2e/e2e.py` which drives the real extension in headless Chromium against a fake YouTube page and a mock Gemini API (including axe accessibility scans).
+- `server/` — the SceneVoice Cloud reference relay, a Cloudflare Worker with its own README (the protocol) and tests under `server/test/`; not deployed, and the extension does not use it while `CLOUD_OPEN` is false.
 - `site/` — the project website (English and Simplified Chinese; the home pages need no build step). `site/play/` is the web player page (`index.html`, `play.css`, and `player.js` from `npm run build:web`); `site/check.mjs` is the accessibility gate for all three pages.
 
-Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md), which also lists the manual checks for Bilibili.
+Testing with a screen reader before a release: see [CONTRIBUTING.md](./CONTRIBUTING.md), which also lists the manual checks for Bilibili. The short test for screen reader users in mainland China is [docs/tester-guide.zh-CN.md](./docs/tester-guide.zh-CN.md); the owner's store checklist is [docs/store-submission.zh-CN.md](./docs/store-submission.zh-CN.md).
 
 ## Roadmap
 
-Done since 1.0.0: defaults by video type, the Bilibili and Qwen edition for mainland China, an honest first minute (the welcome page, one key describing every site, nothing hanging in silence), descriptions that no longer talk over dialogue or cut each other off, a usage counter with a daily limit, 14 interface languages, SceneVoice Cloud (the optional no-key path: an extension provider, a reference relay under `server/`, and a privacy section), a website under `site/`, and release engineering (tagged GitHub Releases with checksums, store drafts, CI with an accessibility gate). The plan behind this is `docs/plan-2026-11.zh-CN.md`.
+Done since 1.0.0: defaults by video type, the Bilibili and Qwen edition for mainland China, an honest first minute (the welcome page, one key describing every site, nothing hanging in silence), descriptions that no longer talk over dialogue or cut each other off, a usage counter with a daily limit, 14 interface languages, the code for SceneVoice Cloud (the optional no-key path: an extension provider and a reference relay under `server/`; written, not deployed, and switched off in the released extension), a website under `site/`, and release engineering (tagged GitHub Releases with checksums, store drafts, CI with an accessibility gate). The plan behind this is `docs/plan-2026-11.zh-CN.md`.
 
 Next, in order:
 
-1. Tests with blind and low-vision users (NVDA, JAWS, VoiceOver; English and Chinese), then the Chrome Web Store and Microsoft Edge Add-ons, with a Gitee mirror for mainland China.
-2. SceneVoice Cloud live: the relay deployed under the project's domain, a free daily allowance for everyone and a paid tier that funds it; grants and donated credits where they can be had.
+1. The Chrome Web Store and Microsoft Edge Add-ons, first unlisted (Chrome) and hidden (Edge) so that testers can install from a store link without developer mode; tests with blind and low-vision users (NVDA, JAWS, VoiceOver; in China 争渡读屏, 保益读屏 and NVDA); then the public listings, and a Gitee mirror for mainland China.
+2. SceneVoice Cloud live: the relay deployed under a domain the project holds (none yet), a free daily allowance for everyone and a paid tier that funds it; grants and donated credits where they can be had.
 3. For creators: export the descriptions as text or an audio track to upload as a YouTube *descriptive* track.
 4. More expressive Chinese voices (for example CosyVoice) as an option, and a large-print, high-contrast mode for the text shown on the video.
 5. Character memory you can edit ("call the woman in the red coat Maya"), kept per channel.

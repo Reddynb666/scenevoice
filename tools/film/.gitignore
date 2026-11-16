@@ -1,0 +1,7 @@
+# Downloaded and generated files: never committed.
+node_modules/
+fixtures/
+models/
+out/
+cache/
+*.part

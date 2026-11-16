@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupVoices, languageMatch, pickVoice, speechOptions } from '../src/shared/voices.js';
+import { groupVoices, hasVoiceFor, languageMatch, pickVoice, speechOptions } from '../src/shared/voices.js';
 
 const VOICES = [
   { name: 'Samantha', lang: 'en-US' },
@@ -103,5 +103,27 @@ describe('speechOptions', () => {
 
   it('leaves the voice out when it is missing here', () => {
     expect(speechOptions({ lang: 'zh-CN', voice: 'Ting-Ting (Premium)' }, installed)).not.toHaveProperty('voiceName');
+  });
+});
+
+describe('hasVoiceFor: whether this computer can read a language aloud at all', () => {
+  const english = [{ voiceName: 'Samantha', lang: 'en-US' }, { voiceName: 'Daniel', lang: 'en-GB' }];
+
+  it('is yes with a voice for the language, in any region or script, and no with voices for other languages only', () => {
+    expect(hasVoiceFor(english, 'en')).toBe(true);
+    expect(hasVoiceFor(english, 'en-AU')).toBe(true);
+    expect(hasVoiceFor(english, 'zh-CN')).toBe(false);
+    expect(hasVoiceFor(english, 'sv')).toBe(false);
+    // Chinese voices report zh, cmn or yue; any of them can read Chinese text.
+    expect(hasVoiceFor([{ voiceName: 'Xiaoxiao', lang: 'cmn-Hans-CN' }], 'zh-CN')).toBe(true);
+    expect(hasVoiceFor([{ voiceName: 'Sinji', lang: 'zh-HK' }], 'zh-CN')).toBe(true);
+  });
+
+  it('is yes when it cannot be told: no list yet, no language asked for, or a voice that does not say what it speaks', () => {
+    expect(hasVoiceFor([], 'zh-CN')).toBe(true);
+    expect(hasVoiceFor(undefined, 'zh-CN')).toBe(true);
+    expect(hasVoiceFor(english, '')).toBe(true);
+    expect(hasVoiceFor(english, undefined)).toBe(true);
+    expect(hasVoiceFor([...english, { voiceName: 'eSpeak' }], 'zh-CN')).toBe(true);
   });
 });

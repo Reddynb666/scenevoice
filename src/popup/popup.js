@@ -1,4 +1,4 @@
-import { LANGUAGES, MSG, RTL_LANGUAGES, SAY_SHORTCUTS } from '../shared/constants.js';
+import { CLOUD_OPEN, LANGUAGES, MSG, RTL_LANGUAGES, SAY_SHORTCUTS } from '../shared/constants.js';
 import { BINDABLE_COMMANDS, COMMAND_LABEL_KEYS, displayShortcut, effectiveShortcuts } from '../shared/shortcuts.js';
 import { formatTime } from '../shared/script.js';
 import { bindSettings } from '../shared/form.js';
@@ -95,9 +95,10 @@ let setupTarget = 'options';
 /**
  * Ask for a key when the model this tab's site uses has none. Away from a
  * video any key will do, and the key asked for is the one this listener's
- * language suggests (Gemini cannot be reached from mainland China). With no
- * key and no SceneVoice Cloud token at all, the welcome page is the place to
- * start: a sample, then Cloud or a key.
+ * language suggests (Gemini cannot be reached from mainland China). With
+ * nothing set up at all, the welcome page is the place to start: a sample,
+ * then a key of one's own (or SceneVoice Cloud, once it is open: until then the
+ * banner promises no free allowance and a saved token counts for nothing).
  */
 function renderKeyBanner() {
   const onVideo = Boolean(current?.supported && current.provider);
@@ -107,7 +108,7 @@ function renderKeyBanner() {
   $('keyBanner').hidden = Boolean(has);
   setupTarget = any ? 'options' : 'welcome';
   if (!any) {
-    $('setupBody').textContent = t('popup_setup_body_welcome');
+    $('setupBody').textContent = t(CLOUD_OPEN ? 'popup_setup_body_welcome' : 'popup_setup_body_own');
     $('setupKey').textContent = t('popup_setup_welcome');
     return;
   }

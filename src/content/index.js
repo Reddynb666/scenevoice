@@ -178,6 +178,8 @@ function main() {
       const v = getVideo();
       return Boolean(v && (!v.paused || pausedByUs) && !v.muted && v.volume > 0);
     },
+    // The built-in voice cannot read the descriptions here: a listener without a screen reader would hear nothing, so the reason is shown on the video too.
+    onVoiceFailed: (notice) => ui.showText(notice, 'notice', 12),
   });
   const ui = new PageUI({ onToggle: () => toggle(), platform });
 
@@ -218,10 +220,8 @@ function main() {
 
   /** Direct feedback to a user action (in the interface language): always delivered, cutting off any description in flight. */
   const feedback = (text) => {
-    if (settings.output === 'tts') {
-      announcer.announceToScreenReader(text, false);
-      return announcer.say(text, { lang: announcer.uiLang });
-    }
+    // By voice: spoken at once, and written to a muted region (announcer.js), so a screen reader that is also running does not say it too.
+    if (settings.output === 'tts') return announcer.say(text, { lang: announcer.uiLang, aside: true });
     return announcer.say(text, { status: true, urgent: false });
   };
 

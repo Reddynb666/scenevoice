@@ -4,6 +4,14 @@
 //   node scripts/build.mjs --metafile  build + dist-meta.json and a size table; fails when a bundle is over its limit
 //   node scripts/build.mjs --watch     rebuild on change (inline source maps, no minify)
 //   node scripts/build.mjs --web       the web player only: src/web/player.js -> site/play/player.js (npm run build:web)
+//
+// SceneVoice Cloud follows one switch, CLOUD_OPEN in src/shared/constants.js: the
+// bundles import it, and the manifest gets the relay's host permission only when
+// it is true (scripts/manifest.mjs). For tests of the open state before the
+// owner flips it, SCENEVOICE_CLOUD_OPEN=1 builds the extension with the switch
+// forced on into test/e2e/output/dist-cloud-open/ (git-ignored; the end-to-end
+// suite makes and loads it). Such a build is never dist/, never a package and
+// never the web player: --zip and --web refuse it.
 
 import { build, context } from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -11,14 +19,30 @@ import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { CORE_LOCALES, LOCALES, LOCALE_FOLDERS, SPOKEN_KEYS, STRINGS, coverage, strayKeys } from './locales.mjs';
-import { RTL_LANGUAGES } from '../src/shared/constants.js';
+import { relayAddressProblem, stampManifest } from './manifest.mjs';
+import { CLOUD_OPEN, RTL_LANGUAGES } from '../src/shared/constants.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const dist = join(root, 'dist');
+const args = new Set(process.argv.slice(2));
+/** A test build with SceneVoice Cloud forced on (see the top of this file). */
+const forcedOpen = process.env.SCENEVOICE_CLOUD_OPEN === '1';
+const cloudOpen = forcedOpen || CLOUD_OPEN;
+if (forcedOpen && (args.has('--zip') || args.has('--web') || args.has('--watch'))) {
+  console.error('SCENEVOICE_CLOUD_OPEN=1 makes a test build only: it cannot be packaged, watched or built as the web player. To open SceneVoice Cloud for real, set CLOUD_OPEN in src/shared/constants.js.');
+  process.exit(1);
+}
+// The relay's address must fit the switch as the source has it (scripts/manifest.mjs): a
+// placeholder on .invalid while Cloud is closed, a real address once it is open. The forced
+// test build keeps the placeholder, which the end-to-end suite points at its mock.
+const addressProblem = relayAddressProblem({ cloudOpen: CLOUD_OPEN });
+if (addressProblem) {
+  console.error(addressProblem);
+  process.exit(1);
+}
+const dist = forcedOpen ? join(root, 'test', 'e2e', 'output', 'dist-cloud-open') : join(root, 'dist');
 // Source maps live outside dist/ so they are never in the store package, but
 // are kept with each release (the -sourcemaps zip) to read a stack trace.
-const maps = join(root, 'dist-maps');
-const args = new Set(process.argv.slice(2));
+const maps = forcedOpen ? join(root, 'test', 'e2e', 'output', 'dist-cloud-open-maps') : join(root, 'dist-maps');
 
 /**
  * Messages written into every _locales folder by writeLocales() rather than
@@ -118,8 +142,8 @@ function copyStatic() {
   }
   cpSync(join(root, 'src', 'offscreen', 'offscreen.html'), join(dist, 'offscreen.html'));
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-  const manifest = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
-  manifest.version = pkg.version;
+  // The version, and the relay's host permission only while SceneVoice Cloud is open (manifest.mjs).
+  const manifest = stampManifest(JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8')), { version: pkg.version, cloudOpen });
   writeFileSync(join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return pkg.version;
 }
@@ -217,6 +241,25 @@ function reportSizes(results) {
   }
 }
 
+/**
+ * The test build with Cloud forced on: the one line that holds the switch is
+ * read as true. The build fails if that line is not found as written, so a
+ * rewording of constants.js cannot quietly turn this into an ordinary build.
+ */
+const SWITCH_LINE = 'export const CLOUD_OPEN = false;';
+const forceCloudOpen = {
+  name: 'cloud-open',
+  setup(b) {
+    const constants = join(root, 'src', 'shared', 'constants.js');
+    b.onLoad({ filter: /constants\.js$/ }, (a) => {
+      if (resolve(a.path) !== constants) return null;
+      const source = readFileSync(a.path, 'utf8');
+      if (!source.includes(SWITCH_LINE)) throw new Error(`src/shared/constants.js no longer has the line "${SWITCH_LINE}"`);
+      return { contents: source.replace(SWITCH_LINE, 'export const CLOUD_OPEN = true;'), loader: 'js' };
+    });
+  },
+};
+
 const common = {
   bundle: true,
   target: ['chrome116'],
@@ -226,6 +269,7 @@ const common = {
   sourcemap: args.has('--watch') ? 'inline' : 'external',
   sourcesContent: true,
   metafile: args.has('--metafile'),
+  plugins: forcedOpen ? [forceCloudOpen] : [],
 };
 
 const entries = [
@@ -302,7 +346,7 @@ if (args.has('--watch')) {
 } else {
   const results = await Promise.all(entries.map((e) => build({ ...common, ...e })));
   moveSourceMaps();
-  console.log(`Built SceneVoice ${version} into dist/ (source maps in dist-maps/)`);
+  console.log(forcedOpen ? `Built SceneVoice ${version} with SceneVoice Cloud forced OPEN into ${relative(root, dist)}/ (a test build: never package or publish it)` : `Built SceneVoice ${version} into dist/ (source maps in dist-maps/)`);
   if (args.has('--metafile')) reportSizes(results);
   if (args.has('--zip')) {
     const stray = entriesOf(dist, (name) => !PACKAGED.has(name.slice(name.lastIndexOf('.'))));

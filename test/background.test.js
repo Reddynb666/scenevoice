@@ -1,5 +1,19 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MSG, SCRIPT_VERSION } from '../src/shared/constants.js';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * The SceneVoice Cloud switch as the service worker sees it (CLOUD_OPEN in
+ * constants.js, false as shipped). The service worker is imported once and
+ * reads the constant each time it needs it, so the tests of the open state
+ * turn this flag on; everything else here runs with Cloud closed.
+ */
+const cloudSwitch = vi.hoisted(() => ({ open: false }));
+vi.mock('../src/shared/constants.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  get CLOUD_OPEN() {
+    return cloudSwitch.open;
+  },
+}));
+import { CLOUD_API_BASE, MSG, SCRIPT_VERSION } from '../src/shared/constants.js';
 import { localDay } from '../src/shared/usage.js';
 
 const ID = 'abcdefghijklmnopqrstuvwxyzabcdef';
@@ -108,6 +122,50 @@ describe('speaking with the built-in voice', () => {
   it('plays the voice test from the popup', async () => {
     await deliver({ type: MSG.SPEAK, text: 'A woman crosses the street.', lang: 'en', rate: 1.2, pitch: 1.3, voice: '', id: 'test' }, popup);
     expect(speak.mock.calls[0][1]).toMatchObject({ rate: 1.2, pitch: 1.3 });
+  });
+
+  it('tells the tab how the utterance ended, and nothing about it to anyone else', async () => {
+    chrome.tabs.sendMessage.mockClear();
+    await deliver({ type: MSG.SPEAK, text: 'A dog runs.', lang: 'en', id: 'u7' }, youtube);
+    const { onEvent } = speak.mock.calls.at(-1)[1];
+    onEvent({ type: 'start' });
+    onEvent({ type: 'word' });
+    expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+    for (const type of ['end', 'interrupted', 'cancelled', 'error']) onEvent({ type });
+    expect(chrome.tabs.sendMessage.mock.calls).toEqual(['end', 'interrupted', 'cancelled', 'error'].map((event) => [7, { type: MSG.TTS_EVENT, id: 'u7', event }]));
+  });
+
+  it('says when this computer has no voice for the language, unless a voice was picked by name or the voices are not known', async () => {
+    const ended = async (msg) => {
+      chrome.tabs.sendMessage.mockClear();
+      await deliver({ type: MSG.SPEAK, id: 'u8', ...msg }, youtube);
+      speak.mock.calls.at(-1)[1].onEvent({ type: 'end' });
+      return chrome.tabs.sendMessage.mock.calls.at(-1)[1];
+    };
+    // Tingting (zh-CN) and Samantha (en-US) are installed: no Swedish voice. Chrome still tries; the tab is told.
+    expect(await ended({ text: 'En kvinna går in.', lang: 'sv' })).toEqual({ type: MSG.TTS_EVENT, id: 'u8', event: 'end', noVoice: true });
+    expect(speak.mock.calls.at(-1)[1].lang).toBe('sv');
+    // A voice for the language, of any region or script: nothing to say.
+    expect(await ended({ text: '她走进厨房。', lang: 'zh-TW' })).toEqual({ type: MSG.TTS_EVENT, id: 'u8', event: 'end' });
+    // A voice the listener picked by name is their choice, whatever it speaks.
+    expect(await ended({ text: 'En kvinna går in.', lang: 'sv', voice: 'Samantha' })).toEqual({ type: MSG.TTS_EVENT, id: 'u8', event: 'end' });
+    // No list (some systems report voices late), or a voice that does not say its language: not known, so not claimed.
+    installed = [];
+    expect(await ended({ text: 'En kvinna går in.', lang: 'sv' })).not.toHaveProperty('noVoice');
+    installed = [{ voiceName: 'eSpeak' }];
+    expect(await ended({ text: 'En kvinna går in.', lang: 'sv' })).not.toHaveProperty('noVoice');
+  });
+
+  it('reports an utterance the speech engine refuses outright as an error, instead of leaving the tab waiting', async () => {
+    chrome.tabs.sendMessage.mockClear();
+    speak.mockImplementationOnce(() => {
+      throw new Error('no speech engine');
+    });
+    expect(await deliver({ type: MSG.SPEAK, text: 'Hi', lang: 'en', id: 'u9' }, youtube)).toEqual({ ok: true });
+    expect(chrome.tabs.sendMessage.mock.calls.at(-1)).toEqual([7, { type: MSG.TTS_EVENT, id: 'u9', event: 'error' }]);
+    speak.mockImplementationOnce(() => Promise.reject(new Error('Invalid voice')));
+    await deliver({ type: MSG.SPEAK, text: 'Hi', lang: 'en', id: 'u10' }, youtube);
+    await vi.waitFor(() => expect(chrome.tabs.sendMessage.mock.calls.at(-1)).toEqual([7, { type: MSG.TTS_EVENT, id: 'u10', event: 'error' }]));
   });
 
   it('still refuses speech from a page that is not YouTube', async () => {
@@ -519,13 +577,14 @@ describe('SceneVoice Cloud: the token where the key goes, and the shared cache',
   const VIDEO = 'abcdefghijk';
   const KEY = `script:${VIDEO}:en`;
   const TOKEN = `svd_${'0123456789abcdef'.repeat(2)}`;
-  const CLOUD = 'https://api.scenevoice.app';
+  const CLOUD = CLOUD_API_BASE;
   const cue = (start, standard, extra = {}) => ({ start, gap: 3, kind: 'visual', priority: 1, onScreenText: '', confidence: 'high', brief: standard, standard, detailed: standard, ...extra });
   const shared = (extra = {}) => ({ version: SCRIPT_VERSION, videoId: VIDEO, lang: 'en', duration: 600, cues: [cue(1, 'A door opens.')], characters: [], videoType: 'other', model: 'gemini-2.5-flash', completedUntil: 600, complete: true, source: 'cloud', ...extra });
   const start = (extra = {}) => deliver({ type: MSG.GEN_START, videoId: VIDEO, duration: 600, meta: { title: 'Diner' }, lang: 'en', ...extra }, youtube);
   const calls = (cmd) => workerCalls.filter((c) => c.cmd === cmd);
 
   beforeEach(() => {
+    cloudSwitch.open = true;
     for (const k of Object.keys(store)) delete store[k];
     for (const k of Object.keys(synced)) delete synced[k];
     store.local = { cloudToken: TOKEN, cloudPlan: 'free' };
@@ -537,6 +596,10 @@ describe('SceneVoice Cloud: the token where the key goes, and the shared cache',
       if (data.cmd === 'start') return { started: true, done: 0, total: 2, chunkStartedAt: 1, chunkMs: [], provider: data.provider };
       return { status: 'idle' };
     };
+  });
+
+  afterEach(() => {
+    cloudSwitch.open = false;
   });
 
   it('tells the pages only that a token exists, and that Cloud describes both sites', async () => {
@@ -681,5 +744,67 @@ describe('SceneVoice Cloud: the token where the key goes, and the shared cache',
     synced.settings = { youtubeProvider: 'cloud' };
     expect(await start()).toEqual({ error: 'no-key' });
     expect((await deliver({ type: MSG.GET_STATUS }, youtube)).providers.youtube).toBe('cloud');
+  });
+});
+
+describe('SceneVoice Cloud closed, as shipped: nothing is offered and the relay is never asked', () => {
+  const VIDEO = 'abcdefghijk';
+  const KEY = `script:${VIDEO}:en`;
+  const TOKEN = `svd_${'0123456789abcdef'.repeat(2)}`;
+  const CLOUD = CLOUD_API_BASE;
+  const start = (extra = {}) => deliver({ type: MSG.GEN_START, videoId: VIDEO, duration: 600, meta: { title: 'Diner' }, lang: 'en', ...extra }, youtube);
+
+  beforeEach(() => {
+    expect(cloudSwitch.open).toBe(false);
+    for (const k of Object.keys(store)) delete store[k];
+    for (const k of Object.keys(synced)) delete synced[k];
+    workerCalls.length = 0;
+    chrome.tabs.sendMessage.mockClear();
+    worker = (data) => (data.cmd === 'start' ? { started: true, done: 0, total: 2, chunkStartedAt: 1, chunkMs: [], provider: data.provider } : { status: 'idle' });
+  });
+
+  it('counts a saved device token as no key at all, and never lets Cloud stand in for a site', async () => {
+    store.local = { cloudToken: TOKEN, cloudPlan: 'free' };
+    const status = await deliver({ type: MSG.GET_STATUS }, youtube);
+    expect(status).toMatchObject({ hasKey: false, keys: { gemini: false, qwen: false, cloud: false }, providers: { youtube: 'gemini', bilibili: 'qwen' } });
+    expect(JSON.stringify(status)).not.toContain(TOKEN);
+    // The tab is told a key is missing, in the own-key words (no-key for Gemini), and nothing reaches the worker.
+    expect(await start()).toEqual({ error: 'no-key' });
+    expect(workerCalls).toEqual([]);
+  });
+
+  it('treats a site stored as Cloud as that site’s default model, with the listener’s own key and Google’s address', async () => {
+    store.local = { apiKey: 'gemini-key', model: 'gemini-2.5-flash', cloudToken: TOKEN };
+    synced.settings = { youtubeProvider: 'cloud', bilibiliProvider: 'cloud', shareDescriptions: true };
+    expect((await deliver({ type: MSG.GET_STATUS }, youtube)).providers).toEqual({ youtube: 'gemini', bilibili: 'gemini' });
+    expect(await start()).toMatchObject({ status: 'generating' });
+    // No look in the shared cache, and the job is Gemini's.
+    expect(workerCalls.map((c) => c.cmd)).toEqual(['start']);
+    expect(workerCalls[0]).toMatchObject({ provider: 'gemini', config: { apiKey: 'gemini-key' } });
+    expect(JSON.stringify(workerCalls)).not.toContain(CLOUD);
+    expect(JSON.stringify(workerCalls)).not.toContain(TOKEN);
+  });
+
+  it('shares nothing, even for an event that names Cloud while sharing is stored as on', async () => {
+    store.local = { cloudToken: TOKEN };
+    synced.settings = { shareDescriptions: true };
+    const finished = { version: SCRIPT_VERSION, videoId: VIDEO, lang: 'en', duration: 600, cues: [], characters: [], completedUntil: 600, complete: true };
+    await deliver({ type: MSG.JOB_EVENT, event: 'done', key: `${VIDEO}:en`, videoId: VIDEO, lang: 'en', provider: 'cloud', script: finished, done: 2, total: 2 }, offscreenPage);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(workerCalls.filter((c) => c.cmd === 'cloud-put' || c.cmd === 'cloud-get')).toEqual([]);
+    expect(store[KEY]).toMatchObject({ complete: true });
+  });
+
+  it('opens the plain settings page when asked for the Cloud block, which is not there', async () => {
+    const created = [];
+    chrome.tabs.create = vi.fn(async (opts) => created.push(opts.url));
+    chrome.runtime.getURL = (path) => `${ORIGIN}/${path}`;
+    chrome.runtime.openOptionsPage = vi.fn(async () => {});
+    expect(await deliver({ type: MSG.OPEN_OPTIONS, provider: 'cloud' }, youtube)).toEqual({ ok: true });
+    expect(created).toEqual([]);
+    expect(chrome.runtime.openOptionsPage).toHaveBeenCalledTimes(1);
+    // A key field is still opened by name.
+    await deliver({ type: MSG.OPEN_OPTIONS, provider: 'qwen' }, youtube);
+    expect(created).toEqual([`${ORIGIN}/options.html#qwen`]);
   });
 });

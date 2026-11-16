@@ -7,6 +7,7 @@
 // wrong type or out of range falls back to its default.
 
 import {
+  CLOUD_OPEN,
   DEFAULT_SETTINGS,
   DENSITIES,
   DETAILS,
@@ -99,14 +100,24 @@ const CLEAN = {
 /** Settings the user can pick for themselves instead of leaving them to the video type. */
 export const CHOICES = Object.freeze(['mode', 'detail', 'density']);
 
+/** Settings that name a site's provider: 'cloud' is a value only while SceneVoice Cloud is open. */
+const PROVIDER_KEYS = ['youtubeProvider', 'bilibiliProvider'];
+
 /**
  * Stored settings, with every known key present and valid. Unknown keys are
- * dropped (they stay in storage; see storage.js).
+ * dropped (they stay in storage; see storage.js). While SceneVoice Cloud is
+ * closed (CLOUD_OPEN in constants.js), a site set to Cloud reads as that
+ * site's default model and sharing reads as off: nothing is offered to, or
+ * fetched from, a relay that is not there.
  */
-export function normalizeSettings(raw) {
+export function normalizeSettings(raw, { cloudOpen = CLOUD_OPEN } = {}) {
   const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const out = {};
   for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) out[key] = CLEAN[key](src[key], fallback);
+  if (!cloudOpen) {
+    for (const key of PROVIDER_KEYS) if (out[key] === 'cloud') out[key] = DEFAULT_SETTINGS[key];
+    out.shareDescriptions = false;
+  }
   // Saved before these flags existed: a mode, detail or density other than the
   // default can only have been picked by the user.
   for (const key of CHOICES) {

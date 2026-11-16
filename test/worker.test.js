@@ -2,7 +2,21 @@
 // turn, two at a time per provider, and every answer carries what it cost.
 // The model calls are faked; the worker's own queue and replies are real.
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CLOUD_API_BASE } from '../src/shared/constants.js';
+
+/**
+ * The SceneVoice Cloud switch as the worker sees it (CLOUD_OPEN in constants.js,
+ * false as shipped): the tests of what the worker does for Cloud turn it on.
+ * That it refuses Cloud commands while closed is in test/cloud.test.js.
+ */
+const cloudSwitch = vi.hoisted(() => ({ open: false }));
+vi.mock('../src/shared/constants.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  get CLOUD_OPEN() {
+    return cloudSwitch.open;
+  },
+}));
 
 /** Model calls waiting to be answered by the test, in the order they were made, with the client each was given. */
 const calls = [];
@@ -134,7 +148,14 @@ describe('requests wait their turn', () => {
 });
 
 describe('the model a key chose is remembered for the session', () => {
-  const CLOUD = 'https://api.scenevoice.app';
+  beforeAll(() => {
+    cloudSwitch.open = true;
+  });
+  afterAll(() => {
+    cloudSwitch.open = false;
+  });
+
+  const CLOUD = CLOUD_API_BASE;
   const token = { apiKey: 'svd_token', apiBase: CLOUD, model: '' };
   const cloud = (start, config = token) => ({ cmd: 'frames', provider: 'cloud', config, params: { window: { start, end: start + 12 }, frames: [] } });
 

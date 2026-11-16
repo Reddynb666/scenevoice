@@ -1,9 +1,9 @@
-import { DEFAULT_API_BASE, DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL, DEFAULT_SETTINGS, LANGUAGES, MSG, PAGE_SHORTCUT_DEFAULTS, RTL_LANGUAGES, SAY_SHORTCUTS, USAGE_KEY } from '../shared/constants.js';
+import { CLOUD_OPEN, DEFAULT_API_BASE, DEFAULT_QWEN_API_BASE, DEFAULT_QWEN_MODEL, DEFAULT_SETTINGS, LANGUAGES, MSG, PAGE_SHORTCUT_DEFAULTS, RTL_LANGUAGES, SAY_SHORTCUTS, USAGE_KEY } from '../shared/constants.js';
 import { BINDABLE_COMMANDS, COMMAND_LABEL_KEYS, displayShortcut, effectiveShortcuts, isPageShortcut, shortcutConflict, shortcutFromEvent } from '../shared/shortcuts.js';
 import { COUNTED_PROVIDERS, costText, formatTokens, todaysUsage } from '../shared/usage.js';
 import { activateLicense, allowanceMinutes, cleanPlan, fetchMe, registerDevice, validLicenseKey } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
-import { bindSettings } from '../shared/form.js';
+import { applyCloudSwitch, bindSettings } from '../shared/form.js';
 import { cloudRegisterMessage, errorMessage, localizeDocument, resetTimeText, t } from '../shared/i18n.js';
 import { typeChosenText } from '../shared/labels.js';
 import { CHOICES, voiceFor, voicePatch, voiceTestMessage } from '../shared/settings.js';
@@ -320,13 +320,23 @@ async function registerCloud() {
   return got;
 }
 
+/** Start free is waiting for the relay's answer: a second press while it is does nothing. */
+let cloudStarting = false;
+
 /**
  * Start free: register, share finished descriptions (the hint beside the switch
  * says what that means), and have Cloud describe both sites when the listener
- * has no key of their own (a key already saved keeps its sites).
+ * has no key of their own (a key already saved keeps its sites). One request at
+ * a time: pressed again before the answer, it would register a second device
+ * and leave the first token orphaned. The button says it is busy with
+ * aria-disabled, not disabled, so focus stays on it.
  */
 async function startCloud() {
+  if (cloudStarting) return;
+  cloudStarting = true;
   const statusEl = $('cloudStatus');
+  const startButton = $('cloudStart');
+  startButton.setAttribute('aria-disabled', 'true');
   setStatus(statusEl, t('opt_cloud_starting'));
   try {
     const before = await getLocal();
@@ -341,6 +351,9 @@ async function startCloud() {
   } catch (err) {
     const code = err instanceof ApiError ? err.code : 'unknown';
     setStatus(statusEl, `${cloudRegisterMessage(code, err?.resetAt)} ${t('opt_cloud_use_own')}`, 'bad');
+  } finally {
+    cloudStarting = false;
+    startButton.removeAttribute('aria-disabled');
   }
 }
 
@@ -352,6 +365,16 @@ async function stopCloud() {
   const patch = { shareDescriptions: false };
   for (const key of ['youtubeProvider', 'bilibiliProvider']) if (settings[key] === 'cloud') patch[key] = DEFAULT_SETTINGS[key];
   await setSettings(patch).catch(onSaveError);
+  if (!CLOUD_OPEN) {
+    // Closed: there is no Start free to go back to. The button goes, the words stay, and focus moves to the block's heading.
+    $('cloudStop').hidden = true;
+    $('cloudInfo').textContent = t('opt_cloud_closed');
+    setStatus($('cloudStatus'), t('opt_cloud_stopped'));
+    // A heading takes focus only now, as a place to land: it is not a control and is not in the Tab order.
+    $('h-cloud').tabIndex = -1;
+    $('h-cloud').focus();
+    return;
+  }
   await renderCloud();
   setStatus($('cloudStatus'), t('opt_cloud_stopped'));
   $('cloudStart').focus();
@@ -389,7 +412,28 @@ async function activateCloudLicense() {
   }
 }
 
-function initCloud() {
+/**
+ * The Cloud block follows the switch (CLOUD_OPEN). Open: all of it. Closed:
+ * none of it, and the relay is never asked; except that a device token saved
+ * by a version that offered Cloud must not be left with no way to remove it,
+ * so then the block stays with what it is and "Stop using Cloud", and nothing
+ * of the offer (Start free, sharing, the licence field).
+ */
+function initCloud(local) {
+  const block = $('cloudBlock');
+  if (!CLOUD_OPEN) {
+    if (!local.cloudToken) {
+      block.remove();
+      return undefined;
+    }
+    for (const el of block.querySelectorAll('[data-cloud-offer]')) el.remove();
+    $('cloudInfo').textContent = t('opt_cloud_closed_token');
+    $('cloudStop').hidden = false;
+    $('cloudStop').addEventListener('click', stopCloud);
+    block.hidden = false;
+    return undefined;
+  }
+  block.hidden = false;
   $('cloudStart').addEventListener('click', startCloud);
   $('cloudStop').addEventListener('click', stopCloud);
   $('activateLicense').addEventListener('click', activateCloudLicense);
@@ -512,7 +556,7 @@ function renderKeyRows(focusId = '') {
     }
     const change = document.createElement('td');
     if (chromeKeys[command]) {
-      change.textContent = t('opt_keys_chrome');
+      change.textContent = t('opt_keys_browser');
       change.className = 'muted';
     } else {
       change.className = 'row';
@@ -636,6 +680,8 @@ async function renderUsage() {
 }
 
 async function init() {
+  // Before anything is localized or bound: the provider lists and the privacy points as the Cloud switch has them.
+  applyCloudSwitch(document, CLOUD_OPEN);
   localizeDocument();
   fillLanguages();
   await loadVoices();
@@ -716,7 +762,7 @@ async function init() {
   });
 
   initQwen(local);
-  await initCloud();
+  await initCloud(local);
 
   $('testVoice').addEventListener('click', async () => {
     const s = await getSettings();
@@ -746,14 +792,16 @@ async function init() {
     if (area === 'local' && changes[USAGE_KEY]) renderUsage();
   });
 
-  // Sent here for a particular key (options.html#qwen) or for SceneVoice Cloud
-  // (#cloud): start on that control, the Cloud button as rendered (a token the
-  // relay no longer knew is gone by now, and Start free is the one shown).
-  // Otherwise, with nothing set up yet, start where a key goes: in Chinese, at
-  // the Qwen key, since Gemini needs Google, which mainland China cannot reach.
-  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey', '#cloud': $('cloudStart').hidden ? 'cloudStop' : 'cloudStart', '#keys': 'h-keys' }[location.hash];
+  // Sent here for a particular key (options.html#qwen) or, while it is open, for
+  // SceneVoice Cloud (#cloud): start on that control, the Cloud button as
+  // rendered (a token the relay no longer knew is gone by now, and Start free is
+  // the one shown). Otherwise, with nothing set up yet, start where a key goes:
+  // in Chinese, at the Qwen key, since Gemini needs Google, which mainland China
+  // cannot reach. A leftover Cloud token while Cloud is closed is nothing set up.
+  const cloudButton = CLOUD_OPEN ? ($('cloudStart').hidden ? 'cloudStop' : 'cloudStart') : '';
+  const wanted = { '#gemini': 'apiKey', '#qwen': 'qwenApiKey', '#cloud': cloudButton, '#keys': 'h-keys' }[location.hash];
   if (wanted) $(wanted).focus();
-  else if (!local.apiKey && !local.qwenApiKey && !local.cloudToken) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
+  else if (!local.apiKey && !local.qwenApiKey && !(CLOUD_OPEN && local.cloudToken)) $(chrome.i18n.getUILanguage().startsWith('zh') ? 'qwenApiKey' : 'apiKey').focus();
 }
 
 /** A sentence for the next key status, when saving a key changed which model a site uses. */

@@ -1,14 +1,16 @@
 // The welcome page, opened once after installing. Three steps, nothing above
-// them: hear a sample (no model, no key), choose SceneVoice Cloud or a key of
-// one's own, try a video. Written to be followed with a screen reader: focus
-// starts on the heading, every state is said in a live region, and the
-// built-in voice and the screen reader never speak at once.
+// them: hear a sample (no model, no key), add a key of one's own, try a video.
+// Once SceneVoice Cloud is open (CLOUD_OPEN in shared/constants.js) step 2 is a
+// choice between Cloud and a key; until then nothing on the page mentions it.
+// Written to be followed with a screen reader: focus starts on the heading,
+// every state is said in a live region, and the built-in voice and the screen
+// reader never speak at once.
 
-import { MSG, SAMPLE_DESCRIPTIONS, SAY_SHORTCUTS } from '../shared/constants.js';
+import { CLOUD_OPEN, MSG, SAMPLE_DESCRIPTIONS, SAY_SHORTCUTS } from '../shared/constants.js';
 import { displayShortcut, effectiveShortcuts } from '../shared/shortcuts.js';
 import { allowanceMinutes, registerDevice } from '../shared/cloud.js';
 import { ApiError } from '../shared/errors.js';
-import { bindSettings } from '../shared/form.js';
+import { applyCloudSwitch, bindSettings } from '../shared/form.js';
 import { cloudRegisterMessage, interfaceLocale, localizeDocument, t } from '../shared/i18n.js';
 import { estimateSeconds } from '../shared/script.js';
 import { classifySender } from '../shared/sender.js';
@@ -73,7 +75,7 @@ async function playSample() {
   stopSample();
   const run = sampleRun;
   const lines = SAMPLE_DESCRIPTIONS[sampleLang()];
-  const texts = [lines[0], t('welcome_sample_between'), lines[1], lines[2], t('welcome_sample_done')];
+  const texts = [lines[0], t('welcome_sample_between'), lines[1], lines[2], t(CLOUD_OPEN ? 'welcome_sample_done' : 'welcome_sample_done_own')];
   const settings = await getSettings();
   if (run !== sampleRun) return;
   const out = $('sampleOut');
@@ -114,7 +116,7 @@ function onSampleEvent(id, event) {
   }
 }
 
-/** Which of the two ways is shown under the radios. Nothing is saved by the choice itself. */
+/** With Cloud open: which of the two ways is shown under the radios. Nothing is saved by the choice itself. */
 function showSource() {
   const own = document.querySelector('input[name=source]:checked')?.value === 'own';
   $('cloudBox').hidden = own;
@@ -161,6 +163,10 @@ async function renderShortcut() {
 }
 
 async function init() {
+  // Closed, the Cloud choice and everything said about it leave the page before anything is read;
+  // open, step 2 is a choice again and is named as one.
+  applyCloudSwitch(document, CLOUD_OPEN);
+  if (CLOUD_OPEN) $('step2').dataset.i18n = 'welcome_step2_title';
   localizeDocument();
   // The heading first, not a field: a screen reader starts reading from here.
   $('title').focus();
@@ -173,25 +179,31 @@ async function init() {
   // The service worker reports how the built-in voice's sample ended.
   chrome.runtime.onMessage.addListener((msg, sender) => {
     if (msg?.type !== MSG.TTS_EVENT || classifySender(sender, chrome.runtime.id) !== 'service-worker') return;
-    onSampleEvent(msg.id, msg.event);
+    // No voice on this computer for the sample's language counts as a failure: the sample was silent, or could not be followed.
+    onSampleEvent(msg.id, msg.noVoice ? 'error' : msg.event);
   });
 
-  for (const radio of document.querySelectorAll('input[name=source]')) radio.addEventListener('change', showSource);
-  showSource();
   // Gemini needs Google, which mainland China cannot reach: a Chinese browser starts at the Qwen key.
   $('ownKey').href = chinese() ? 'options.html#qwen' : 'options.html#gemini';
   $('tryBilibiliItem').hidden = !chinese();
-  // The privacy note in the reader's language. GitHub's anchor for the heading
-  // "SceneVoice Cloud（可选）" drops the full-width parentheses; if it ever misses, the
-  // page opens at the top, which is still the right document.
-  if (chinese()) $('privacyLink').href = 'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md#scenevoice-cloud可选';
+  // In the Simplified Chinese interface the Bilibili sample comes first: YouTube needs
+  // a network that can reach it, and the link's own text says so (zh_CN.mjs).
+  if (interfaceLocale() === 'zh-CN') $('tryList').prepend($('tryBilibiliItem'));
 
-  const local = await getLocal();
-  if (local.cloudToken) {
-    $('startFree').hidden = true;
-    $('cloudStatus').textContent = t('welcome_cloud_already');
+  if (CLOUD_OPEN) {
+    for (const radio of document.querySelectorAll('input[name=source]')) radio.addEventListener('change', showSource);
+    showSource();
+    // The privacy note in the reader's language. GitHub drops the full-width
+    // punctuation of the Chinese heading from its anchor; if it ever misses, the
+    // page opens at the top, which is still the right document.
+    if (chinese()) $('privacyLink').href = 'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.zh-CN.md#scenevoice-cloud开放之后';
+    const local = await getLocal();
+    if (local.cloudToken) {
+      $('startFree').hidden = true;
+      $('cloudStatus').textContent = t('welcome_cloud_already');
+    }
+    $('startFree').addEventListener('click', startFree);
   }
-  $('startFree').addEventListener('click', startFree);
 
   // The keys are changed on SceneVoice's settings page (Chrome's own shortcuts page is linked from there).
   $('editShortcuts').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html#keys') }));

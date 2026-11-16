@@ -3,7 +3,7 @@
 // slow just now is skipped by the next choice.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_API_BASE } from '../src/shared/constants.js';
+import { CLOUD_API_BASE, DEFAULT_API_BASE } from '../src/shared/constants.js';
 import { GeminiClient, GeminiError, chooseModel, mergeStreamed } from '../src/shared/gemini.js';
 import { firstAnswerMs, runGeneration } from '../src/shared/generation.js';
 import { ModelHealth, modelHealth } from '../src/shared/modelhealth.js';
@@ -69,7 +69,7 @@ describe('a streamed answer', () => {
   });
 
   it('does not stream through a relay or a custom address, and reads a plain JSON reply when one comes', async () => {
-    expect(new GeminiClient({ apiKey: 'k', apiBase: 'https://api.scenevoice.app', model: 'm' }).stream).toBe(false);
+    expect(new GeminiClient({ apiKey: 'k', apiBase: CLOUD_API_BASE, model: 'm' }).stream).toBe(false);
     expect(new GeminiClient({ apiKey: 'k', apiBase: 'https://example.test', model: 'm' }).stream).toBe(false);
     const json = vi.fn(async () => ({ ok: true, status: 200, json: async () => [piece('{"a":'), piece('1}', { finishReason: 'STOP' })] }));
     const c = new GeminiClient({ apiKey: 'k', apiBase: DEFAULT_API_BASE, model: 'm', fetchImpl: json });

@@ -16,10 +16,33 @@ export const PROVIDERS = Object.freeze(['gemini', 'qwen', 'cloud']);
 
 /**
  * SceneVoice Cloud relay (server/). Gemini-compatible, so GeminiClient talks to
- * it unchanged with apiKey = the device token. The owner changes this to the
- * domain they register; the manifest's host permission names the same origin.
+ * it unchanged with apiKey = the device token.
+ *
+ * The address is a placeholder on the reserved .invalid top-level domain
+ * (RFC 2606, RFC 6761), a name that can never resolve. The project holds no
+ * domain yet, and an address on a domain somebody else holds would let that
+ * party answer as the relay: version 1.1.0 named one (SECURITY.md, "The relay
+ * address in version 1.1.0"). The real address is written here only once the
+ * owner holds the domain it is on, in the change that turns CLOUD_OPEN on;
+ * scripts/manifest.mjs builds the host permission from this constant and
+ * refuses a build whose address does not fit the switch.
  */
-export const CLOUD_API_BASE = 'https://api.scenevoice.app';
+export const CLOUD_API_BASE = 'https://scenevoice-cloud.invalid';
+
+/**
+ * The one switch for SceneVoice Cloud. false: the relay is not deployed, so
+ * nothing offers it, nothing is sent to it, and the built manifest does not ask
+ * for its host (scripts/manifest.mjs reads this constant; static/manifest.json
+ * names only the two model hosts). The owner sets it to true once server/ runs
+ * under a domain they hold and CLOUD_API_BASE names it: the welcome page, the
+ * settings page, the popup, the web player, the service worker and the
+ * manifest all follow. One thing does not follow, because it is plain HTML:
+ * the web player's Content-Security-Policy in site/play/index.html, which
+ * gains the relay's origin by hand (site/check.mjs fails until it does). A
+ * test build with the switch forced on is made with SCENEVOICE_CLOUD_OPEN=1
+ * (scripts/build.mjs), never a package.
+ */
+export const CLOUD_OPEN = false;
 
 /**
  * Qwen (通义千问) through Alibaba Cloud Model Studio (阿里云百炼 / DashScope),

@@ -152,12 +152,16 @@ function fakeSynth() {
 let app = null;
 
 /** The page from its HTML, with init() run against fakes. */
-function openPlayer({ url = '/play/', language = 'en-US', local = memoryStorage(), session = memoryStorage(), gemini = fakeGemini(), yt = fakeYouTube(), speech = null, tickMs = 0, durationHintMs, waitingSayMs } = {}) {
+/**
+ * `cloudOpen`: the page as it will be once SceneVoice Cloud is open (init takes the switch; left out, it is
+ * CLOUD_OPEN in constants.js, false as shipped, and the page offers the own key only).
+ */
+function openPlayer({ url = '/play/', language = 'en-US', local = memoryStorage(), session = memoryStorage(), gemini = fakeGemini(), yt = fakeYouTube(), speech = null, tickMs = 0, durationHintMs, waitingSayMs, cloudOpen } = {}) {
   app?.destroy();
   window.history.replaceState(null, '', url);
   document.documentElement.innerHTML = html.replace(/<!doctype html>/i, '').replace(/<\/?html[^>]*>/g, '');
   Object.defineProperty(window.navigator, 'language', { value: language, configurable: true });
-  const api = init({ win: window, fetchImpl: gemini.fetchImpl, loadApi: async () => yt.YT, speech: speech || new WebSpeech({ synth: null, Utterance: null }), local, session, version: 'test', tickMs, ...(durationHintMs ? { durationHintMs } : {}), ...(waitingSayMs ? { waitingSayMs } : {}) });
+  const api = init({ win: window, fetchImpl: gemini.fetchImpl, loadApi: async () => yt.YT, speech: speech || new WebSpeech({ synth: null, Utterance: null }), local, session, version: 'test', tickMs, ...(durationHintMs ? { durationHintMs } : {}), ...(waitingSayMs ? { waitingSayMs } : {}), ...(cloudOpen === undefined ? {} : { cloudOpen }) });
   app = { ...api, local, session, gemini, yt };
   return app;
 }
@@ -239,9 +243,17 @@ describe('web player: links', () => {
     await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_link_missing));
     $('link').value = VIDEO;
     $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_key_missing));
+    // Closed, as shipped: the key is the only way, and the sentence does not offer another.
+    await vi.waitFor(() => expect(status()).toBe('Paste your Gemini API key first.'));
     expect(document.activeElement).toBe($('key'));
     expect(app.gemini.requests).toEqual([]);
+
+    // With Cloud open the same moment names the other choice.
+    openPlayer({ cloudOpen: true });
+    $('link').value = VIDEO;
+    $('link-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(status()).toBe(TABLES.en.web_key_missing));
+    expect(status()).toMatch(/or choose SceneVoice Cloud/);
   });
 });
 
@@ -296,8 +308,8 @@ describe('web player: the key and the token', () => {
     expect(before).toBeGreaterThan(0);
   });
 
-  it('SceneVoice Cloud: a device token from POST /v1/devices (client "web"), kept in local storage and sent in the same header to the relay', async () => {
-    openPlayer();
+  it('SceneVoice Cloud, once open: a device token from POST /v1/devices (client "web"), kept in local storage and sent in the same header to the relay', async () => {
+    openPlayer({ cloudOpen: true });
     await play(VIDEO, { key: '', source: 'cloud' });
     const [register, ...rest] = app.gemini.requests;
     expect(register.url).toBe(`${CLOUD_API_BASE}/v1/devices`);
@@ -313,8 +325,8 @@ describe('web player: the key and the token', () => {
     }
   });
 
-  it('says in one sentence when the relay cannot be reached and points to the own-key choice', async () => {
-    openPlayer({ gemini: fakeGemini({ fail: true }) });
+  it('with Cloud open, says in one sentence when the relay cannot be reached and points to the own-key choice', async () => {
+    openPlayer({ gemini: fakeGemini({ fail: true }), cloudOpen: true });
     $('source-cloud').checked = true;
     $('source-cloud').dispatchEvent(new Event('change', { bubbles: true }));
     $('link').value = VIDEO;
@@ -323,8 +335,44 @@ describe('web player: the key and the token', () => {
     expect(status()).toMatch(/My Gemini key/);
   }, 25000);
 
-  it('preselects the own key and hides the key field only when Cloud is chosen', () => {
-    openPlayer();
+  it('as shipped, with Cloud closed: offers the own key only, with no Cloud choice or word of it in either language, and never asks the relay', async () => {
+    // A choice of Cloud and a device token saved by an earlier visit: read as the own key, and not used.
+    const local = memoryStorage();
+    local.setItem('scenevoice-play-settings', JSON.stringify({ source: 'cloud', mode: 'pause' }));
+    local.setItem('scenevoice-play-device', 'svd_0123456789abcdef0123456789abcdef');
+    openPlayer({ local });
+    // The whole choice is out of the document (a group of one radio would be noise), not hidden or disabled in it.
+    expect($('source-cloud')).toBeNull();
+    expect($('source-own')).toBeNull();
+    expect(document.querySelector('#source fieldset')).toBeNull();
+    expect(document.querySelectorAll('#source [hidden], #source [disabled]')).toHaveLength(0);
+    // What is left of step 2 is the key field, shown, with its label, note and guide.
+    expect($('key-block').hidden).toBe(false);
+    expect($('key').labels[0].textContent).toBe('Gemini API key');
+    expect(app.state).toBeTruthy();
+    expect($('mode').value).toBe('pause');
+    for (const lang of ['en', 'zh-CN']) {
+      if (lang === 'zh-CN') $('lang-switch').click();
+      const text = document.querySelector('main').textContent;
+      expect(text, lang).not.toMatch(/SceneVoice Cloud|SceneVoice 云端|relay|中转|device token|设备凭证|allowance|免费额度|scenevoice\.app/);
+      const points = [...document.querySelectorAll('#privacy li')].map((li) => li.textContent);
+      expect(points[0], lang).toBe(TABLES[lang.replace('-', '_')].web_privacy_leaves_own);
+      expect(points[2], lang).toBe(TABLES[lang.replace('-', '_')].web_privacy_local_own);
+    }
+    $('lang-switch').click();
+    expect(document.querySelector('#privacy li').textContent).toMatch(/^What leaves this browser: the video’s link, the part to describe and your key go to Google’s Gemini API .*Nothing goes to SceneVoice\.$/);
+    // Playing uses the key, straight to Google: nothing goes to the relay, and the saved token is not sent anywhere.
+    await play();
+    expect(app.gemini.requests.length).toBeGreaterThan(0);
+    for (const r of app.gemini.requests) {
+      expect(r.url.startsWith(DEFAULT_API_BASE)).toBe(true);
+      expect(JSON.stringify(r.headers)).not.toContain('svd_');
+    }
+  });
+
+  it('with Cloud open: preselects the own key and hides the key field only when Cloud is chosen', () => {
+    openPlayer({ cloudOpen: true });
+    expect(document.querySelector('#source fieldset').hidden).toBe(false);
     expect($('source-own').checked).toBe(true);
     expect($('key-block').hidden).toBe(false);
     $('source-cloud').checked = true;

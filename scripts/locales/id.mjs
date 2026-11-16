@@ -10,7 +10,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice: Deskripsi Audio AI untuk Video',
-  ext_description: 'Deskripsi audio AI untuk YouTube dan Bilibili, bagi penonton tunanetra dan berpenglihatan rendah. Bekerja dengan pembaca layar Anda.',
+  ext_description: 'Deskripsi audio AI di YouTube dan Bilibili bagi penonton tunanetra dan berpenglihatan rendah, lewat pembaca layar atau suara bawaan.',
   cmd_toggle: 'Buat deskripsi, atau nyalakan dan matikan',
   cmd_describe_now: 'Deskripsikan yang ada di layar sekarang',
   cmd_repeat: 'Ulangi deskripsi terakhir',
@@ -179,6 +179,7 @@ export default {
   late_prefix: 'Tadi: ',
   status_fallback_cloud: 'Tidak ada kunci milik Anda sendiri, jadi SceneVoice Cloud yang mendeskripsikan situs ini.',
   provider_name_cloud: 'SceneVoice Cloud',
+  status_voice_failed: 'Suara bawaan tidak bisa membaca deskripsi ini dengan baik di komputer ini: tidak ada suara untuk bahasanya, atau fitur ucapan tidak berfungsi. Tambahkan suara di pengaturan ucapan sistem Anda, atau pilih “Pembaca layar saya” di popup SceneVoice.',
   // ----- errors -----
   error_no_key: 'SceneVoice membutuhkan kunci API Gemini. Halaman pengaturan sedang dibuka agar Anda bisa menambahkannya.',
   error_bad_key: 'Kunci API Gemini tidak diterima. Periksa di halaman pengaturan SceneVoice.',
@@ -252,6 +253,7 @@ export default {
   error_cloud_bad_json: 'SceneVoice Cloud memberi jawaban yang tidak bisa dibaca SceneVoice. Coba lagi.',
   error_cloud_rate_limited: 'Terlalu banyak permintaan ke SceneVoice Cloud dalam waktu singkat. Tunggu semenit lalu coba lagi; deskripsi yang sudah dibuat tersimpan.',
   error_cloud_quota_daily: 'Model di balik SceneVoice Cloud sudah kehabisan kuota hari ini. Coba lagi besok, atau gunakan kunci Anda sendiri di pengaturan.',
+  error_cloud_closed: 'SceneVoice Cloud belum dibuka. Tambahkan kunci Anda sendiri di halaman pengaturan.',
   // ----- popup -----
   popup_setup_title: 'Siapkan SceneVoice',
   popup_setup_body: 'Tambahkan kunci API Gemini gratis Anda untuk mulai membuat deskripsi.',
@@ -291,6 +293,7 @@ export default {
   popup_language_note: 'Antarmuka: $1 · Deskripsi: $2',
   popup_setup_body_welcome: 'SceneVoice bisa mendeskripsikan video secara gratis, tanpa menyiapkan apa pun. Halaman sambutan menunjukkan caranya dalam tiga langkah.',
   popup_setup_welcome: 'Siapkan SceneVoice',
+  popup_setup_body_own: 'SceneVoice memerlukan kunci API milik Anda sendiri untuk mendeskripsikan video (Gemini atau Qwen; kunci Gemini gratis). Halaman sambutan menunjukkan caranya dalam tiga langkah, dengan contoh untuk didengarkan lebih dulu.',
   // ----- shared settings -----
   set_enabled: 'Deskripsikan saat saya menonton',
   set_enabled_hint: 'Ucapkan deskripsi secara otomatis selama pemutaran.',
@@ -471,9 +474,9 @@ export default {
   opt_keys_change_for: 'Ubah tombol untuk: $1',
   opt_keys_clear: 'Hapus',
   opt_keys_clear_for: 'Hapus tombol untuk: $1',
-  opt_keys_chrome: 'Ditetapkan Chrome',
-  opt_keys_chrome_note: 'Empat tombol pertama dikelola Chrome. Untuk mengubahnya, buka halaman pintasan Chrome (chrome://extensions/shortcuts); tombol lainnya diubah di sini.',
-  opt_keys_chrome_open: 'Buka halaman pintasan Chrome',
+  opt_keys_browser: 'Ditetapkan peramban',
+  opt_keys_browser_note: 'Empat tombol pertama dikelola peramban. Untuk mengubahnya, buka halaman pintasan peramban dengan tombol di bawah; tombol lainnya diubah di sini.',
+  opt_keys_browser_open: 'Buka halaman pintasan peramban',
   opt_keys_restore: 'Pulihkan tombol bawaan',
   opt_keys_capture: 'Tekan kombinasi tombol yang baru, atau Escape untuk mempertahankan yang lama.',
   opt_keys_need_modifier: 'Tahan Alt (Option di Mac), Ctrl, atau Command bersama huruf, angka, panah, atau tombol fungsi. Escape mempertahankan yang lama.',
@@ -491,8 +494,9 @@ export default {
   opt_cache_confirm: 'Hapus semua deskripsi tersimpan? Video perlu dideskripsikan lagi.',
   privacy_1:
     'Dengan kunci Anda sendiri, SceneVoice tidak punya server dan tidak punya akun, dan tidak ada yang dikirim ke pengembang. SceneVoice tidak pernah mengumpulkan data analitik. SceneVoice Cloud, jika Anda menyalakannya, adalah relai opsional yang dijalankan proyek ini; poin berikutnya menjelaskan apa yang diterimanya.',
+  privacy_1_own: 'SceneVoice bekerja dengan kunci Anda sendiri: tidak punya server dan tidak punya akun, dan tidak ada yang dikirim ke pengembang. SceneVoice tidak pernah mengumpulkan data analitik.',
   privacy_6:
-    'SceneVoice Cloud mati sampai Anda menekan “Mulai gratis”. Saat menyala, permintaan dikirim ke api.scenevoice.app dengan token perangkat anonim sebagai ganti kunci, dan relai meneruskannya ke Gemini. Per token, relai hanya menyimpan berapa detik video yang dideskripsikan hari ini, paketnya, dan kunci lisensi bila ada, ditambah teks akhir deskripsi sebuah video saat berbagi dinyalakan. Relai tidak pernah menyimpan gambar, pertanyaan Anda, jawabannya, atau alamat IP Anda, dan tidak mencatat permintaan. “Berhenti memakai Cloud” menghapus token itu.',
+    'SceneVoice Cloud mati sampai Anda menekan “Mulai gratis”. Saat menyala, permintaan dikirim ke relai SceneVoice Cloud dengan token perangkat anonim sebagai ganti kunci, dan relai meneruskannya ke Gemini. Per token, relai hanya menyimpan berapa detik video yang dideskripsikan hari ini, paketnya, dan kunci lisensi bila ada, ditambah teks akhir deskripsi sebuah video saat berbagi dinyalakan. Relai tidak pernah menyimpan gambar, pertanyaan Anda, jawabannya, atau alamat IP Anda, dan tidak mencatat permintaan. “Berhenti memakai Cloud” menghapus token itu.',
   privacy_2:
     'Untuk membuat deskripsi atau menjawab pertanyaan, alamat video YouTube, judul, kanal, dan keterangannya, pertanyaan Anda, serta deskripsi terbaru dikirim ke API Gemini dengan kunci Anda. Untuk mendeskripsikan sebuah momen lagi, deskripsi yang Anda tandai salah juga dikirim. Ketentuan Google untuk API Gemini berlaku.',
   privacy_5:
@@ -500,9 +504,10 @@ export default {
   privacy_3: 'Deskripsi disimpan di komputer ini agar sebuah video hanya dideskripsikan sekali.',
   privacy_4:
     'Deskripsi yang Anda tandai salah dicatat hanya di komputer ini, agar versi koreksinya tetap tersimpan. Deskripsi itu tidak pernah dikirim ke pengembang dan dibuang sebelum deskripsi sebuah video dibagikan. Catatan itu terhapus bersama deskripsi tersimpan.',
+  privacy_4_own: 'Deskripsi yang Anda tandai salah dicatat hanya di komputer ini, agar versi koreksinya tetap tersimpan. Deskripsi itu tidak pernah dikirim ke pengembang. Catatan itu terhapus bersama deskripsi tersimpan.',
   opt_reset_title: '6. Kembalikan bawaan',
   opt_reset_intro:
-    'Kembalikan semua pengaturan deskripsi, suara, dan bunyi seperti saat SceneVoice pertama dipasang. Kunci API, model, dan deskripsi tersimpan Anda tidak berubah. Pintasan keyboard yang diatur di sini kembali ke bawaan; empat yang dikelola Chrome tidak berubah.',
+    'Kembalikan semua pengaturan deskripsi, suara, dan bunyi seperti saat SceneVoice pertama dipasang. Kunci API, model, dan deskripsi tersimpan Anda tidak berubah. Pintasan keyboard yang diatur di sini kembali ke bawaan; empat yang dikelola peramban tidak berubah.',
   opt_reset_button: 'Kembalikan pengaturan bawaan',
   opt_reset_confirm: 'Kembalikan semua pengaturan SceneVoice ke bawaan? Kunci API dan deskripsi tersimpan Anda tidak berubah.',
   opt_reset_done: 'Pengaturan bawaan dikembalikan.',
@@ -518,6 +523,9 @@ export default {
   opt_cloud_use_own: 'Anda bisa memakai kunci sendiri sebagai gantinya: Gemini atau Qwen, di bawah.',
   opt_cloud_stop: 'Berhenti memakai Cloud',
   opt_cloud_stopped: 'SceneVoice Cloud tidak lagi dipakai di komputer ini; token perangkat sudah dihapus.',
+  opt_cloud_closed: 'SceneVoice Cloud belum dibuka di versi ini, dan tidak ada yang dikirim ke sana.',
+  opt_cloud_closed_token:
+    'SceneVoice Cloud belum dibuka di versi ini, jadi tidak dipakai dan tidak ada yang dikirim ke sana. Token perangkat Cloud yang disimpan versi sebelumnya masih ada di komputer ini; “Berhenti memakai Cloud” menghapusnya.',
   set_share_descriptions: 'Bagikan deskripsi yang sudah selesai dengan pengguna SceneVoice lain',
   set_share_descriptions_hint: 'Saat deskripsi sebuah video sudah lengkap, teksnya dikirim ke cache SceneVoice, supaya pendengar berikutnya langsung mendapatkannya dan video hanya dideskripsikan sekali. Tidak pernah gambar, pertanyaan, atau siapa Anda. Hanya dengan SceneVoice Cloud.',
   opt_license_label: 'Kunci lisensi',
@@ -534,13 +542,18 @@ export default {
   plan_org: 'Organisasi',
   welcome_title: 'Selamat datang di SceneVoice',
   welcome_intro: 'SceneVoice menyebutkan apa yang ada di layar pada video YouTube dan Bilibili, di jeda antar ucapan, lewat pembaca layar Anda atau suara bawaan. Tiga langkah, sekitar dua menit.',
+  welcome_intro_own: 'SceneVoice menyebutkan apa yang ada di layar pada video YouTube dan Bilibili, di jeda antar ucapan, lewat pembaca layar Anda atau suara bawaan. Tiga langkah: dengarkan contoh, tambahkan kunci Anda sendiri, coba sebuah video.',
   welcome_step1_title: '1. Dengarkan apa yang dilakukan SceneVoice',
   welcome_step1_body: 'Tiga contoh deskripsi, seperti yang datang saat video diputar. Tidak ada yang dikirim dan tidak perlu kunci.',
   welcome_output_legend: 'Dengarkan lewat',
   welcome_sample_button: 'Dengarkan contoh',
+  welcome_sample_silent: 'Jika Anda tidak mendengar apa pun setelah menekan “Dengarkan contoh”, mungkin pembaca layar Anda tidak membacakan pengumuman otomatis di peramban ini: pilih “Suara bawaan” di atas lalu tekan tombol itu lagi.',
   welcome_sample_between: 'Video terus berjalan; deskripsi masuk di jeda.',
   welcome_sample_done: 'Itu tadi contohnya. Berikutnya: pilih cara deskripsi dibuat.',
+  welcome_sample_done_own: 'Itu tadi contohnya. Berikutnya: langkah 2, tambahkan kunci Anda sendiri.',
   welcome_step2_title: '2. Pilih cara deskripsi dibuat',
+  welcome_step2_title_own: '2. Tambahkan kunci Anda sendiri',
+  welcome_own_only: 'Deskripsi ditulis oleh model AI, dan model itu memerlukan kunci API milik Anda sendiri: kunci Gemini dari Google AI Studio, gratis, untuk YouTube; atau kunci Qwen dari Alibaba Cloud Model Studio, untuk Bilibili dan di tempat Google tidak bisa dijangkau. Anda cukup menempelkannya sekali. Kunci hanya disimpan di komputer ini dan hanya dikirim ke layanan tersebut; tidak ada yang lewat SceneVoice.',
   welcome_source_legend: 'Deskripsi dibuat oleh',
   welcome_source_cloud: 'SceneVoice Cloud: jatah gratis, tidak perlu menyiapkan apa pun',
   welcome_source_cloud_hint: '60 menit video yang baru dideskripsikan per hari; video yang sudah dideskripsikan pengguna SceneVoice lain tidak dihitung. Permintaan lewat relai SceneVoice dengan token perangkat anonim, tanpa akun.',
@@ -581,7 +594,7 @@ export default {
   web_source_own: 'Kunci Gemini saya',
   web_source_own_hint: 'Gratis dari Google AI Studio, tanpa kartu. Kunci hanya dikirim ke Google, dalam header permintaan, dan tidak pernah ke SceneVoice.',
   web_source_cloud: 'SceneVoice Cloud',
-  web_source_cloud_hint: 'Kunci milik proyek sendiri lewat relai SceneVoice, dengan token perangkat anonim dan jatah harian gratis. Belum dibuka: gunakan kunci Anda sendiri sampai saat itu.',
+  web_source_cloud_hint: 'Kunci milik proyek sendiri lewat relai SceneVoice, dengan token perangkat anonim dan jatah harian gratis.',
   web_key_label: 'Kunci API Gemini',
   web_key_note: 'Kunci hanya dikirim ke API Gemini milik Google, dalam header permintaan, tidak pernah di alamat web, dan tidak pernah ke SceneVoice.',
   web_remember: 'Ingat kunci di perangkat ini',
@@ -607,7 +620,7 @@ export default {
   web_settings_heading: '4. Cara mendeskripsikan',
   web_privacy_heading: 'Privasi',
   web_privacy_leaves:
-    'Yang keluar dari peramban ini: dengan kunci Anda sendiri, tautan video, bagian yang akan dideskripsikan dan kunci Anda dikirim ke API Gemini milik Google (generativelanguage.googleapis.com), kunci dalam header permintaan, tidak pernah di alamat web. Dengan SceneVoice Cloud, tautan dan bagian yang akan dideskripsikan dikirim ke relai SceneVoice (api.scenevoice.app) dengan token perangkat anonim di header yang sama.',
+    'Yang keluar dari peramban ini: dengan kunci Anda sendiri, tautan video, bagian yang akan dideskripsikan dan kunci Anda dikirim ke API Gemini milik Google (generativelanguage.googleapis.com), kunci dalam header permintaan, tidak pernah di alamat web. Dengan SceneVoice Cloud, tautan dan bagian yang akan dideskripsikan dikirim ke relai SceneVoice Cloud dengan token perangkat anonim di header yang sama.',
   web_privacy_youtube:
     'Video diputar di pemutar sematan YouTube dari youtube-nocookie.com. YouTube tetap memasang cookie-nya sendiri dan tahu bahwa video itu ditonton, seperti di situs mana pun yang menyematkan video. Skrip pemutar dari youtube.com adalah satu-satunya skrip yang dimuat halaman ini dari pihak selain SceneVoice, dan hanya dimuat saat Anda menekan Putar.',
   web_privacy_local:

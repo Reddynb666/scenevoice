@@ -18,7 +18,7 @@
 // Events (no id): {event: 'started'|'chunk'|'done'|'error'|'stopped'|'model', key, provider, ...};
 // 'chunk' and 'done' carry the section's own usage and length in seconds.
 
-import { CHUNK_SECONDS } from '../shared/constants.js';
+import { CHUNK_SECONDS, CLOUD_OPEN } from '../shared/constants.js';
 import { cloudRequest, scriptGetPath, scriptPath } from '../shared/cloud.js';
 import { askFrames, createClient, describeFrames, reviseFrames } from '../shared/describe.js';
 import { ApiError } from '../shared/errors.js';
@@ -299,7 +299,10 @@ self.onmessage = async ({ data }) => {
   const { id, cmd } = data || {};
   let reply;
   try {
-    if (cmd === 'start') reply = start(data);
+    // While SceneVoice Cloud is closed (CLOUD_OPEN) nothing here goes to the relay:
+    // a command for it is refused before a client or a request is made.
+    if (!CLOUD_OPEN && (data?.provider === 'cloud' || cmd === 'cloud-get' || cmd === 'cloud-put')) reply = { error: 'cloud-closed' };
+    else if (cmd === 'start') reply = start(data);
     else if (cmd === 'abort') reply = abort(data);
     else if (cmd === 'status') reply = status(data);
     else if (cmd === 'ask') reply = await ask(data);

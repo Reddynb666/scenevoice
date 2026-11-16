@@ -4,7 +4,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice: AI Audio Description for Video',
-  ext_description: 'AI audio description for YouTube and Bilibili videos, made for blind and low-vision viewers. Works with your screen reader.',
+  ext_description: 'AI audio description for YouTube and Bilibili, for blind and low-vision viewers. Read by your screen reader or a built-in voice.',
   cmd_toggle: 'Create descriptions, or turn them on and off',
   cmd_describe_now: 'Describe what is on screen now',
   cmd_repeat: 'Repeat the last description',
@@ -177,6 +177,8 @@ export default {
   // No key of the listener's own, but a SceneVoice Cloud token: the relay describes instead.
   status_fallback_cloud: 'No key of your own is set, so SceneVoice Cloud describes this site.',
   provider_name_cloud: 'SceneVoice Cloud',
+  // The built-in voice failed, or has no voice for the description language: said once on the video page, through the live region and as text on the video.
+  status_voice_failed: 'The built-in voice cannot read these descriptions properly on this computer: it has no voice for their language, or speech is not working. Add a voice in your system’s speech settings, or choose “My screen reader” in the SceneVoice popup.',
   // ----- errors -----
   error_no_key: 'SceneVoice needs a Gemini API key. The settings page is opening so you can add one.',
   error_bad_key: 'The Gemini API key was not accepted. Check it on the SceneVoice settings page.',
@@ -262,6 +264,8 @@ export default {
   error_cloud_rate_limited: 'Too many requests to SceneVoice Cloud in a short time. Wait a minute and try again; descriptions made so far are saved.',
   error_cloud_device_limit: 'Too many computers on this network have started SceneVoice Cloud today. Try again after $1.',
   error_cloud_quota_daily: 'The model behind SceneVoice Cloud has no quota left today. Try again tomorrow, or use a key of your own in settings.',
+  // SceneVoice Cloud is closed in this build (CLOUD_OPEN): the answer to anything that still asks for it.
+  error_cloud_closed: 'SceneVoice Cloud is not open yet. Add a key of your own on the settings page.',
   // ----- popup -----
   popup_setup_title: 'Set up SceneVoice',
   popup_setup_body: 'Add your free Gemini API key to start creating descriptions.',
@@ -307,6 +311,8 @@ export default {
   // No key and no Cloud token at all: the welcome page, not the settings page, is the place to start.
   popup_setup_body_welcome: 'SceneVoice can describe videos for free, with nothing to set up. The welcome page shows how, in three steps.',
   popup_setup_welcome: 'Set up SceneVoice',
+  // The same banner while SceneVoice Cloud is closed: no free allowance is promised.
+  popup_setup_body_own: 'SceneVoice needs an API key of your own to describe videos (Gemini or Qwen; a Gemini key is free). The welcome page shows how, in three steps, with a sample to hear first.',
   // ----- shared settings -----
   set_enabled: 'Describe while I watch',
   set_enabled_hint: 'Speak descriptions automatically during playback.',
@@ -342,7 +348,7 @@ export default {
   output_screenreader: 'My screen reader',
   output_screenreader_hint: 'Your own voice, speed and braille display.',
   output_tts: 'Built-in voice',
-  output_tts_hint: 'For listeners without a screen reader.',
+  output_tts_hint: 'For listening without a screen reader, or when yours does not read the descriptions aloud.',
   set_language: 'Description language',
   lang_auto: 'Same as my browser (Chinese on Bilibili)',
   set_auto_generate: 'Create descriptions automatically',
@@ -499,10 +505,10 @@ export default {
   opt_keys_change_for: 'Change the key for: $1',
   opt_keys_clear: 'Clear',
   opt_keys_clear_for: 'Clear the key for: $1',
-  // The four keys Chrome keeps (static/manifest.json): shown, not changed here.
-  opt_keys_chrome: 'Set by Chrome',
-  opt_keys_chrome_note: 'Chrome owns the first four keys. To change them, open Chrome’s shortcuts page (chrome://extensions/shortcuts); the other keys are changed here.',
-  opt_keys_chrome_open: 'Open Chrome’s shortcuts page',
+  // The four keys the browser itself keeps (static/manifest.json): shown, not changed here. No browser is named: the same package is listed for Chrome and for Edge.
+  opt_keys_browser: 'Set by the browser',
+  opt_keys_browser_note: 'The browser keeps the first four keys. To change them, open the browser’s shortcuts page with the button below; the other keys are changed here.',
+  opt_keys_browser_open: 'Open the browser’s shortcuts page',
   opt_keys_restore: 'Restore default keys',
   // Said in the status region while a new key is being recorded, and after.
   opt_keys_capture: 'Press the new key combination, or Escape to keep the old one.',
@@ -521,8 +527,10 @@ export default {
   opt_cache_confirm: 'Delete all saved descriptions? Videos will need to be described again.',
   privacy_1:
     'With your own key, SceneVoice has no server and no account, and nothing is sent to the developer. It never collects analytics. SceneVoice Cloud, if you turn it on, is an optional relay run by the project; the next point says what it receives.',
+  // privacy_1 and privacy_4 while SceneVoice Cloud is closed: nothing about the relay or sharing.
+  privacy_1_own: 'SceneVoice works with your own key: it has no server and no account, and nothing is sent to the developer. It never collects analytics.',
   privacy_6:
-    'SceneVoice Cloud is off until you press “Start free”. With it on, requests go to api.scenevoice.app with an anonymous device token instead of a key, and the relay passes them to Gemini. Per token it keeps only how many seconds of video were described today, the plan and any licence key, plus the finished text of a video’s descriptions when sharing is on. It never keeps pictures, your questions, the answers or your IP address, and does not log requests. “Stop using Cloud” removes the token.',
+    'SceneVoice Cloud is off until you press “Start free”. With it on, requests go to the SceneVoice Cloud relay with an anonymous device token instead of a key, and the relay passes them to Gemini. Per token it keeps only how many seconds of video were described today, the plan and any licence key, plus the finished text of a video’s descriptions when sharing is on. It never keeps pictures, your questions, the answers or your IP address, and does not log requests. “Stop using Cloud” removes the token.',
   privacy_2:
     'To create descriptions or answer a question, the YouTube video\'s address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google\'s terms for the Gemini API apply.',
   privacy_5:
@@ -530,9 +538,10 @@ export default {
   privacy_3: 'Descriptions are saved on this computer so a video is described only once.',
   privacy_4:
     'The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer, and are stripped before a video’s descriptions are shared. The record is deleted with the saved descriptions.',
+  privacy_4_own: 'The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer. The record is deleted with the saved descriptions.',
   opt_reset_title: '6. Restore defaults',
   opt_reset_intro:
-    'Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. The keyboard shortcuts set here go back to their defaults; the four Chrome keeps do not change.',
+    'Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. The keyboard shortcuts set here go back to their defaults; the four the browser keeps do not change.',
   opt_reset_button: 'Restore default settings',
   opt_reset_confirm: 'Restore all SceneVoice settings to their defaults? Your API key and saved descriptions stay.',
   opt_reset_done: 'Default settings restored.',
@@ -562,6 +571,9 @@ export default {
   cloud_register_busy: 'SceneVoice Cloud is busy right now. Try Start free again in a minute.',
   opt_cloud_stop: 'Stop using Cloud',
   opt_cloud_stopped: 'SceneVoice Cloud is no longer used on this computer; the device token was removed.',
+  // Cloud is closed in this build, but a device token from a version that offered it is still saved: the block shows only this and Stop using Cloud.
+  opt_cloud_closed: 'SceneVoice Cloud is not open in this version, and nothing is sent to it.',
+  opt_cloud_closed_token: 'SceneVoice Cloud is not open in this version, so it is not used and nothing is sent to it. A Cloud device token saved by an earlier version is still on this computer; “Stop using Cloud” removes it.',
   set_share_descriptions: 'Share finished descriptions with other SceneVoice users',
   set_share_descriptions_hint:
     'When a video’s descriptions are complete, their text is sent to the SceneVoice cache, so the next listener gets them at once and the video is described only once. Never pictures, questions or who you are. Only with SceneVoice Cloud.',
@@ -581,15 +593,22 @@ export default {
   welcome_title: 'Welcome to SceneVoice',
   welcome_intro:
     'SceneVoice says what is on screen in YouTube and Bilibili videos, in the pauses between speech, through your screen reader or a built-in voice. Three steps, about two minutes.',
+  // The welcome page while SceneVoice Cloud is closed (the *_own strings): one path, a key of one's own.
+  welcome_intro_own: 'SceneVoice says what is on screen in YouTube and Bilibili videos, in the pauses between speech, through your screen reader or a built-in voice. Three steps: hear a sample, add a key of your own, try a video.',
   welcome_step1_title: '1. Hear what SceneVoice does',
   welcome_step1_body: 'Three sample descriptions, the way they come during a video. Nothing is sent anywhere and no key is needed.',
   welcome_output_legend: 'Hear them through',
   welcome_sample_button: 'Hear a sample',
   welcome_sample_stop: 'Stop the sample',
   welcome_sample_voice_failed: 'The built-in voice could not speak on this computer. Choose “My screen reader” above and press Hear a sample again.',
+  // Under the sample button: some screen readers may not read live regions in this browser.
+  welcome_sample_silent: 'If you hear nothing after pressing Hear a sample, your screen reader may not read automatic announcements in this browser: choose “Built-in voice” above and press the button again.',
   welcome_sample_between: 'The video keeps playing; descriptions fit the pauses.',
   welcome_sample_done: 'That was the sample. Next: choose how descriptions are made.',
+  welcome_sample_done_own: 'That was the sample. Next: step 2, add a key of your own.',
   welcome_step2_title: '2. Choose how descriptions are made',
+  welcome_step2_title_own: '2. Add a key of your own',
+  welcome_own_only: 'The descriptions are written by an AI model, and the model needs an API key of your own: a Gemini key from Google AI Studio, free, for YouTube; or a Qwen key from Alibaba Cloud Model Studio, for Bilibili and wherever Google cannot be reached. You paste it in once. It is stored only on this computer and sent only to that service; nothing goes through SceneVoice.',
   welcome_source_legend: 'Descriptions are made by',
   welcome_source_cloud: 'SceneVoice Cloud: free allowance, nothing to set up',
   welcome_source_cloud_hint: '60 minutes of newly described video a day; videos already described by other SceneVoice users do not count. Requests go through the SceneVoice relay with an anonymous device token, no account.',
@@ -631,7 +650,7 @@ export default {
   web_source_own: 'My Gemini key',
   web_source_own_hint: 'Free from Google AI Studio, no card needed. The key goes only to Google, in a request header, and never to SceneVoice.',
   web_source_cloud: 'SceneVoice Cloud',
-  web_source_cloud_hint: 'The project’s own key through the SceneVoice relay, with an anonymous device token and a free daily allowance. Not open yet: use your own key until it is.',
+  web_source_cloud_hint: 'The project’s own key through the SceneVoice relay, with an anonymous device token and a free daily allowance.',
   web_key_label: 'Gemini API key',
   web_key_note: 'The key is sent only to Google’s Gemini API, in a request header, never in a web address, and never to SceneVoice.',
   web_remember: 'Remember the key on this device',
@@ -639,6 +658,7 @@ export default {
   web_key_guide: 'How to get a free Gemini key: the guide in the README',
   web_key_guide_url: 'https://github.com/reddynb666/scenevoice#getting-a-gemini-api-key',
   web_key_missing: 'Paste your Gemini API key first, or choose SceneVoice Cloud.',
+  web_key_missing_own: 'Paste your Gemini API key first.',
   web_key_forgotten: 'The key is no longer remembered on this device; it is kept until this tab closes.',
   web_cloud_unreachable: 'SceneVoice Cloud could not be reached, so nothing was described. Choose “My Gemini key” above and press Play again.',
   web_watch_heading: '3. Watch and listen',
@@ -657,11 +677,13 @@ export default {
   web_settings_heading: '4. How to describe',
   web_privacy_heading: 'Privacy',
   web_privacy_leaves:
-    'What leaves this browser: with your own key, the video’s link, the part to describe and your key go to Google’s Gemini API (generativelanguage.googleapis.com), the key in a request header, never in a web address. With SceneVoice Cloud, the link and the part to describe go to the SceneVoice relay (api.scenevoice.app) with an anonymous device token in the same header.',
+    'What leaves this browser: with your own key, the video’s link, the part to describe and your key go to Google’s Gemini API (generativelanguage.googleapis.com), the key in a request header, never in a web address. With SceneVoice Cloud, the link and the part to describe go to the SceneVoice Cloud relay with an anonymous device token in the same header.',
+  web_privacy_leaves_own: 'What leaves this browser: the video’s link, the part to describe and your key go to Google’s Gemini API (generativelanguage.googleapis.com), the key in a request header, never in a web address. Nothing goes to SceneVoice.',
   web_privacy_youtube:
     'The video plays in YouTube’s embedded player from youtube-nocookie.com. YouTube still sets its own cookies and sees that the video was watched, as on any site that embeds one. The player’s script from youtube.com is the only script this page loads from anyone but SceneVoice, and it is loaded only when you press Play.',
   web_privacy_local:
     'No analytics, no account, no cookies of its own. Your key (if remembered), the device token, your choices and the finished descriptions stay in this browser’s storage and go with the browser’s site data when you clear it. Descriptions and answers are written by an AI and can be wrong.',
+  web_privacy_local_own: 'No analytics, no account, no cookies of its own. Your key (if remembered), your choices and the finished descriptions stay in this browser’s storage and go with the browser’s site data when you clear it. Descriptions and answers are written by an AI and can be wrong.',
   web_privacy_policy: 'Full privacy policy',
   web_privacy_url: 'https://github.com/reddynb666/scenevoice/blob/main/PRIVACY.md',
   web_extension_note: 'For Bilibili, for timing from the real captions and for the shortcuts on youtube.com itself, install the extension:',

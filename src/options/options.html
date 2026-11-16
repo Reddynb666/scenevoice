@@ -19,31 +19,38 @@
     <section class="card stack" aria-labelledby="h-key">
       <h2 id="h-key" data-i18n="opt_key_title">1. Connect an AI model</h2>
 
-      <!-- SceneVoice Cloud: the no-key path. Plan and allowance, Start free, licence, sharing, stop. -->
-      <h3 id="h-cloud" data-i18n="provider_cloud">SceneVoice Cloud</h3>
-      <p id="cloudIntro" class="small muted" data-i18n="opt_cloud_intro">SceneVoice Cloud describes videos with the project’s own key, so there is nothing to set up.</p>
-      <p id="cloudInfo"></p>
-      <div class="row">
-        <button type="button" id="cloudStart" aria-describedby="cloudIntro" data-i18n="opt_cloud_start">Start free</button>
-        <button type="button" id="cloudStop" class="danger" hidden data-i18n="opt_cloud_stop">Stop using Cloud</button>
+      <!-- SceneVoice Cloud: the no-key path. Plan and allowance, Start free, licence, sharing, stop.
+           Hidden as shipped: while Cloud is closed (CLOUD_OPEN in shared/constants.js) options.js
+           takes the block out of the page, or, when a device token from a version that offered
+           Cloud is still saved, keeps only its state and "Stop using Cloud" (the parts marked
+           data-cloud-offer go). The provider lists and the privacy points follow the same switch
+           through data-cloud="open" / "closed" (shared/form.js applyCloudSwitch). -->
+      <div id="cloudBlock" class="stack" hidden>
+        <h3 id="h-cloud" data-i18n="provider_cloud">SceneVoice Cloud</h3>
+        <p id="cloudIntro" class="small muted" data-cloud-offer data-i18n="opt_cloud_intro">SceneVoice Cloud describes videos with the project’s own key, so there is nothing to set up.</p>
+        <p id="cloudInfo"></p>
+        <div class="row">
+          <button type="button" id="cloudStart" aria-describedby="cloudIntro" data-cloud-offer data-i18n="opt_cloud_start">Start free</button>
+          <button type="button" id="cloudStop" class="danger" hidden data-i18n="opt_cloud_stop">Stop using Cloud</button>
+        </div>
+        <p id="cloudStatus" role="status" aria-live="polite"></p>
+        <label class="check" data-cloud-offer><input type="checkbox" id="shareDescriptions" data-setting="shareDescriptions" aria-describedby="shareHint"><span data-i18n="set_share_descriptions">Share finished descriptions with other SceneVoice users</span></label>
+        <p id="shareHint" class="small muted" data-cloud-offer data-i18n="set_share_descriptions_hint">When a video’s descriptions are complete, their text is sent to the SceneVoice cache. Never pictures, questions or who you are.</p>
+        <label class="field" for="licenseKey" data-cloud-offer><span data-i18n="opt_license_label">Licence key</span></label>
+        <div class="row nowrap" data-cloud-offer>
+          <input type="text" id="licenseKey" autocomplete="off" spellcheck="false" aria-describedby="licenseHint licenseStatus">
+          <button type="button" id="activateLicense" class="secondary" data-i18n="opt_license_activate">Activate a licence key</button>
+        </div>
+        <p id="licenseHint" class="small muted" data-cloud-offer data-i18n="opt_license_hint">For SceneVoice Cloud Plus or an organisation licence. Keys look like svl-XXXX-XXXX-XXXX.</p>
+        <p id="licenseStatus" role="status" aria-live="polite" data-cloud-offer></p>
       </div>
-      <p id="cloudStatus" role="status" aria-live="polite"></p>
-      <label class="check"><input type="checkbox" id="shareDescriptions" data-setting="shareDescriptions" aria-describedby="shareHint"><span data-i18n="set_share_descriptions">Share finished descriptions with other SceneVoice users</span></label>
-      <p id="shareHint" class="small muted" data-i18n="set_share_descriptions_hint">When a video’s descriptions are complete, their text is sent to the SceneVoice cache. Never pictures, questions or who you are.</p>
-      <label class="field" for="licenseKey"><span data-i18n="opt_license_label">Licence key</span></label>
-      <div class="row nowrap">
-        <input type="text" id="licenseKey" autocomplete="off" spellcheck="false" aria-describedby="licenseHint licenseStatus">
-        <button type="button" id="activateLicense" class="secondary" data-i18n="opt_license_activate">Activate a licence key</button>
-      </div>
-      <p id="licenseHint" class="small muted" data-i18n="opt_license_hint">For SceneVoice Cloud Plus or an organisation licence. Keys look like svl-XXXX-XXXX-XXXX.</p>
-      <p id="licenseStatus" role="status" aria-live="polite"></p>
 
       <h3 id="h-provider" data-i18n="opt_provider_title">Which model describes each site</h3>
       <p id="providerHint" class="small muted" data-i18n="opt_provider_hint">Gemini watches a whole YouTube video by its link.</p>
       <label class="field">
         <span data-i18n="set_provider_youtube">YouTube videos</span>
         <select id="youtubeProvider" data-setting="youtubeProvider" aria-describedby="providerHint">
-          <option value="cloud" data-i18n="provider_cloud">SceneVoice Cloud</option>
+          <option value="cloud" data-cloud="open" hidden data-i18n="provider_cloud">SceneVoice Cloud</option>
           <option value="gemini" data-i18n="provider_gemini">Gemini (Google)</option>
           <option value="qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</option>
         </select>
@@ -51,7 +58,7 @@
       <label class="field">
         <span data-i18n="set_provider_bilibili">Bilibili videos (experimental)</span>
         <select id="bilibiliProvider" data-setting="bilibiliProvider" aria-describedby="providerHint">
-          <option value="cloud" data-i18n="provider_cloud">SceneVoice Cloud</option>
+          <option value="cloud" data-cloud="open" hidden data-i18n="provider_cloud">SceneVoice Cloud</option>
           <option value="gemini" data-i18n="provider_gemini">Gemini (Google)</option>
           <option value="qwen" data-i18n="provider_qwen">Qwen (Alibaba Cloud Model Studio)</option>
         </select>
@@ -253,7 +260,7 @@
         <legend data-i18n="set_output">Voice</legend>
         <div class="choices">
           <label class="choice"><input type="radio" name="output" value="screenreader" data-setting="output"><span data-i18n="output_screenreader">My screen reader</span><span class="hint" data-i18n="output_screenreader_hint">Your own voice, speed and braille display.</span></label>
-          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listeners without a screen reader.</span></label>
+          <label class="choice"><input type="radio" name="output" value="tts" data-setting="output"><span data-i18n="output_tts">Built-in voice</span><span class="hint" data-i18n="output_tts_hint">For listening without a screen reader, or when yours does not read the descriptions aloud.</span></label>
         </div>
       </fieldset>
 
@@ -298,7 +305,7 @@
       <label class="check"><input type="checkbox" data-setting="showText"><span data-i18n="set_show_text">Show descriptions as large text on the video</span><span class="hint" data-i18n="set_show_text_hint">Helpful for low vision, and for people watching with you.</span></label>
     </section>
 
-    <!-- 4. Shortcuts: the four Chrome keeps are shown; the rest are changed here (shared/shortcuts.js). -->
+    <!-- 4. Shortcuts: the four the browser keeps are shown; the rest are changed here (shared/shortcuts.js). -->
     <section class="card stack" id="keys" aria-labelledby="h-keys">
       <h2 id="h-keys" tabindex="-1" data-i18n="opt_keys_title">4. Keyboard shortcuts</h2>
       <p><span data-i18n="opt_keys_intro">These work on YouTube and Bilibili videos, even while focus is on the player.</span> <span id="keysSayHint"></span></p>
@@ -310,8 +317,8 @@
       <p id="keysStatus" class="small" role="status" aria-live="polite"></p>
       <p class="small muted" data-i18n="opt_keys_hint">Change them if they clash with your screen reader: press Change, then the new keys; the page says what was saved.</p>
       <div class="row"><button type="button" id="restoreKeys" class="secondary" data-i18n="opt_keys_restore">Restore default keys</button></div>
-      <p class="small muted" data-i18n="opt_keys_chrome_note">Chrome owns the first four keys. To change them, open Chrome’s shortcuts page (chrome://extensions/shortcuts); the other keys are changed here.</p>
-      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_chrome_open">Open Chrome’s shortcuts page</button></div>
+      <p class="small muted" data-i18n="opt_keys_browser_note">The browser keeps the first four keys. To change them, open the browser’s shortcuts page with the button below; the other keys are changed here.</p>
+      <div class="row"><button type="button" id="editShortcuts" class="secondary" data-i18n="opt_keys_browser_open">Open the browser’s shortcuts page</button></div>
     </section>
 
     <!-- 5. Data -->
@@ -335,19 +342,21 @@
       </label>
       <p id="dailyBudgetHint" class="small muted" data-i18n="set_daily_budget_hint">How much video SceneVoice may describe per day, every model together, counted on this computer. When it is reached, no new descriptions start until tomorrow; questions still work.</p>
       <ul class="small">
-        <li data-i18n="privacy_1">With your own key, SceneVoice has no server and no account, and nothing is sent to the developer. It never collects analytics. SceneVoice Cloud, if you turn it on, is an optional relay run by the project; the next point says what it receives.</li>
-        <li data-i18n="privacy_6">SceneVoice Cloud is off until you press “Start free”. With it on, requests go to api.scenevoice.app with an anonymous device token instead of a key, and the relay passes them to Gemini. Per token it keeps only how many seconds of video were described today, the plan and any licence key, plus the finished text of a video’s descriptions when sharing is on. It never keeps pictures, your questions, the answers or your IP address, and does not log requests. “Stop using Cloud” removes the token.</li>
+        <li data-cloud="closed" data-i18n="privacy_1_own">SceneVoice uses your own key: it has no server and no account, and nothing is sent to the developer. It never collects analytics.</li>
+        <li data-cloud="open" hidden data-i18n="privacy_1">With your own key, SceneVoice has no server and no account, and nothing is sent to the developer. It never collects analytics. SceneVoice Cloud, if you turn it on, is an optional relay run by the project; the next point says what it receives.</li>
+        <li data-cloud="open" hidden data-i18n="privacy_6">SceneVoice Cloud is off until you press “Start free”. With it on, requests go to the SceneVoice Cloud relay with an anonymous device token instead of a key, and the relay passes them to Gemini. Per token it keeps only how many seconds of video were described today, the plan and any licence key, plus the finished text of a video’s descriptions when sharing is on. It never keeps pictures, your questions, the answers or your IP address, and does not log requests. “Stop using Cloud” removes the token.</li>
         <li data-i18n="privacy_2">To create descriptions or answer a question, the YouTube video's address, title, channel and description, your question and the recent descriptions are sent to the Gemini API with your key. To describe a moment again, the description you marked as wrong is sent too. Google's terms for the Gemini API apply.</li>
         <li data-i18n="privacy_3">Descriptions are saved on this computer so a video is described only once.</li>
         <li data-i18n="privacy_5">With Qwen, or on Bilibili, pictures taken from the playing video are sent instead of its address.</li>
-        <li data-i18n="privacy_4">The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer, and are stripped before a video’s descriptions are shared. The record is deleted with the saved descriptions.</li>
+        <li data-cloud="closed" data-i18n="privacy_4_own">The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer. The record is deleted with the saved descriptions.</li>
+        <li data-cloud="open" hidden data-i18n="privacy_4">The descriptions you mark as wrong are recorded only on this computer, so the corrected versions are kept. They are never sent to the developer, and are stripped before a video’s descriptions are shared. The record is deleted with the saved descriptions.</li>
       </ul>
     </section>
 
     <!-- 6. Defaults -->
     <section class="card stack" aria-labelledby="h-reset">
       <h2 id="h-reset" data-i18n="opt_reset_title">6. Restore defaults</h2>
-      <p id="resetIntro" data-i18n="opt_reset_intro">Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. Keyboard shortcuts stay too; change them on Chrome’s shortcuts page.</p>
+      <p id="resetIntro" data-i18n="opt_reset_intro">Put every description, voice and sound setting back the way it was when you installed SceneVoice. Your API key, model and saved descriptions stay. The keyboard shortcuts set here go back to their defaults; the four the browser keeps do not change.</p>
       <div class="row"><button type="button" id="resetSettings" class="danger" aria-describedby="resetIntro" data-i18n="opt_reset_button">Restore default settings</button></div>
     </section>
 

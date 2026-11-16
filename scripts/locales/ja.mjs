@@ -9,7 +9,7 @@
 export default {
   // ----- manifest -----
   ext_name: 'SceneVoice：動画のAI音声ガイド',
-  ext_description: 'YouTube と Bilibili の動画に AI 音声ガイドを付けます。視覚障害のある方やロービジョンの方のために作られ、お使いのスクリーンリーダーと一緒に動きます。',
+  ext_description: 'YouTube と Bilibili の動画に AI 音声ガイドを付けます。視覚障害のある方やロービジョンの方のために、お使いのスクリーンリーダーか内蔵の音声が読み上げます。',
   cmd_toggle: '音声ガイドを作成、またはオンとオフを切り替え',
   cmd_describe_now: '今の画面を説明',
   cmd_repeat: '直前の音声ガイドをもう一度',
@@ -180,6 +180,7 @@ export default {
   late_prefix: '少し前：',
   status_fallback_cloud: '自分のキーが設定されていないので、このサイトはSceneVoice Cloudが説明します。',
   provider_name_cloud: 'SceneVoice Cloud',
+  status_voice_failed: 'このパソコンでは、内蔵の音声でこの音声ガイドをうまく読めません。その言語の声がないか、音声読み上げが動いていません。システムの音声設定で声を追加するか、SceneVoiceのポップアップで「自分のスクリーンリーダー」を選んでください。',
   // ----- errors -----
   error_no_key: 'SceneVoiceにはGemini APIキーが必要です。設定ページを開くので、キーを追加してください。',
   error_bad_key: 'Gemini APIキーが受け付けられませんでした。SceneVoiceの設定ページで確認してください。',
@@ -253,6 +254,7 @@ export default {
   error_cloud_bad_json: 'SceneVoice Cloudの答えをSceneVoiceが読み取れませんでした。もう一度お試しください。',
   error_cloud_rate_limited: '短時間にSceneVoice Cloudへのリクエストが多すぎます。1分待ってからもう一度お試しください。ここまでの音声ガイドは保存されています。',
   error_cloud_quota_daily: 'SceneVoice Cloudの背後のモデルは、今日の利用枠を使い切りました。明日もう一度試すか、設定で自分のキーを使ってください。',
+  error_cloud_closed: 'SceneVoice Cloudはまだ開放されていません。設定ページで自分のキーを追加してください。',
   // ----- popup -----
   popup_setup_title: 'SceneVoiceを設定',
   popup_setup_body: '無料のGemini APIキーを追加すると、音声ガイドを作成できます。',
@@ -292,6 +294,7 @@ export default {
   popup_language_note: '画面の言語：$1・音声ガイドの言語：$2',
   popup_setup_body_welcome: 'SceneVoiceは、何も設定しなくても無料で動画を説明できます。ようこそページが3つのステップで案内します。',
   popup_setup_welcome: 'SceneVoiceを設定する',
+  popup_setup_body_own: 'SceneVoiceが動画を説明するには、あなた自身のAPIキーが必要です（GeminiまたはQwen。Geminiのキーは無料です）。ようこそページが3つのステップで案内し、先に例を聞くこともできます。',
   // ----- shared settings -----
   set_enabled: '見ている間に説明する',
   set_enabled_hint: '再生中に音声ガイドを自動で読み上げます。',
@@ -472,9 +475,9 @@ export default {
   opt_keys_change_for: 'キーを変更：$1',
   opt_keys_clear: '解除',
   opt_keys_clear_for: 'キーを解除：$1',
-  opt_keys_chrome: 'Chromeが設定',
-  opt_keys_chrome_note: '最初の4つのキーはChromeが管理しています。変更するにはChromeのショートカットページ（chrome://extensions/shortcuts）を開いてください。ほかのキーはここで変更できます。',
-  opt_keys_chrome_open: 'Chromeのショートカットページを開く',
+  opt_keys_browser: 'ブラウザーが設定',
+  opt_keys_browser_note: '最初の4つのキーはブラウザーが管理しています。変更するには下のボタンでブラウザーのショートカットページを開いてください。ほかのキーはここで変更できます。',
+  opt_keys_browser_open: 'ブラウザーのショートカットページを開く',
   opt_keys_restore: 'キーを初期設定に戻す',
   opt_keys_capture: '新しいキーの組み合わせを押してください。Escapeを押すと元のままにします。',
   opt_keys_need_modifier: 'Alt（MacではOption）、Ctrl、Commandのいずれかを押しながら、文字、数字、矢印、ファンクションキーを押してください。Escapeで元のままにします。',
@@ -492,8 +495,9 @@ export default {
   opt_cache_confirm: '保存した音声ガイドをすべて削除しますか。動画はもう一度説明し直すことになります。',
   privacy_1:
     '自分のキーを使うかぎり、SceneVoiceにはサーバーもアカウントもなく、開発者には何も送られません。利用状況の収集も一切しません。SceneVoice Cloudは、オンにした場合にだけ使われる、プロジェクトが運営する任意の中継です。何を受け取るかは次の項目にあります。',
+  privacy_1_own: 'SceneVoiceはあなた自身のキーで動きます。サーバーもアカウントもなく、開発者には何も送られません。利用状況の収集も一切しません。',
   privacy_6:
-    'SceneVoice Cloudは「無料で始める」を押すまでオフです。オンにすると、リクエストはキーの代わりに匿名の端末トークンを付けてapi.scenevoice.appに送られ、中継がGeminiに渡します。中継がトークンごとに保存するのは、今日何秒分の動画を説明したか、プラン、ライセンスキー（あれば）、そして共有がオンのときに完成した動画の音声ガイドの本文だけです。画像、あなたの質問、その回答、IPアドレスは保存せず、リクエストの記録も残しません。「Cloudの利用をやめる」でトークンは削除されます。',
+    'SceneVoice Cloudは「無料で始める」を押すまでオフです。オンにすると、リクエストはキーの代わりに匿名の端末トークンを付けてSceneVoice Cloudの中継サーバーに送られ、中継がGeminiに渡します。中継がトークンごとに保存するのは、今日何秒分の動画を説明したか、プラン、ライセンスキー（あれば）、そして共有がオンのときに完成した動画の音声ガイドの本文だけです。画像、あなたの質問、その回答、IPアドレスは保存せず、リクエストの記録も残しません。「Cloudの利用をやめる」でトークンは削除されます。',
   privacy_2:
     '音声ガイドの作成や質問への回答のために、YouTube動画のアドレス、タイトル、チャンネル名、概要欄、あなたの質問、最近の音声ガイドが、あなたのキーと一緒にGemini APIに送られます。場面を説明し直すときは、誤りとして記録した音声ガイドも送られます。GoogleのGemini API利用規約が適用されます。',
   privacy_5:
@@ -501,9 +505,10 @@ export default {
   privacy_3: '音声ガイドはこのパソコンに保存されるので、同じ動画を説明するのは1回だけです。',
   privacy_4:
     '誤りとして記録した音声ガイドはこのパソコンにだけ残り、修正後の版を保つために使われます。開発者には送られず、動画の音声ガイドを共有する前に取り除かれます。この記録は、保存した音声ガイドと一緒に削除されます。',
+  privacy_4_own: '誤りとして記録した音声ガイドはこのパソコンにだけ残り、修正後の版を保つために使われます。開発者には送られません。この記録は、保存した音声ガイドと一緒に削除されます。',
   opt_reset_title: '6. 初期設定に戻す',
   opt_reset_intro:
-    '音声ガイド、声、音の設定をすべて、SceneVoiceをインストールしたときの状態に戻します。APIキー、モデル、保存した音声ガイドはそのまま残ります。ここで設定したショートカットキーは初期設定に戻ります。Chromeが管理する4つは変わりません。',
+    '音声ガイド、声、音の設定をすべて、SceneVoiceをインストールしたときの状態に戻します。APIキー、モデル、保存した音声ガイドはそのまま残ります。ここで設定したショートカットキーは初期設定に戻ります。ブラウザーが管理する4つは変わりません。',
   opt_reset_button: '設定を初期設定に戻す',
   opt_reset_confirm: 'SceneVoiceの設定をすべて初期設定に戻しますか。APIキーと保存した音声ガイドは残ります。',
   opt_reset_done: '初期設定に戻しました。',
@@ -519,6 +524,8 @@ export default {
   opt_cloud_use_own: '代わりに自分のキーも使えます。下のGeminiまたはQwenです。',
   opt_cloud_stop: 'Cloudの利用をやめる',
   opt_cloud_stopped: 'このパソコンではSceneVoice Cloudを使わなくなりました。端末トークンを削除しました。',
+  opt_cloud_closed: 'このバージョンではSceneVoice Cloudは開放されておらず、何も送られません。',
+  opt_cloud_closed_token: 'このバージョンではSceneVoice Cloudは開放されていないため、使われず、何も送られません。以前のバージョンが保存したCloudの端末トークンがこのパソコンに残っています。「Cloudの利用をやめる」を押すと削除されます。',
   set_share_descriptions: '完成した音声ガイドをほかのSceneVoiceユーザーと共有する',
   set_share_descriptions_hint: '動画の音声ガイドがすべて完成すると、その文章がSceneVoiceのキャッシュに送られ、次に同じ動画を見る人がすぐに受け取れます。動画は一度しか説明されません。画像、質問、あなたが誰かは決して送られません。SceneVoice Cloudを使うときのみです。',
   opt_license_label: 'ライセンスキー',
@@ -535,13 +542,18 @@ export default {
   plan_org: '団体',
   welcome_title: 'SceneVoiceへようこそ',
   welcome_intro: 'SceneVoiceは、YouTubeとBilibiliの動画で画面に映っているものを、せりふの合間に、スクリーンリーダーまたは内蔵の音声で伝えます。3ステップ、約2分です。',
+  welcome_intro_own: 'SceneVoiceは、YouTubeとBilibiliの動画で画面に映っているものを、せりふの合間に、スクリーンリーダーまたは内蔵の音声で伝えます。3ステップです。例を聞く、自分のキーを追加する、動画で試す。',
   welcome_step1_title: '1. SceneVoiceが何をするか聞いてみる',
   welcome_step1_body: '動画の最中に流れるのと同じ、3つの音声ガイドの例です。何も送信されず、キーも不要です。',
   welcome_output_legend: '聞く方法',
   welcome_sample_button: '例を聞く',
+  welcome_sample_silent: '「例を聞く」を押しても何も聞こえない場合、お使いのスクリーンリーダーがこのブラウザーで自動の読み上げ通知を読まないのかもしれません。上で「内蔵の音声」を選び、もう一度ボタンを押してください。',
   welcome_sample_between: '動画は止まりません。音声ガイドは合間に収まります。',
   welcome_sample_done: '例はここまでです。次は、音声ガイドの作り方を選びます。',
+  welcome_sample_done_own: '例はここまでです。次はステップ2、自分のキーを追加します。',
   welcome_step2_title: '2. 音声ガイドの作り方を選ぶ',
+  welcome_step2_title_own: '2. 自分のキーを追加する',
+  welcome_own_only: '音声ガイドはAIモデルが作成し、モデルにはあなた自身のAPIキーが必要です。YouTubeにはGoogle AI StudioのGeminiキー（無料）、Bilibiliや、Googleにつながらない場所ではAlibaba Cloud Model StudioのQwenキーを使います。貼り付けるのは一度だけです。キーはこのパソコンにだけ保存され、そのサービスにだけ送られます。SceneVoiceを通るものは何もありません。',
   welcome_source_legend: '音声ガイドを作るのは',
   welcome_source_cloud: 'SceneVoice Cloud：無料枠あり、設定不要',
   welcome_source_cloud_hint: '1日に60分の動画を新しく説明できます。ほかのSceneVoiceユーザーがすでに説明した動画は数えません。リクエストは匿名の端末トークンでSceneVoiceの中継サーバーを通ります。アカウントは不要です。',
@@ -582,7 +594,7 @@ export default {
   web_source_own: '自分のGeminiキー',
   web_source_own_hint: 'Google AI Studioで無料、カード不要。キーはリクエストヘッダーに入れてGoogleにだけ送られ、SceneVoiceには送られません。',
   web_source_cloud: 'SceneVoice Cloud',
-  web_source_cloud_hint: 'プロジェクト自身のキーをSceneVoiceの中継サーバー経由で使います。匿名のデバイストークンと、1日分の無料枠付き。まだ開放されていません。それまでは自分のキーをお使いください。',
+  web_source_cloud_hint: 'プロジェクト自身のキーをSceneVoiceの中継サーバー経由で使います。匿名のデバイストークンと、1日分の無料枠付き。',
   web_key_label: 'Gemini APIキー',
   web_key_note: 'キーはリクエストヘッダーに入れてGoogleのGemini APIにだけ送られます。ウェブアドレスには入れず、SceneVoiceにも送りません。',
   web_remember: 'このデバイスにキーを記憶する',
@@ -608,7 +620,7 @@ export default {
   web_settings_heading: '4. 説明のしかた',
   web_privacy_heading: 'プライバシー',
   web_privacy_leaves:
-    'このブラウザーから出ていくもの：自分のキーを使う場合、動画のリンク、説明する範囲、あなたのキーがGoogleのGemini API（generativelanguage.googleapis.com）に送られます。キーはリクエストヘッダーに入れ、ウェブアドレスには決して入れません。SceneVoice Cloudを使う場合、リンクと説明する範囲がSceneVoiceの中継サーバー（api.scenevoice.app）に、匿名のデバイストークンを同じヘッダーに入れて送られます。',
+    'このブラウザーから出ていくもの：自分のキーを使う場合、動画のリンク、説明する範囲、あなたのキーがGoogleのGemini API（generativelanguage.googleapis.com）に送られます。キーはリクエストヘッダーに入れ、ウェブアドレスには決して入れません。SceneVoice Cloudを使う場合、リンクと説明する範囲がSceneVoice Cloudの中継サーバーに、匿名のデバイストークンを同じヘッダーに入れて送られます。',
   web_privacy_youtube:
     '動画はyoutube-nocookie.comのYouTube埋め込みプレーヤーで再生されます。動画を埋め込むどのサイトでも同じように、YouTubeは自身のCookieを設定し、その動画が見られたことを知ります。youtube.comのプレーヤースクリプトは、このページがSceneVoice以外から読み込む唯一のスクリプトで、「再生」を押したときにだけ読み込まれます。',
   web_privacy_local:

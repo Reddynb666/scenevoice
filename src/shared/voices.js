@@ -29,6 +29,17 @@ export function languageMatch(voiceLang, lang) {
   return 1;
 }
 
+/**
+ * Whether any installed voice speaks the language. Yes when it cannot be told:
+ * no list (some systems report their voices late), no language asked for, or
+ * a voice that does not say what it speaks.
+ * @param {{lang?: string}[]} installed  chrome.tts.getVoices()
+ */
+export function hasVoiceFor(installed, lang) {
+  if (!Array.isArray(installed) || !installed.length || !lang) return true;
+  return installed.some((v) => !v?.lang || languageMatch(v.lang, lang) > 0);
+}
+
 const byName = (a, b) => a.name.localeCompare(b.name);
 
 /**

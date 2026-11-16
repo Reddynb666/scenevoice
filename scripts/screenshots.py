@@ -5,13 +5,24 @@ docs/store/. Run after `npm run build`:
     npm run screenshots                       English, into docs/store/
     python3 scripts/screenshots.py zh_CN      Chinese, into docs/store/zh-CN/
 
+The words drawn on the images themselves (the caption beside the popup, the promo
+tile) are in WORDS below, in English and Simplified Chinese; they are not interface
+strings, so they are not in scripts/locales/. Another language gets the English
+words, and so does Chinese on a machine with no font that has Chinese glyphs.
+
 Chrome takes the interface language from the machine, not from Playwright's
 locale, so the extension is copied with only the wanted language and that
 language as the manifest's default_locale. The pages are shown with a stub key
-in chrome.storage.local, so the settings page reads as connected, and a sample
-script in the cache, so the transcript page has lines to show. No model is
-called and nothing leaves the machine. Pages that another build may not have
-yet (welcome.html) are skipped with a note.
+in chrome.storage.local, so the key field shows as filled, and a sample script
+in the cache, so the transcript page has lines to show. No model is called and
+nothing leaves the machine: every request that is not to the extension's own
+files is refused (with a key in place the settings page asks for the model
+list as it opens). Pages that another build may not have yet (welcome.html)
+are skipped with a note.
+
+The keyboard shortcuts picture names the keys as the store description does,
+"Alt+Shift+D", whatever machine runs this: on a Mac the page would write
+"Option+Shift+D".
 """
 import json
 import shutil
@@ -58,8 +69,53 @@ SAMPLE_SCRIPT = {
 }
 
 
-def font(size, bold=False):
-    """A system font that has Latin glyphs; Pillow's default bitmap font is the fallback."""
+# What is written on the images. It says what the store description says: public videos
+# on two sites (never "any" video), and no screen reader named as tested.
+WORDS = {
+    "en": {
+        "popup_title": "One key, one shortcut.",
+        "popup_lines": ["Alt+Shift+D starts descriptions.", "Status, progress and every setting", "are read by your screen reader."],
+        "promo_name": "SceneVoice",
+        "promo_tag": "AI audio description",
+        "promo_lines": ["YouTube and Bilibili videos,", "described in the pauses,", "through your own screen reader."],
+    },
+    "zh_CN": {
+        "popup_title": "一把密钥，一个快捷键。",
+        "popup_lines": ["按 Alt+Shift+D 开始口述。", "状态、进度和每一项设置，", "都由你的读屏读出来。"],
+        "promo_name": "SceneVoice 声景",
+        "promo_tag": "AI 口述影像",
+        "promo_lines": ["YouTube 和哔哩哔哩视频，", "口述放进对白空隙，", "用你自己的读屏朗读。"],
+    },
+}
+# Fonts with Chinese glyphs, as (file, face for regular, face for bold) on macOS and Linux.
+CJK_FONTS = [
+    ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0, 2),
+    ("/System/Library/Fonts/STHeiti Medium.ttc", 1, 1),
+    ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0, 0),
+    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2, 2),
+    ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0, 0),
+]
+
+
+def cjk_font_file():
+    return next((entry for entry in CJK_FONTS if Path(entry[0]).exists()), None)
+
+
+def words_for(lang):
+    """The words for this language, and whether they need a font with Chinese glyphs."""
+    if lang == "en" or lang not in WORDS:
+        return WORDS["en"], False
+    if not cjk_font_file():
+        print("  note: no font with Chinese glyphs on this machine; the words on the images stay English")
+        return WORDS["en"], False
+    return WORDS[lang], True
+
+
+def font(size, bold=False, cjk=False):
+    """A system font that has Latin glyphs (and Chinese ones with cjk); Pillow's default bitmap font is the fallback."""
+    if cjk:
+        path, regular, heavy = cjk_font_file()
+        return ImageFont.truetype(path, size, index=heavy if bold else regular)
     candidates = [
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
@@ -76,8 +132,9 @@ def canvas(color=NAVY):
     return Image.new("RGB", SIZE, color)
 
 
-def compose_popup(popup_png: Path, out: Path):
-    """The 380px-wide popup on a 1280x800 canvas with a caption, like a store screenshot."""
+def compose_popup(popup_png: Path, out: Path, lang="en"):
+    """The 380px-wide popup on a 1280x800 canvas with a caption in the popup's language, like a store screenshot."""
+    words, cjk = words_for(lang)
     img = canvas()
     popup = Image.open(popup_png).convert("RGB")
     if popup.height > 700:
@@ -88,23 +145,33 @@ def compose_popup(popup_png: Path, out: Path):
     img.paste(shadow, (x - 8, y - 8))
     img.paste(popup, (x, y))
     d = ImageDraw.Draw(img)
-    d.text((80, 260), "One key, one shortcut.", font=font(48, bold=True), fill=WHITE)
-    for i, line in enumerate(["Alt+Shift+D starts descriptions.", "Status, progress and every setting", "are read by your screen reader."]):
-        d.text((80, 340 + i * 44), line, font=font(28), fill=YELLOW if i == 0 else WHITE)
+    d.text((80, 260), words["popup_title"], font=font(48, bold=True, cjk=cjk), fill=WHITE)
+    for i, line in enumerate(words["popup_lines"]):
+        d.text((80, 340 + i * 44), line, font=font(28, cjk=cjk), fill=YELLOW if i == 0 else WHITE)
     img.save(out)
 
 
-def promo_tile(out: Path):
+def promo_tile(out: Path, lang="en"):
     """440x280 small promo tile: icon, name, one line."""
+    words, cjk = words_for(lang)
     img = Image.new("RGB", (440, 280), NAVY)
     icon = Image.open(ROOT / "static" / "icons" / "icon128.png").convert("RGBA").resize((96, 96), Image.LANCZOS)
     img.paste(icon, (32, 40), icon)
     d = ImageDraw.Draw(img)
-    d.text((148, 52), "SceneVoice", font=font(40, bold=True), fill=WHITE)
-    d.text((148, 102), "AI audio description", font=font(22), fill=YELLOW)
-    for i, line in enumerate(["Any YouTube or Bilibili video,", "described in the pauses,", "through your own screen reader."]):
-        d.text((32, 164 + i * 32), line, font=font(22), fill=WHITE)
+    name_font = font(40 if not cjk else 34, bold=True, cjk=cjk)
+    d.text((148, 52), words["promo_name"], font=name_font, fill=WHITE)
+    d.text((148, 102), words["promo_tag"], font=font(22, cjk=cjk), fill=YELLOW)
+    for i, line in enumerate(words["promo_lines"]):
+        d.text((32, 164 + i * 32), line, font=font(22, cjk=cjk), fill=WHITE)
     img.save(out)
+
+
+# Run in the settings page before its own script, for the shortcuts picture only: a platform
+# that is not a Mac, where the page would write "Option" for Alt (isMac in shared/shortcuts.js).
+NOT_A_MAC = """
+  Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Win32', configurable: true });
+  Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined, configurable: true });
+"""
 
 
 def shot(page, out: Path):
@@ -137,8 +204,8 @@ def main():
     if not (DIST / "manifest.json").exists():
         sys.exit("dist/ is missing: run `npm run build` first")
     out.mkdir(parents=True, exist_ok=True)
-    if lang == "en":
-        promo_tile(out / "promo-440x280.png")
+    if lang in WORDS:
+        promo_tile(out / "promo-440x280.png", lang)
         print("  wrote", (out / "promo-440x280.png").relative_to(ROOT))
 
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
@@ -152,6 +219,8 @@ def main():
             color_scheme="light",
             viewport={"width": SIZE[0], "height": SIZE[1]},
         )
+        # Nothing leaves the machine, and no page waits on a network for what it shows.
+        ctx.route(lambda url: not url.startswith("chrome-extension://"), lambda route: route.abort())
         sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker")
         ext_id = sw.url.split("/")[2]
         base = f"chrome-extension://{ext_id}"
@@ -188,7 +257,7 @@ def main():
         time.sleep(0.8)
         popup_raw = Path(tmp) / "popup.png"
         page.screenshot(path=str(popup_raw), full_page=True)
-        compose_popup(popup_raw, out / "2-popup-1280x800.png")
+        compose_popup(popup_raw, out / "2-popup-1280x800.png", lang)
         print("  wrote", (out / "2-popup-1280x800.png").relative_to(ROOT))
 
         if (DIST / "welcome.html").exists():
@@ -206,6 +275,21 @@ def main():
 
         page.goto(f"{base}/guide.html")
         shot(page, out / "5-key-guide-1280x800.png")
+
+        # "4. Keyboard shortcuts" is far below the first screen of the settings page, so it
+        # gets a picture of its own: the section at the top of the window.
+        keys = ctx.new_page()
+        keys.add_init_script(NOT_A_MAC)
+        keys.goto(f"{base}/options.html")
+        keys.wait_for_load_state()
+        try:
+            # The rows are complete once the page has asked the browser for the four keys it keeps:
+            # the first command then shows its key and no Change button.
+            keys.wait_for_function("() => document.querySelector('#shortcuts tr:first-child kbd') && !document.querySelector('#shortcuts tr:first-child button')", timeout=10000)
+        except Exception:
+            print("  note: the settings page did not show the browser's own keys; capturing as is")
+        keys.evaluate("() => document.getElementById('keys').scrollIntoView({ block: 'start' })")
+        shot(keys, out / "6-shortcuts-1280x800.png")
         ctx.close()
     print("done:", out.relative_to(ROOT))
 

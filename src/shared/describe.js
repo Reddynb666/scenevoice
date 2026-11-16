@@ -5,7 +5,7 @@
 // its text back. Everything else, from reading the JSON to checking times and
 // saying what is uncertain, is shared with descriptions made from a video link.
 
-import { CLOUD_API_BASE } from './constants.js';
+import { CLOUD_API_BASE, CLOUD_OPEN } from './constants.js';
 import { ApiError } from './errors.js';
 import { framesAskPrompt, framesRevisionPrompt, framesScriptPrompt } from './frames.js';
 import { GeminiClient, buildFramesRequest, parseAnswer, responseText, usageOf } from './gemini.js';
@@ -48,8 +48,12 @@ function adapter(provider) {
   return a;
 }
 
-/** A client for a provider, from what the service worker sends (key, address, model). */
-export function createClient(provider, config, fetchImpl) {
+/**
+ * A client for a provider, from what the service worker sends (key, address,
+ * model). No client is made for SceneVoice Cloud while it is closed.
+ */
+export function createClient(provider, config, fetchImpl, cloudOpen = CLOUD_OPEN) {
+  if (provider === 'cloud' && !cloudOpen) throw new ApiError('cloud-closed');
   return adapter(provider).createClient(config || {}, fetchImpl);
 }
 

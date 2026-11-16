@@ -13,17 +13,17 @@
 // the tab sends frames from the playing video (MSG.GEN_FRAMES), described here
 // stretch by stretch and added to the same cache.
 
-import { CLOUD_API_BASE, FRAME_SAMPLING, MSG, USAGE_KEY } from '../shared/constants.js';
-import { adoptCloudScript, cloudScriptOk, shareableScript } from '../shared/cloud.js';
+import { CLOUD_API_BASE, CLOUD_OPEN, FRAME_SAMPLING, MSG, USAGE_KEY } from '../shared/constants.js';
+import { adoptCloudScript, cloudScriptOk, forgetClosedCloud, shareableScript } from '../shared/cloud.js';
 import { authorizeBackgroundMessage, platformOfSender } from '../shared/sender.js';
-import { getLocal, getSettings, isDescriptionLanguage, protectLocalStorage, setLocal } from '../shared/storage.js';
+import { getLocal, getSettings, isDescriptionLanguage, protectLocalStorage, setLocal, setSettings } from '../shared/storage.js';
 import { addFeedback, cacheInfo, clearCache, deleteScript, getFeedback, getScript, putScript } from '../shared/cache.js';
 import { mergeFramesChunk, newFramesScript, recentCues } from '../shared/coverage.js';
 import { sanitizeFrames } from '../shared/frames.js';
 import { platformOfVideoId } from '../shared/platforms.js';
 import { effectiveProvider, inputModeFor, providerFor } from '../shared/providers.js';
 import { applyCorrections, cueRef, findCueIndex, replaceCue } from '../shared/revision.js';
-import { speechOptions } from '../shared/voices.js';
+import { hasVoiceFor, speechOptions } from '../shared/voices.js';
 import { cleanAskHistory } from '../shared/ask.js';
 import { askClip, revisionClip } from '../shared/gemini.js';
 import { budgetReached, recordUsage, todaysUsage } from '../shared/usage.js';
@@ -42,8 +42,8 @@ const storageAccess = restrictStorage();
 
 // ---------- install ----------
 
-// Show the welcome page on first install: hear a sample, pick SceneVoice Cloud
-// or a key of one's own, try a video. The browser window may not exist yet when
+// Show the welcome page on first install: hear a sample, add a key of one's own
+// (or, once it is open, pick SceneVoice Cloud), try a video. The browser window may not exist yet when
 // the event fires (e.g. installed by policy at start-up), so retry briefly, and
 // fall back to the settings page if the tab cannot be opened at all.
 async function openWelcome(attempt = 0) {
@@ -58,6 +58,11 @@ async function openWelcome(attempt = 0) {
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   restrictStorage();
   if (reason === 'install') openWelcome();
+  // An earlier version may have left a Cloud token, or a site set to Cloud: while Cloud is closed they are removed.
+  if (reason === 'update') {
+    const storedSettings = async () => (await chrome.storage.sync.get('settings')).settings;
+    forgetClosedCloud({ getLocal, setLocal, storedSettings, setSettings }).catch(() => {});
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -69,17 +74,32 @@ chrome.runtime.onStartup.addListener(() => {
 // The chosen voice is checked against the voices on this computer: settings
 // sync between computers, and Chrome does not look for a voice that speaks the
 // language when asked for one it does not have. Then Chrome chooses by language.
+//
+// The tab is told how each utterance ended (end, interrupted, cancelled, error),
+// also when the engine refuses it outright, and whether this computer has any
+// voice for the language at all (noVoice): without one Chrome reads with
+// whatever it has, which for another script is silence. The page says so once
+// instead of staying silent (content/announcer.js; the welcome page's sample).
 async function speak(msg, tabId) {
-  const installed = msg.voice ? await chrome.tts.getVoices().catch(() => []) : [];
+  const installed = await chrome.tts.getVoices().catch(() => []);
+  const options = speechOptions(msg, installed);
+  const noVoice = !options.voiceName && !hasVoiceFor(installed, msg.lang);
+  const tell = (event) => {
+    if (tabId == null) return;
+    chrome.tabs.sendMessage(tabId, { type: MSG.TTS_EVENT, id: msg.id, event, ...(noVoice ? { noVoice: true } : {}) }).catch(() => {});
+  };
   const opts = {
-    ...speechOptions(msg, installed),
+    ...options,
     onEvent: (ev) => {
-      if (['end', 'interrupted', 'cancelled', 'error'].includes(ev.type) && tabId != null) {
-        chrome.tabs.sendMessage(tabId, { type: MSG.TTS_EVENT, id: msg.id, event: ev.type }).catch(() => {});
-      }
+      if (['end', 'interrupted', 'cancelled', 'error'].includes(ev.type)) tell(ev.type);
     },
   };
-  chrome.tts.speak(String(msg.text ?? ''), opts);
+  try {
+    const started = chrome.tts.speak(String(msg.text ?? ''), opts);
+    if (typeof started?.catch === 'function') started.catch(() => tell('error'));
+  } catch {
+    tell('error');
+  }
 }
 
 // ---------- offscreen document ----------
@@ -185,6 +205,8 @@ async function overBudget() {
 /** What the worker needs to call a provider, or an error when its key is not set. */
 function providerConfig(local, provider) {
   if (provider === 'cloud') {
+    // Closed (CLOUD_OPEN): no config names the relay, so nothing can be sent to it, token or not.
+    if (!CLOUD_OPEN) return { error: 'cloud-closed' };
     // The device token stands where the key goes; the relay's address is fixed, never read from storage.
     if (!local.cloudToken) return { error: 'no-key' };
     return { config: { apiKey: local.cloudToken, apiBase: CLOUD_API_BASE, model: local.cloudModel || '' } };
@@ -205,8 +227,12 @@ function providerConfig(local, provider) {
   return { config: { apiKey: local.apiKey, apiBase: local.apiBase, model: local.model } };
 }
 
-/** Which keys are set (the Cloud device token counts as one), and nothing else about them. */
-const keysOf = (local) => ({ gemini: Boolean(local.apiKey), qwen: Boolean(local.qwenApiKey), cloud: Boolean(local.cloudToken) });
+/**
+ * Which keys are set (the Cloud device token counts as one), and nothing else
+ * about them. While Cloud is closed a saved token is no key at all: the pages
+ * hear that there is none, and nothing falls back to the relay.
+ */
+const keysOf = (local) => ({ gemini: Boolean(local.apiKey), qwen: Boolean(local.qwenApiKey), cloud: CLOUD_OPEN && Boolean(local.cloudToken) });
 
 /**
  * The provider for the tab that asks, from its site (never from the message)
@@ -302,6 +328,7 @@ async function broadcast(msg) {
  * saved script, or null when there is none or the relay cannot be reached.
  */
 async function fetchSharedScript(config, { videoId, lang, duration }) {
+  if (!CLOUD_OPEN) return null;
   const reply = await workerRequest({ cmd: 'cloud-get', config, params: { videoId, lang } }).catch(() => null);
   if (!reply || reply.error || !reply.script) return null;
   if (!cloudScriptOk(reply.script, { videoId, lang, duration })) return null;
@@ -337,6 +364,7 @@ async function startGeneration({ videoId, duration, meta, lang, force }, sender)
  * failure is logged and changes nothing here.
  */
 async function shareScript(videoId, lang, script) {
+  if (!CLOUD_OPEN) return;
   const { shareDescriptions } = await getSettings();
   if (!shareDescriptions) return;
   const local = await getLocal();
@@ -533,12 +561,12 @@ async function onJobEvent(ev) {
 
 /**
  * Open the settings page. Named a provider, it opens at that provider's key
- * field (options.html#gemini / #qwen) or at the SceneVoice Cloud block
- * (#cloud), so a listener sent there for a missing key lands on the control to
- * use, not at the top of a long page.
+ * field (options.html#gemini / #qwen) or, while Cloud is open, at the
+ * SceneVoice Cloud block (#cloud), so a listener sent there for a missing key
+ * lands on the control to use, not at the top of a long page.
  */
 async function openOptions(provider) {
-  if (provider === 'gemini' || provider === 'qwen' || provider === 'cloud') {
+  if (provider === 'gemini' || provider === 'qwen' || (provider === 'cloud' && CLOUD_OPEN)) {
     try {
       await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#${provider}`) });
       return;

@@ -1,0 +1,113 @@
+{
+  "name": "scenevoice-desktop",
+  "private": true,
+  "version": "0.0.1",
+  "description": "SceneVoice film edition: the first-round screen reader test shell (K3). A test instrument, not the product.",
+  "license": "MIT",
+  "author": "SceneVoice contributors",
+  "type": "module",
+  "main": "main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "selftest": "electron . --selftest",
+    "test": "vitest run",
+    "make-sample": "node scripts/make-sample.mjs",
+    "make-icon": "node scripts/make-icon.mjs",
+    "pack": "electron-builder --dir",
+    "dist:win": "node scripts/dist.mjs win",
+    "dist:mac": "node scripts/dist.mjs mac",
+    "check-dist": "node scripts/check-dist.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "4.14.0",
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0",
+    "vitest": "5.1.0"
+  },
+  "build": {
+    "appId": "app.scenevoice.desktop.k3test",
+    "productName": "SceneVoice 影院版 测试版",
+    "copyright": "SceneVoice contributors, MIT.",
+    "asar": true,
+    "publish": null,
+    "artifactName": "SceneVoice-K3-Test-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main/**",
+      "ipc/**",
+      "shared/**",
+      "locales/**",
+      "renderer/**",
+      "package.json",
+      "!renderer/sample/sample.mp4"
+    ],
+    "extraResources": [
+      {
+        "from": "THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE.SceneVoice.txt"
+      }
+    ],
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "win": {
+      "executableName": "SceneVoiceK3Test",
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "packElevateHelper": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052",
+      "displayLanguageSelector": false,
+      "differentialPackage": false,
+      "include": "build/installer.nsh",
+      "artifactName": "SceneVoice-K3-Test-${version}-win-x64-setup.${ext}",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.video",
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Only when you press “Test the microphone”: the app listens for three seconds to say whether it hears sound. Nothing is recorded."
+      }
+    }
+  }
+}

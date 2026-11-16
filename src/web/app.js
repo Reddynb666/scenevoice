@@ -7,8 +7,14 @@
 // Credentials: the Gemini key and the Cloud device token go to GeminiClient,
 // which sends them in the x-goog-api-key header only. They are never put in a
 // URL, and the key is written to localStorage only when "remember" is ticked.
+//
+// SceneVoice Cloud follows one switch (CLOUD_OPEN in shared/constants.js, or
+// init's cloudOpen in tests). Closed, the page offers the own key only: the
+// choice between the two is taken out of the document here, so the HTML needs
+// no change, the privacy points use their own-key wording, and nothing is sent
+// to the relay.
 
-import { MODES } from '../shared/constants.js';
+import { CLOUD_OPEN, MODES } from '../shared/constants.js';
 import { ApiError } from '../shared/errors.js';
 import { runAsk, runGeneration } from '../shared/generation.js';
 import { modelHealth } from '../shared/modelhealth.js';
@@ -67,8 +73,9 @@ function readerSpeedLabel(speed) {
  * @param {Storage|null} [o.session]
  * @param {string} [o.version]
  * @param {number} [o.tickMs]  0 = no timer (tests call api.tick())
+ * @param {boolean} [o.cloudOpen]  whether SceneVoice Cloud is offered (CLOUD_OPEN unless given)
  */
-export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, session, version = '', tickMs = 250, durationHintMs = DURATION_HINT_MS, waitingSayMs = WAITING_SAY_MS } = {}) {
+export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, session, version = '', tickMs = 250, durationHintMs = DURATION_HINT_MS, waitingSayMs = WAITING_SAY_MS, cloudOpen = CLOUD_OPEN } = {}) {
   const doc = win.document;
   const $ = (id) => doc.getElementById(id);
   const nav = win.navigator || {};
@@ -113,6 +120,25 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     voiceRateBlock: $('voice-rate-block'),
   };
 
+  // ---------- SceneVoice Cloud, open or closed ----------
+  // The page's HTML carries the choice between the own key and Cloud, and two
+  // privacy points that name the relay. Closed: the whole choice (a group of one
+  // radio would be noise) leaves the document and the privacy points switch to
+  // the wording without Cloud, before the page is localized. Open: the choice is
+  // shown, also when the HTML ships it hidden.
+  const sourceChoice = el.sourceOwn?.closest('fieldset') || null;
+  if (cloudOpen) {
+    if (sourceChoice) sourceChoice.hidden = false;
+    for (const node of doc.querySelectorAll('[data-cloud="open"]')) node.hidden = false;
+    for (const node of doc.querySelectorAll('[data-cloud="closed"]')) node.remove();
+  } else {
+    sourceChoice?.remove();
+    for (const node of doc.querySelectorAll('[data-cloud="open"]')) node.remove();
+    for (const key of ['web_privacy_leaves', 'web_privacy_local']) {
+      for (const node of doc.querySelectorAll(`[data-i18n="${key}"]`)) node.dataset.i18n = `${key}_own`;
+    }
+  }
+
   // ---------- language ----------
   const url = new URL(win.location.href);
   setLocale(chooseLocale({ query: url.searchParams.get('lang'), stored: read(local, LANG_KEY), language: nav.language }));
@@ -154,7 +180,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
   });
 
   // ---------- settings ----------
-  const settings = loadSettings(local);
+  const settings = loadSettings(local, { cloudOpen });
   const state = {
     videoId: '',
     start: 0,
@@ -185,7 +211,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     const voice = settings.output === 'tts';
     el.readerSpeedBlock.hidden = voice;
     el.voiceRateBlock.hidden = !voice;
-    (settings.source === 'cloud' ? el.sourceCloud : el.sourceOwn).checked = true;
+    if (cloudOpen) (settings.source === 'cloud' ? el.sourceCloud : el.sourceOwn).checked = true;
     el.keyBlock.hidden = settings.source === 'cloud';
   }
 
@@ -211,10 +237,12 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
   });
   el.readerSpeed.addEventListener('change', () => setSetting('readerSpeed', Number(el.readerSpeed.value)));
   el.voiceRate.addEventListener('change', () => setSetting('ttsRate', Number(el.voiceRate.value)));
-  for (const radio of [el.sourceOwn, el.sourceCloud]) {
-    radio.addEventListener('change', () => {
-      if (radio.checked) setSetting('source', radio.value);
-    });
+  if (cloudOpen) {
+    for (const radio of [el.sourceOwn, el.sourceCloud]) {
+      radio.addEventListener('change', () => {
+        if (radio.checked) setSetting('source', radio.value);
+      });
+    }
   }
 
   // ---------- the key ----------
@@ -271,7 +299,7 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
       return;
     }
     if (settings.source !== 'cloud' && !el.key.value.trim()) {
-      output.status(t('web_key_missing'));
+      output.status(t(cloudOpen ? 'web_key_missing' : 'web_key_missing_own'));
       el.key.focus();
       return;
     }
@@ -388,10 +416,10 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
     if (source === 'cloud') {
       let token = loadToken(local);
       if (!token) {
-        token = (await registerWebDevice(fetchImpl, { version, locale: interfaceLocale() })).token;
+        token = (await registerWebDevice(fetchImpl, { version, locale: interfaceLocale(), open: cloudOpen })).token;
         saveToken(local, token);
       }
-      return makeClient({ source, token, model: healthy(state.models.cloud), fetchImpl });
+      return makeClient({ source, token, model: healthy(state.models.cloud), fetchImpl, cloudOpen });
     }
     return makeClient({ source, key: el.key.value.trim(), model: healthy(state.models.own), fetchImpl });
   }
@@ -405,7 +433,8 @@ export function init({ win, fetchImpl, loadApi = loadIframeApi, speech, local, s
       rememberError(t('web_cloud_unreachable'));
       return;
     }
-    let text = webErrorMessage(err, provider);
+    // With Cloud closed, a missing key is never answered with "or choose SceneVoice Cloud".
+    let text = !cloudOpen && err instanceof ApiError && err.code === 'no-key' ? t('web_key_missing_own') : webErrorMessage(err, provider);
     if (resumable && state.script?.completedUntil) text = `${text} ${t('web_error_resume', String(Math.max(1, Math.round(state.script.completedUntil / 60))))}`;
     rememberError(text);
   }
