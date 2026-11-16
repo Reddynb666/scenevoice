@@ -347,11 +347,11 @@ describe('site: what the pages claim today', () => {
   });
 
   it('version 1.1.0 is not to be installed: the install section says so before any download link, and "no button" and "no server" are said of 1.2.0 on', () => {
-    // The site goes live on the merge to main, before 1.2.0 exists, and the 1.1.0 zip is what the
-    // Releases page holds that day. Its Start free button points at an address that was never the
-    // project's (SECURITY.md), so the page names no download as ready: it says which version to
-    // install and which not to. Shorten the warning, and drop "from version 1.2.0", once 1.2.0
-    // is out and the 1.1.0 zip has been withdrawn.
+    // The site goes live on the merge to main, before 1.2.0 exists, and 1.1.0 is the only release
+    // the Releases page lists that day (its zip was withdrawn on 16 November 2026; copies are
+    // installed). Its Start free button points at an address that was never the project's
+    // (SECURITY.md), so the page names no download as ready: it says which version to install and
+    // which not to. Shorten the warning, and drop "from version 1.2.0", once 1.2.0 is out.
     const en = loadPage('index.html').window.document;
     const zh = loadPage('zh-CN/index.html').window.document;
     const warning = (doc) => doc.querySelector('#install [data-old-release]').textContent;
@@ -708,9 +708,13 @@ describe('texts for the stores, the owner and the testers', () => {
     expect(five.indexOf('“Notes for the reviewer”')).toBeGreaterThan(five.indexOf('scenevoice-1.2.0.zip: OK'));
     expect(five).toMatch(/\n7\. 上传之前，用这个刚校验过的压缩包和第 4\.2 步的那把 Key/);
     expect(five).toMatch(/\n8\. 1\.2\.0 能正常下载之后，处理 1\.1\.0：/);
-    // Withdrawing 1.1.0 does not wait for 1.2.0: it is in step 1, right after the merge.
-    expect(step(1)).toContain('把它附带的 `scenevoice-1.1.0.zip` 删掉');
-    expect(step(1)).toMatch(/合并之后马上处理 1\.1\.0，不用等 1\.2\.0/);
+    // The 1.1.0 zip was withdrawn on 16 November 2026, with a warning on its release. Step 1 says so,
+    // and keeps what is left for the owner, which does not wait for 1.2.0: telling those who installed it.
+    expect(step(0)).toContain('`scenevoice-1.1.0.zip` 已经删掉');
+    expect(step(1)).toMatch(/\n6\. 1\.1\.0 的发布页，不用再动（2026 年 11 月 16 日已处理）/);
+    expect(step(1)).toContain('`scenevoice-1.1.0.zip` 已经删掉，原来的下载地址打不开了');
+    expect(step(1)).toMatch(/\n7\. 还剩一件和 1\.1\.0 有关的事，不用等 1\.2\.0：\n   - 告诉已经装了 1\.1\.0 的人/);
+    expect(step(1)).not.toMatch(/再把它附带的|马上撤下/);
     expect(repoFile('docs/store-listing.md')).toMatch(/run the block once yourself with the review key on the exact zip you upload/);
     // Nothing a step uses is made by a later one. Where a step takes something from another, that
     // one is earlier:

@@ -127,7 +127,9 @@ Found on 16 November 2026. Fixed in the version after 1.1.0.
   not press *Start free* or *Activate*. If *Start free* ever succeeded for you (it said that
   SceneVoice Cloud is ready), press *Stop using Cloud* on the settings page
   and tell us through the private report above. The web player needs no
-  update: the page you open is always the current one.
+  update: the page you open is always the current one. The zip of 1.1.0 was
+  removed from the Releases page on 16 November 2026, and that release now
+  says not to install it.
 - **What the fixed version does.** SceneVoice Cloud is not offered anywhere.
   The package asks for no permission for a relay address and makes no request
   to one, and the address left in the code is a placeholder that cannot
